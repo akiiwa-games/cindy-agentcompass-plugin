@@ -29,8 +29,23 @@
     if (!reply.ok) throw Error(reply.message || 'Node bridge unavailable');
     return reply.result;
   }
+  const memory = new Map();
   async function persist(msg,operation,record) {
     await node(msg,'save',{operation,record});
+    memory.delete(operation);
+  }
+  async function tryPersist(msg,operation,record) {
+    try {await persist(msg,operation,record);return null;}
+    catch(error) {memory.set(operation,JSON.parse(JSON.stringify(record)));return error.message || String(error);}
+  }
+  async function loadRecord(msg,operation) {
+    const disk=await node(msg,'load',{operation});
+    const mem=memory.get(operation);
+    if (mem && mem.parent===disk.parent && (!disk.taskId || (mem.messagesComplete && !disk.messagesComplete) || mem.state==='cleaned')) {
+      await tryPersist(msg,operation,mem);
+      return JSON.parse(JSON.stringify(mem));
+    }
+    return disk;
   }
   async function capabilities() {
     if (typeof cindy.tasks?.capabilities!=='function') throw Error('UNSUPPORTED: Cindy has no public tasks API. No worker started.');
@@ -97,7 +112,7 @@
     if (record.state==='creating' && !record.taskId) {
       record.state='unknown_create';
       record.error ||= 'The create answer was never recorded. Inspect the Cindy task list; nothing is created again.';
-      await persist(msg,operation,record);
+      await tryPersist(msg,operation,record);
       return record;
     }
     if (!['sending','unknown_send'].includes(record.state) || record.runId || !record.taskId) return record;
@@ -105,13 +120,13 @@
     for (const run of runs) {
       if (!await carriesPrompt(record,run)) continue;
       record.runId=run.runId;record.state=run.status;record.delivery='reconciled';
-      await persist(msg,operation,record);
+      await tryPersist(msg,operation,record);
       return record;
     }
     if (record.state==='sending') {
       record.state='unknown_send';
       record.error ||= 'The send answer was never recorded and no run of task '+record.taskId+' carries this prompt yet.';
-      await persist(msg,operation,record);
+      await tryPersist(msg,operation,record);
     }
     return record;
   }
@@ -146,6 +161,7 @@
     const run=await cindy.tasks.getRun({runId:record.runId});
     record.run=run;
     record.state=run.status;
+    let saveError=null;
     if (terminal.has(run.status)) {
       for (let i=0;i<10 && !record.messagesComplete;i++) {
         const page=await cindy.tasks.readMessages({taskId:record.taskId,limit:100,
@@ -156,10 +172,10 @@
         if (final) record.finalMessage=final;
         record.messageCursor=page.nextCursor;
         record.messagesComplete=!page.nextCursor;
-        await persist(msg,operation,record);
+        saveError=(await tryPersist(msg,operation,record)) || saveError;
       }
     }
-    await persist(msg,operation,record);
+    saveError=(await tryPersist(msg,operation,record)) || saveError;
     const output=record.finalMessage ? text(record.finalMessage.content) : '';
     const done=terminal.has(run.status) && Boolean(record.messagesComplete);
     return {status:run.status,operation,taskId:record.taskId,runId:run.runId,
@@ -167,7 +183,9 @@
       output_available:Boolean(record.finalMessage),messages_complete:Boolean(record.messagesComplete),
       message_pages_read:(record.artifacts || []).length,
       final_result_summary:output.slice(0,4000),summary_shortened:output.length>4000,
-      full_result_artifacts:record.artifacts || [],next_tool:next(done ? 'cleanup' : 'status',operation),
+      full_result_artifacts:record.artifacts || [],
+      ...(saveError ? {receipt_saved:false,receipt_error:saveError} : {}),
+      next_tool:next(done ? 'cleanup' : 'status',operation),
       next_action:done ? 'Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy.' :
         terminal.has(run.status) ? 'The run is '+run.status+' but its messages are not all collected yet. Call status again to read the remaining pages; do not clean up before messages_complete is true.' :
         'No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation.'};
@@ -179,7 +197,7 @@
     // self, split or a router-side launch: the router's own answer, not a Cindy task.
     if (prepared.router?.status!=='native' && prepared.state==='prepared') return prepared.router;
     return await exclusive('op\0'+operation,async()=>{
-      let record=await node(msg,'load',{operation});
+      let record=await loadRecord(msg,operation);
       if (record.state!=='prepared') return await collect(msg,operation,await reconcile(msg,operation,record));
       const route=selectRoute(record.bundle,await cindy.tasks.models(),record.mappings);
       if (!record.prompt || record.prompt.length>32768) throw Error('Full task plus return contract exceeds Cindy send limit (32768 characters); nothing launched.');
@@ -189,21 +207,33 @@
       await persist(msg,operation,record);
       let task;
       try {task=await cindy.tasks.create(record.createRequest);} catch(error) {
-        record.state='unknown_create';record.error=error.message;await persist(msg,operation,record);
-        return {status:record.state,operation,error:record.error,next_tool:next('status',operation)};
+        record.state='unknown_create';record.error=error.message;
+        const saveError=await tryPersist(msg,operation,record);
+        return {status:record.state,operation,error:record.error,
+          ...(saveError ? {receipt_saved:false,receipt_error:saveError} : {}),next_tool:next('status',operation)};
       }
       record.taskId=task.taskId;
       if (!sameRoute(task.resolvedConfig,route) || task.permissionMode!=='bypassPermissions' ||
           task.planModeEnabled || task.workingDir!==ctx.workdir) {
         record.state='blocked';record.error='Created draft has different route/permissions/workdir. Configure plugin task directory to the current project; no model input sent.';
         await discardDraft(record,canArchive);
-        await persist(msg,operation,record);
-        return {status:'blocked',operation,taskId:task.taskId,error:record.error,
-          draft_cleanup:record.draft_cleanup,cleanup_error:record.cleanup_error || null,next_tool:next('cleanup',operation)};
+        const saveError=await tryPersist(msg,operation,record);
+        return {status:'blocked',operation,taskId:task.taskId,task_id:task.taskId,error:record.error,
+          draft_cleanup:record.draft_cleanup,cleanup_error:record.cleanup_error || null,
+          ...(saveError ? {receipt_saved:false,receipt_error:saveError} : {}),next_tool:next('cleanup',operation)};
       }
       record.sendRequest={taskId:task.taskId,expectedRevision:task.revision,requestKey:operation+':send',text:record.prompt};
       record.state='sending';
-      await persist(msg,operation,record);
+      const preSendError=await tryPersist(msg,operation,record);
+      if (preSendError) {
+        record.state='blocked';
+        record.error='Created draft could not be recorded before send: '+preSendError;
+        await discardDraft(record,canArchive);
+        await tryPersist(msg,operation,record);
+        return {status:'blocked',operation,taskId:task.taskId,task_id:task.taskId,runId:null,run_id:null,
+          error:record.error,draft_cleanup:record.draft_cleanup,cleanup_error:record.cleanup_error || null,
+          receipt_saved:false,receipt_error:preSendError,next_tool:next('cleanup',operation)};
+      }
       let run, failure;
       try {run=await cindy.tasks.send(record.sendRequest);} catch(error) {failure=error;}
       if (run) {record.runId=run.runId;record.state=run.status;record.delivery='accepted';}
@@ -217,8 +247,7 @@
       }
       // The run exists even when its receipt cannot be saved: hand back the handles instead of failing the call.
       // The receipt on disk then says `sending`, which status settles from the host's runs without resending.
-      let saveError=null;
-      try {await persist(msg,operation,record);} catch(error) {saveError=error.message;}
+      const saveError=await tryPersist(msg,operation,record);
       return {status:record.state,operation,taskId:record.taskId,runId:record.runId || null,
         task_id:record.taskId,run_id:record.runId || null,
         error:record.error || null,error_code:record.errorCode || null,automatic_callback:false,
@@ -233,8 +262,10 @@
     let run=await cindy.tasks.cancel({runId:record.runId,requestKey:operation+':cancel'});
     // Cindy stops a turn at its next safe point: wait a bounded time for the confirmed terminal state, then say which.
     for (let i=0;i<10 && !terminal.has(run.status);i++) {await pause(1000);run=await cindy.tasks.getRun({runId:record.runId});}
-    record.state=run.status;await persist(msg,operation,record);
-    return {status:run.status,operation,taskId:record.taskId,runId:record.runId,confirmed_terminal:terminal.has(run.status),
+    record.state=run.status;const saveError=await tryPersist(msg,operation,record);
+    return {status:run.status,operation,taskId:record.taskId,runId:record.runId,task_id:record.taskId,run_id:record.runId,
+      confirmed_terminal:terminal.has(run.status),
+      ...(saveError ? {receipt_saved:false,receipt_error:saveError} : {}),
       next_tool:next('status',operation),
       next_action:terminal.has(run.status) ? 'Cindy confirmed the run '+run.status+'. Call status to collect its messages, then cleanup.' :
         'Cindy accepted the cancellation but the run is still '+run.status+': a command already in flight finishes first. Call status until the run is terminal.'};
@@ -257,13 +288,18 @@
       record.runId ? 'stop' : 'status');
     if (record.runId && !record.messagesComplete)
       return refuse('The run is finished but its messages are not all collected. Call status until messages_complete is true.');
-    if (record.draft_cleanup==='archived') {record.state='cleaned';await persist(msg,operation,record);return {status:'cleaned',operation};}
+    if (record.draft_cleanup==='archived') {
+      record.state='cleaned';const saveError=await tryPersist(msg,operation,record);
+      return {status:'cleaned',operation,taskId:record.taskId,task_id:record.taskId,
+        ...(saveError ? {receipt_saved:false,receipt_error:saveError} : {})};
+    }
     if (!canArchive) return {status:'manual_cleanup_required',operation,taskId:record.taskId,
       run_status:record.run?.status || null,archived:false,
       next_action:'Cindy has no public archive API. Archive this confirmed inactive task in the Cindy task list. History and the operation receipt are retained; do not resend the assignment.'};
     await cindy.tasks.archive({taskId:record.taskId});
-    record.state='cleaned';await persist(msg,operation,record);
-    return {status:'cleaned',operation};
+    record.state='cleaned';const saveError=await tryPersist(msg,operation,record);
+    return {status:'cleaned',operation,taskId:record.taskId,task_id:record.taskId,
+      ...(saveError ? {receipt_saved:false,receipt_error:saveError} : {})};
   }
   async function handle(msg) {
     const ctx=msg.args?.session_context;
@@ -276,7 +312,7 @@
     if (!['status','stop','cleanup'].includes(msg.tool)) throw Error('Unsupported tool');
     const operation=msg.args.operation;
     return await exclusive('op\0'+operation,async()=>{
-      const record=await node(msg,'load',{operation});
+      const record=await loadRecord(msg,operation);
       if (msg.tool==='stop') return await stop(msg,operation,record);
       if (msg.tool==='cleanup') return await cleanup(msg,operation,record,canArchive);
       return await collect(msg,operation,await reconcile(msg,operation,record));

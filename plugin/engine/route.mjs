@@ -62,15 +62,6 @@ export function codexHomes(env = process.env, home = os.homedir()) {
 const QUOTA_TAIL_BYTES = 256 * 1024;
 let quotaCache = {key: '', limits: null};
 
-function codexAccount(home) {
-  try {
-    const auth = JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8'));
-    return auth?.tokens?.account_id || auth?.account_id || auth?.email || auth?.user?.email || null;
-  } catch {
-    return null;
-  }
-}
-
 function newestSession(home) {
   let newest = null;
   try {
@@ -102,16 +93,19 @@ function readTail(file, size, maxBytes = QUOTA_TAIL_BYTES) {
 }
 
 export function codexQuota(env = process.env, now = Date.now(), homes = codexHomes(env)) {
-  const accounts = new Map(homes.map(h => [h, codexAccount(h)]));
-  const cindyAccount = homes.slice(1).map(h => accounts.get(h)).find(Boolean) || null;
-  // A standalone ~/.codex logged into a different account than Cindy's managed codex-home must not drive Cindy routing.
-  const eligible = cindyAccount ? homes.filter((h, i) => i > 0 || !accounts.get(h) || accounts.get(h) === cindyAccount) : homes;
-  const newest = eligible.map(newestSession).filter(Boolean).sort((a, b) => b.mtime - a.mtime)[0];
+  // Prefer Cindy's managed codex-home when it has session logs so a standalone ~/.codex login does not override it.
+  const cindySessions = homes.length > 1 ? homes.slice(1).map(newestSession).filter(Boolean).sort((a, b) => b.mtime - a.mtime) : [];
+  const newest = cindySessions[0] || homes.map(newestSession).filter(Boolean).sort((a, b) => b.mtime - a.mtime)[0];
   if (!newest) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'no Codex session log'};
   const cacheKey = `${newest.file}:${newest.mtime}:${newest.size}`;
   let limits = quotaCache.key === cacheKey ? quotaCache.limits : undefined;
   if (limits === undefined) {
-    const text = readTail(newest.file, newest.size);
+    let text = '';
+    try {
+      text = readTail(newest.file, newest.size);
+    } catch {
+      return {source: 'codex-cli-sessions', status: 'unknown', reason: 'unreadable Codex session log', file: newest.file};
+    }
     const at = text.lastIndexOf('"rate_limits"');
     limits = null;
     if (at >= 0) {
@@ -129,10 +123,8 @@ export function codexQuota(env = process.env, now = Date.now(), homes = codexHom
     .filter(w => !w.resets_at || w.resets_at * 1000 > now);
   if (!windows.length) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'snapshot windows have reset', file: newest.file};
   const used = Math.max(...windows.map(w => w.used_percent));
-  const account = accounts.get(newest.home) || null;
   return {source: 'codex-cli-sessions', status: used >= 95 ? 'exhausted' : used >= 80 ? 'high' : 'ok', used_percent: used,
-    observed_at: new Date(newest.mtime).toISOString(), plan: limits.plan_type || null, file: newest.file,
-    ...(account ? {account} : {})};
+    observed_at: new Date(newest.mtime).toISOString(), plan: limits.plan_type || null, file: newest.file};
 }
 
 // ---- routing -------------------------------------------------------------------------------------------------------
@@ -160,9 +152,10 @@ export function routeTask(task, catalog, {env = process.env, now = Date.now(), q
   const rows = (catalog?.models || []).filter(row => HARNESS[row?.route?.agentKind] && row.route.providerId && row.route.model);
   if (!rows.length) return {status: 'blocked', engine: 'builtin',
     error: 'Cindy reports no Claude, Codex or Pi model. Sign in to one in Cindy, then roll again; nothing was started.'};
-  const codex = quota || codexQuota(env, now);
   // Connections the Codex CLI's telemetry describes: only an explicitly matched providerId, or the sole Codex connection.
   const codexProviders = new Set(rows.filter(r => r.route.agentKind === 'codex').map(r => r.route.providerId));
+  const codex = quota || (codexProviders.size === 1 ? codexQuota(env, now)
+    : {source: 'codex-cli-sessions', status: 'unknown', reason: codexProviders.size ? 'multiple Codex connections' : 'no Codex connection in catalog'});
   const matchesCodex = providerId => codexProviders.has(providerId) &&
     (codex.providerId ? providerId === codex.providerId : codexProviders.size === 1);
   const usage = row => matchesCodex(row.route.providerId) && codex.status !== 'unknown' ? codex : null;
@@ -173,8 +166,10 @@ export function routeTask(task, catalog, {env = process.env, now = Date.now(), q
     const spec = resolveModelSpec(canonical).spec;
     const offered = (row.efforts?.length ? row.efforts : [row.route.effort]).filter(Boolean);
     const efforts = offered.filter(e => (spec.efforts || []).includes(e));
+    const fallbackEffort = (spec.efforts || []).includes('high') ? 'high' : (spec.efforts || [])[0] || 'medium';
     row._canonical = canonical;
-    row._efforts = efforts.length ? efforts : offered.slice(0, 1);
+    row._emptyEffort = !offered.length;
+    row._efforts = efforts.length ? efforts : offered.length ? offered.slice(0, 1) : [fallbackEffort];
     const entry = pool.get(canonical) || new Set();
     row._efforts.forEach(e => entry.add(e));
     pool.set(canonical, entry);
@@ -200,7 +195,8 @@ export function routeTask(task, catalog, {env = process.env, now = Date.now(), q
       const spec = resolveModelSpec(row._canonical).spec;
       const fast = wantsFast && harness === 'codex' && Boolean(row.supportsFastMode) && Boolean(spec.fast_capable) &&
         (q ? q.used_percent < 60 : false);
-      candidates.push({row, harness, effort, fast, score: Math.round(score * 10000) / 10000, components: scored.components, notes});
+      const launchEffort = row._emptyEffort ? (row.route.effort ?? '') : effort;
+      candidates.push({row, harness, effort: launchEffort, fast, score: Math.round(score * 10000) / 10000, components: scored.components, notes});
     }
   }
   candidates.sort((a, b) => b.score - a.score);

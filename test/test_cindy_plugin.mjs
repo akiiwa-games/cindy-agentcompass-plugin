@@ -305,6 +305,22 @@ test('review 1: a receipt save that fails after a successful send still returns 
   const status=(await f.send('status',{operation:reply.result.operation})).result;
   assert.equal(status.runId,'run-1');
   assert.equal(f.count('send'),1);
+  // Pre-send save failure after tasks.create preserves taskId/operation, skips send, and archives the draft.
+  const pre=fixture({saveFails:record=>record.state==='sending' || record.state==='blocked'});
+  const preReply=await pre.send('roll',{task:'x'});
+  assert.equal(preReply.ok,true);
+  assert.deepEqual([preReply.result.status,preReply.result.task_id,preReply.result.receipt_saved],['blocked','child-task',false]);
+  assert.equal(pre.count('send'),0);
+  assert.equal(pre.count('archive'),1);
+  // Post-cancel and post-archive save failures preserve the confirmed outcome and handles.
+  const cancelFail=fixture({cancelTo:'cancelled',saveFails:record=>record.state==='cancelled' || record.state==='cleaned'});
+  const cop=(await cancelFail.send('roll',{task:'x'})).result.operation;
+  const stopped=(await cancelFail.send('stop',{operation:cop})).result;
+  assert.deepEqual([stopped.status,stopped.task_id,stopped.run_id,stopped.receipt_saved],['cancelled','child-task','run-1',false]);
+  cancelFail.run.status='cancelled';cancelFail.run.outputMessageId='out-exact';
+  await cancelFail.send('status',{operation:cop});
+  const cleaned=(await cancelFail.send('cleanup',{operation:cop})).result;
+  assert.deepEqual([cleaned.status,cleaned.task_id,cleaned.receipt_saved],['cleaned','child-task',false]);
 });
 test('review 2: a definite send refusal is send_rejected and the draft is discarded, not unknown_send',async()=>{
   for (const code of ['REVISION_CONFLICT','INVALID_REQUEST','PERMISSION_DENIED']) {

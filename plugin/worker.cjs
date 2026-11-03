@@ -116,11 +116,12 @@ function contract(result, ctx, task) {
   else throw Error('Router returned no worker prompt file');
   return {bundle:{...bundle,harness,modeId},prompt:prompt+RETURN_CHANNEL};
 }
+const writeDiag = (file, data) => {try {fs.writeFileSync(file, data);} catch {}};
 let engine=null;
 async function builtin(task, catalog, dir) {
   engine ||= import(pathToFileURL(path.join(__dirname, 'engine', 'route.mjs')).href);
   const result=(await engine).routeTask(task, catalog, {env:process.env});
-  fs.writeFileSync(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
+  writeDiag(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
   if (result.status==='blocked') throw Error(result.error);
   return result;
 }
@@ -147,8 +148,8 @@ async function external(command, task, ctx, dir) {
       clearTimeout(timer);
       children.delete(child);
       const text=Buffer.concat(stdout).toString('utf8');
-      fs.writeFileSync(path.join(dir,'router.stdout.json'),text);
-      fs.writeFileSync(path.join(dir,'router.stderr.txt'),Buffer.concat(stderr));
+      writeDiag(path.join(dir,'router.stdout.json'),text);
+      writeDiag(path.join(dir,'router.stderr.txt'),Buffer.concat(stderr));
       try {
         const result=JSON.parse(text);
         if (code && !['self','split'].includes(result.status)) throw Error(result.error || result.next || 'Router blocked');
