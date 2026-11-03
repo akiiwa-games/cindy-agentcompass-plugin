@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/allocator.js at b8d64fccc8f7fd242ae61c7b4c83cfd8706ae45e (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/allocator.js at e98a82287ee1793ae559c8a0fed188e5d1c69ef1 (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate rather than edit.
 /**
  * AgentCompass Core Pure Intent & Multi-Dimensional Capability Allocator
@@ -1183,7 +1183,6 @@ export function profileDifficulty(profile, policy = DEFAULT_SCORING_POLICY) {
 export function namedRoute(profile) {
   if (!profile || typeof profile !== "object") return null;
   const named = profile.work_kind;
-  if (named === "general_implementation" && profile.code_complexity === 0) return null;
   if (named && named in KIND_TRAITS && named !== "other_or_mixed") return named;
   return null;
 }
@@ -1768,8 +1767,7 @@ export function rankCandidates(profileInput, options = {}) {
   const kind = profileKind(profile, policy);
   const difficulty = profileDifficulty(profile, policy);
   const critical = Boolean(options.critical ?? profile.error_cost >= 3);
-  const rawDiv = profile.divergence || 1;
-  const div = (kind === "computer_use" || profile.needs_gui) && rawDiv >= 3 ? 1 : rawDiv;
+  const div = profile.divergence || 1;
   const depth = profile.reasoning_depth;
   const mechanicalRunbook = Boolean(depth === 1 && profile.code_complexity === 0 && div === 1);
   const unlockDiffs = policy.effort_unlock_difficulties || ["coupled", "frontier"];

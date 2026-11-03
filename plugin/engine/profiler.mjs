@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/profiler-core.js at b8d64fccc8f7fd242ae61c7b4c83cfd8706ae45e (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/profiler-core.js at e98a82287ee1793ae559c8a0fed188e5d1c69ef1 (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate rather than edit.
 /**
  * Multi-Protocol Request Extractor & Deterministic 10-Field Task Profiler
@@ -475,7 +475,9 @@ export function validateProfile(raw) {
     ? raw.hours_confidence
     : "medium";
   profile.urgency = ["unknown", "low", "normal", "high"].includes(raw.urgency) ? raw.urgency : "unknown";
-  profile.reason = typeof raw.reason === "string" ? raw.reason.trim().slice(0, 300) : "";
+  if (typeof raw.reason === "string" && raw.reason.trim()) {
+    profile.reason = raw.reason.trim().slice(0, 300);
+  }
   profile.multi_task = Boolean(raw.multi_task);
   profile.task_count = ["1", "2", "3", ">3"].includes(raw.task_count) ? raw.task_count : "1";
   return profile;
@@ -555,7 +557,6 @@ export function inferTaskProfile(task = {}, routes = CANONICAL_ROUTES) {
     expected_hours: expectedHours,
     hours_confidence: "medium",
     urgency: "unknown",
-    reason: `deterministic profile: work_kind=${kind}, depth=${depth}, code=${code}, scale=${context}, div=${divergence}`,
     multi_task: multiTask,
     task_count: taskCount,
   });

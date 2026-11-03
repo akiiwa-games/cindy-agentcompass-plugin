@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/catalog.js at b8d64fccc8f7fd242ae61c7b4c83cfd8706ae45e (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/catalog.js at e98a82287ee1793ae559c8a0fed188e5d1c69ef1 (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate rather than edit.
 /**
  * AgentCompass Core Model Capabilities, Subjective DNA Vectors, Canonical Routes,
