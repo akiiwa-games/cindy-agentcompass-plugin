@@ -165,11 +165,10 @@ export function routeTask(task, catalog, {env = process.env, now = Date.now(), q
     const canonical = canonicalOf(row.route.model);
     const spec = resolveModelSpec(canonical).spec;
     const offered = (row.efforts?.length ? row.efforts : [row.route.effort]).filter(Boolean);
-    const efforts = offered.filter(e => (spec.efforts || []).includes(e));
     const fallbackEffort = (spec.efforts || []).includes('high') ? 'high' : (spec.efforts || [])[0] || 'medium';
     row._canonical = canonical;
     row._emptyEffort = !offered.length;
-    row._efforts = efforts.length ? efforts : offered.length ? offered : [fallbackEffort];
+    row._efforts = offered.length ? offered : [fallbackEffort];
     const entry = pool.get(canonical) || new Set();
     row._efforts.forEach(e => entry.add(e));
     pool.set(canonical, entry);

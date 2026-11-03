@@ -168,6 +168,11 @@ test('screenshot review classifies as visual_analysis (not GUI computer_use), mu
   const sparkAlgo = route('Implement a standalone algorithm.', sparkOnlyCatalog);
   assert.equal(sparkAlgo.status, 'native', 'all host-offered efforts are ranked when static alias efforts do not overlap');
   assert.equal(sparkAlgo.route.bundle.effort, 'xhigh');
+
+  const lunaOnlyCatalog = {models: [REAL.models.find(r => r.route.model === 'gpt-6-luna')]};
+  const lunaAlgo = route('Implement a standalone algorithm.', lunaOnlyCatalog);
+  assert.equal(lunaAlgo.status, 'native', 'all host-offered efforts are ranked even when static spec efforts partially overlap');
+  assert.equal(lunaAlgo.route.bundle.effort, 'xhigh');
 });
 
 test('nothing runnable: an empty or foreign catalog is blocked, never guessed', () => {
