@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-03T06:32:15.293Z",
+   "started_at": "2026-11-03T07:21:52.848Z",
    "operations": [
     {
      "name": "isolation",
@@ -33,7 +33,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 14 passed, 0 failed",
+       "name": "node --test: 30 passed, 0 failed",
        "ok": true
       },
       {
@@ -91,6 +91,24 @@
      ]
     },
     {
+     "name": "market contract gate",
+     "intent": "plugin/ as the market packs it, and the built source, pass the official repository gate (pinned validateGhostManifest, locales, icon, package rules)",
+     "checks": [
+      {
+       "name": "plugin/ passes the gate (7 checks)",
+       "ok": true
+      },
+      {
+       "name": "the built source passes the gate (6 checks)",
+       "ok": true
+      },
+      {
+       "name": "id agentcompass, name AgentCompass, a 256 px PNG icon and exactly en/ja/ko/zh-CN locales",
+       "ok": true
+      }
+     ]
+    },
+    {
      "name": "AgentCompass core: stock Cindy shell",
      "intent": "raw shell roll in Cindy has no addressable parent: the core refuses instead of routing a provider thread to Paseo",
      "checks": [
@@ -126,6 +144,10 @@
       },
       {
        "name": "the plugin made the launcher permission explicit for the routed harness",
+       "ok": true
+      },
+      {
+       "name": "codex: the router chose codex/gpt-6.1-sol, full-access, without fast mode",
        "ok": true
       },
       {
@@ -348,6 +370,118 @@
       },
       {
        "name": "the second status finishes all twelve pages and finds the exact final message",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "stop to a confirmed cancelled state, cleanup with and without archive",
+     "intent": "stop says stopping; only a host-confirmed cancelled run is terminal; cleanup archives, or hands back the exact task ID",
+     "checks": [
+      {
+       "name": "stop reports stopping and status keeps it non-terminal",
+       "ok": true
+      },
+      {
+       "name": "after the host confirms, status reports cancelled as terminal with no invented output",
+       "ok": true
+      },
+      {
+       "name": "cleanup archives the cancelled task",
+       "ok": true
+      },
+      {
+       "name": "without an archive API cleanup returns manual_cleanup_required with the exact task ID, repeatably",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "zero-config market install",
+     "intent": "plugin/ copied as is (no router.json, no build): the worker finds `agentcompass` on PATH, reads ~/.agent-compass/cindy-plugin/account-map.json, then roll -> status -> cleanup",
+     "checks": [
+      {
+       "name": "the installed copy has no router.json",
+       "ok": true
+      },
+      {
+       "name": "an installed-style `agentcompass` launcher is on PATH (agentcompass)",
+       "ok": true
+      },
+      {
+       "name": "roll starts a run through the discovered command",
+       "ok": true
+      },
+      {
+       "name": "the real router answered natively for the Cindy session",
+       "ok": true
+      },
+      {
+       "name": "the account map from the home directory was applied to the exact catalog route",
+       "ok": true
+      },
+      {
+       "name": "status collects the exact final message and cleanup archives",
+       "ok": true
+      },
+      {
+       "name": "the receipt is under ~/.agent-compass/cindy-plugin and the installed copy is unchanged",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "every Cindy harness through the real router",
+     "intent": "Claude max and high, and Pi, reach exact catalog routes with Cindy bypassPermissions; codex is the first operation",
+     "checks": [
+      {
+       "name": "claude-max: the router chose claude/claude-opus-5-5 at max and the plugin made bypassPermissions explicit",
+       "ok": true
+      },
+      {
+       "name": "claude-max: Cindy creates cc/claude/claude-opus-5-5/max with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "claude-high: the router chose claude/claude-opus-5-5 at high and the plugin made bypassPermissions explicit",
+       "ok": true
+      },
+      {
+       "name": "claude-high: Cindy creates cc/claude/claude-opus-5-5/high with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "pi: the router chose the Pi harness on the codex account with its launch model; the fixed full-tool worker is full-access",
+       "ok": true
+      },
+      {
+       "name": "pi: Cindy creates the exact pi route on the mapped connection with bypassPermissions and the run completes",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "answers that are not a Cindy task, and fast mode",
+     "intent": "split (real router) and self come back unchanged and start nothing; a fast codex route maps to Cindy fastMode",
+     "checks": [
+      {
+       "name": "split from the real router is returned as is (task_count 2) and nothing is created",
+       "ok": true
+      },
+      {
+       "name": "a plugin bound to the fixture router builds",
+       "ok": true
+      },
+      {
+       "name": "self (fixture router) is returned as is and starts nothing",
+       "ok": true
+      },
+      {
+       "name": "only the fast route created a task: one create, one send",
+       "ok": true
+      },
+      {
+       "name": "fast (fixture router): codex/gpt-6.1-sol fast becomes Cindy fastMode true with bypassPermissions",
        "ok": true
       }
      ]
@@ -359,14 +493,14 @@
     "os_release": "6.18.40.1-microsoft-standard-WSL2",
     "node": "v24.22.2",
     "python": "3.12.16",
-    "agentcompass_version": "0.3.4",
+    "agentcompass_version": "0.3.5",
     "agentcompass_checkout": "/run/cindy-sandbox/AgentCompass",
     "sandbox_root": "/run/cindy-sandbox/e2e",
-    "scorer": "http://127.0.0.1:41843/v1"
+    "scorer": "http://127.0.0.1:44459/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 14,
+     "pass": 30,
      "fail": 0
     },
     "python": {
@@ -374,11 +508,26 @@
      "ok": true
     }
    },
-   "finished_at": "2026-11-03T06:32:26.615Z",
+   "market": {
+    "id": "agentcompass",
+    "version": "0.2.0",
+    "icon": {
+     "bytes": 5217,
+     "px": 256
+    },
+    "locales": [
+     "en",
+     "zh-CN",
+     "ja",
+     "ko"
+    ]
+   },
+   "fast_mode_note": "The real router chose no fast route in this sandbox: fast mode needs live, non-stale capacity telemetry for the codex window or an explicit --fast, which the plugin does not pass. The fast mapping is verified through test/fixture_router.cjs.",
+   "finished_at": "2026-11-03T07:22:08.493Z",
    "summary": {
-    "operations": 15,
-    "checks": 64,
-    "passed": 64,
+    "operations": 20,
+    "checks": 90,
+    "passed": 90,
     "failed": 0,
     "artifacts": "/run/cindy-sandbox/e2e/report/cindy"
    }
@@ -386,7 +535,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-03T06:39:46.242Z",
+   "started_at": "2026-11-03T07:20:56.346Z",
    "operations": [
     {
      "name": "isolation",
@@ -415,7 +564,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 14 passed, 0 failed",
+       "name": "node --test: 30 passed, 0 failed",
        "ok": true
       },
       {
@@ -473,6 +622,24 @@
      ]
     },
     {
+     "name": "market contract gate",
+     "intent": "plugin/ as the market packs it, and the built source, pass the official repository gate (pinned validateGhostManifest, locales, icon, package rules)",
+     "checks": [
+      {
+       "name": "plugin/ passes the gate (7 checks)",
+       "ok": true
+      },
+      {
+       "name": "the built source passes the gate (6 checks)",
+       "ok": true
+      },
+      {
+       "name": "id agentcompass, name AgentCompass, a 256 px PNG icon and exactly en/ja/ko/zh-CN locales",
+       "ok": true
+      }
+     ]
+    },
+    {
      "name": "AgentCompass core: stock Cindy shell",
      "intent": "raw shell roll in Cindy has no addressable parent: the core refuses instead of routing a provider thread to Paseo",
      "checks": [
@@ -508,6 +675,10 @@
       },
       {
        "name": "the plugin made the launcher permission explicit for the routed harness",
+       "ok": true
+      },
+      {
+       "name": "codex: the router chose codex/gpt-6.1-sol, full-access, without fast mode",
        "ok": true
       },
       {
@@ -733,6 +904,118 @@
        "ok": true
       }
      ]
+    },
+    {
+     "name": "stop to a confirmed cancelled state, cleanup with and without archive",
+     "intent": "stop says stopping; only a host-confirmed cancelled run is terminal; cleanup archives, or hands back the exact task ID",
+     "checks": [
+      {
+       "name": "stop reports stopping and status keeps it non-terminal",
+       "ok": true
+      },
+      {
+       "name": "after the host confirms, status reports cancelled as terminal with no invented output",
+       "ok": true
+      },
+      {
+       "name": "cleanup archives the cancelled task",
+       "ok": true
+      },
+      {
+       "name": "without an archive API cleanup returns manual_cleanup_required with the exact task ID, repeatably",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "zero-config market install",
+     "intent": "plugin/ copied as is (no router.json, no build): the worker finds `agentcompass` on PATH, reads ~/.agent-compass/cindy-plugin/account-map.json, then roll -> status -> cleanup",
+     "checks": [
+      {
+       "name": "the installed copy has no router.json",
+       "ok": true
+      },
+      {
+       "name": "an installed-style `agentcompass` launcher is on PATH (agentcompass.exe)",
+       "ok": true
+      },
+      {
+       "name": "roll starts a run through the discovered command",
+       "ok": true
+      },
+      {
+       "name": "the real router answered natively for the Cindy session",
+       "ok": true
+      },
+      {
+       "name": "the account map from the home directory was applied to the exact catalog route",
+       "ok": true
+      },
+      {
+       "name": "status collects the exact final message and cleanup archives",
+       "ok": true
+      },
+      {
+       "name": "the receipt is under ~/.agent-compass/cindy-plugin and the installed copy is unchanged",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "every Cindy harness through the real router",
+     "intent": "Claude max and high, and Pi, reach exact catalog routes with Cindy bypassPermissions; codex is the first operation",
+     "checks": [
+      {
+       "name": "claude-max: the router chose claude/claude-opus-5-5 at max and the plugin made bypassPermissions explicit",
+       "ok": true
+      },
+      {
+       "name": "claude-max: Cindy creates cc/claude/claude-opus-5-5/max with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "claude-high: the router chose claude/claude-opus-5-5 at high and the plugin made bypassPermissions explicit",
+       "ok": true
+      },
+      {
+       "name": "claude-high: Cindy creates cc/claude/claude-opus-5-5/high with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "pi: the router chose the Pi harness on the codex account with its launch model; the fixed full-tool worker is full-access",
+       "ok": true
+      },
+      {
+       "name": "pi: Cindy creates the exact pi route on the mapped connection with bypassPermissions and the run completes",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "answers that are not a Cindy task, and fast mode",
+     "intent": "split (real router) and self come back unchanged and start nothing; a fast codex route maps to Cindy fastMode",
+     "checks": [
+      {
+       "name": "split from the real router is returned as is (task_count 2) and nothing is created",
+       "ok": true
+      },
+      {
+       "name": "a plugin bound to the fixture router builds",
+       "ok": true
+      },
+      {
+       "name": "self (fixture router) is returned as is and starts nothing",
+       "ok": true
+      },
+      {
+       "name": "only the fast route created a task: one create, one send",
+       "ok": true
+      },
+      {
+       "name": "fast (fixture router): codex/gpt-6.1-sol fast becomes Cindy fastMode true with bypassPermissions",
+       "ok": true
+      }
+     ]
     }
    ],
    "environment": {
@@ -741,14 +1024,14 @@
     "os_release": "10.0.26100",
     "node": "v24.12.0",
     "python": "3.13.7",
-    "agentcompass_version": "0.3.4",
+    "agentcompass_version": "0.3.5",
     "agentcompass_checkout": "E:\\PROJECTS\\route_manager",
-    "sandbox_root": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-win-sandbox-250877",
-    "scorer": "http://127.0.0.1:9151/v1"
+    "sandbox_root": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-sandbox-win-final",
+    "scorer": "http://127.0.0.1:10192/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 14,
+     "pass": 30,
      "fail": 0
     },
     "python": {
@@ -756,30 +1039,45 @@
      "ok": true
     }
    },
-   "finished_at": "2026-11-03T06:40:07.870Z",
+   "market": {
+    "id": "agentcompass",
+    "version": "0.2.0",
+    "icon": {
+     "bytes": 5217,
+     "px": 256
+    },
+    "locales": [
+     "en",
+     "zh-CN",
+     "ja",
+     "ko"
+    ]
+   },
+   "fast_mode_note": "The real router chose no fast route in this sandbox: fast mode needs live, non-stale capacity telemetry for the codex window or an explicit --fast, which the plugin does not pass. The fast mapping is verified through test/fixture_router.cjs.",
+   "finished_at": "2026-11-03T07:21:31.440Z",
    "summary": {
-    "operations": 15,
-    "checks": 64,
-    "passed": 64,
+    "operations": 20,
+    "checks": 90,
+    "passed": 90,
     "failed": 0,
-    "artifacts": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-win-sandbox-250877\\report\\cindy"
+    "artifacts": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-sandbox-win-final\\report\\cindy"
    }
   }
  },
  "summary": {
   "linux": {
-   "operations": 15,
-   "checks": 64,
-   "passed": 64,
+   "operations": 20,
+   "checks": 90,
+   "passed": 90,
    "failed": 0,
    "artifacts": "/run/cindy-sandbox/e2e/report/cindy"
   },
   "win32": {
-   "operations": 15,
-   "checks": 64,
-   "passed": 64,
+   "operations": 20,
+   "checks": 90,
+   "passed": 90,
    "failed": 0,
-   "artifacts": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-win-sandbox-250877\\report\\cindy"
+   "artifacts": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-sandbox-win-final\\report\\cindy"
   }
  }
 }

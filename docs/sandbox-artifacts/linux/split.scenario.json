@@ -1,0 +1,1 @@
+{"workdir":"/run/cindy-sandbox/e2e/work dir","session":"cindy-session-1","steps":[{"label":"roll","call":"roll","args":{"task":"Rename the helper foo to bar in util.py and update its two callers. [904968cd]\nFIXTURE-SCENARIO: ok split\nFIXTURE-PROFILE: split\n"}}]}

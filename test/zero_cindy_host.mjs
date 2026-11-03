@@ -9,6 +9,7 @@
 // scenario: {workdir, session, steps:[...]}. A step is
 //   {label, call: "roll"|"status"|"stop"|"cleanup", args, inject?: false, context?: {...}, parallel?: n, as?: <other session id>}
 //   or {label, fixture: {...changes to the fake Cindy...}}   e.g. {capabilities, catalog, workingDir, staleRevision, runStatus, outputMessageId, pages, archiveFails}
+//   capabilities: 'full' | 'missing' | 'denied' | 'no-cancel' | 'no-archive' | 'no-exact'
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -45,8 +46,12 @@ const host = {
 const log = (name, detail) => host.calls.push({ name, ...detail });
 const ALL_OPS = ['models', 'create', 'send', 'get', 'getRun', 'listRuns', 'readMessages', 'cancel', 'archive'];
 
-function routeOf(bundle) {
-  return { agentKind: { claude: 'cc', codex: 'codex', pi: 'pi' }[bundle.harness], providerId: bundle.account, model: bundle.launch_model || bundle.model, effort: bundle.effort, fastMode: Boolean(bundle.fast) };
+// The catalog row a correctly configured Cindy shows for the routed account: its connection is the mapped one, else
+// the connection named like the router account.
+function routeOf(bundle, mappings = []) {
+  const mapped = mappings.find(m => m.routerProvider === bundle.provider && m.routerAccount === bundle.account);
+  return { agentKind: { claude: 'cc', codex: 'codex', pi: 'pi' }[bundle.harness], providerId: mapped ? mapped.providerId : bundle.account,
+    model: bundle.launch_model || bundle.model, effort: bundle.effort, fastMode: Boolean(bundle.fast) };
 }
 const cindy = {
   node: {
@@ -62,12 +67,13 @@ const cindy = {
     capabilities: async () => {
       log('capabilities', {});
       if (host.capabilities === 'denied') throw Error('PERMISSION_DENIED');
-      const operations = host.capabilities === 'no-cancel' ? ALL_OPS.filter(o => o !== 'cancel') : ALL_OPS;
+      const missing = { 'no-cancel': 'cancel', 'no-archive': 'archive' }[host.capabilities];
+      const operations = ALL_OPS.filter(o => o !== missing);
       return { operations, exactRoute: host.capabilities !== 'no-exact', createPermissionMode: true };
     },
     models: async () => {
       log('models', {});
-      const route = host.prepared ? routeOf(host.prepared.bundle) : null;
+      const route = host.prepared ? routeOf(host.prepared.bundle, host.prepared.mappings) : null;
       if (!route || host.catalog === 'empty') return { models: [] };
       const shown = host.catalog === 'other-model' ? { ...route, model: route.model + '-other' } : route;
       return { models: [{ route: shown, efforts: [route.effort], supportsFastMode: true }] };

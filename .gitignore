@@ -2,3 +2,4 @@ node_modules/
 __pycache__/
 *.pyc
 .cindy-sandbox-cache/
+plugin/router.json

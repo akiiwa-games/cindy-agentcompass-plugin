@@ -29,16 +29,36 @@ Cindy session ──ghost_call {tool:"roll", args:{task}}──▶ plugin/main.j
 ```
 
 - `plugin/ghost.json`: Cindy v3 manifest (`minCindyVersion: "0.1.121"`, `sessionContext`, `agent.tasks`, a Node worker) with four tools:
-  `roll`, `status`, `stop`, `cleanup`.
+  `roll`, `status`, `stop`, `cleanup`; the icon `plugin/assets/icon.png` (from `scripts/make_icon.mjs`) and `en`, `zh-CN`, `ja`, `ko`
+  resources in `plugin/locales/`, as the official plugin repository requires.
 - `plugin/main.js`: the logic page. Requires the experimental tasks API, picks the one catalog route that exactly matches the routed
   harness/connection/model/effort/fast setting, creates and checks the draft, sends the full prompt once, and collects results.
 - `plugin/worker.cjs`: the node bridge. Validates the host context, calls the public router, turns its native route into an explicit Cindy
   contract (only `claude`, `codex`, `pi`; Claude `bypassPermissions`, Codex and Pi `full-access`; an explicitly different mode is refused),
   appends the return-channel contract, and keeps durable receipts and message pages under `~/.agent-compass/cindy-plugin/`.
-- `scripts/build_plugin.py`: writes a reviewable plugin source directory with a `router.json` bound to one AgentCompass install.
+- `scripts/build_plugin.py`: writes a reviewable plugin source directory with a `router.json` bound to one AgentCompass install
+  (optional: `plugin/` itself installs as is).
 - `scripts/cindy_0_1_121_cancel_hotfix.py` and `patches/cindy-0.1.121-cancel.patch`: the opt-in local fix for cancellation on Cindy 0.1.121.
 
 ## Install
+
+### From the plugin market (zero configuration)
+
+1. Install AgentCompass (`uv tool install agentcompass` or the Windows installer) and run `agentcompass setup`.
+2. Install the `agentcompass` plugin in Cindy, approve Node, sessionContext and tasks, and set the plugin's task directory to the
+   project being delegated.
+
+`plugin/` needs no build step. When it has no `router.json`, the worker looks, on every `roll`, for:
+
+1. `~/.agent-compass/cindy-plugin/router.json` (`{"command": [...roll command...], "accountMappings": [...], "stateRoot": "..."}`);
+2. otherwise `agentcompass` on `PATH`, then in `~/.local/bin` (Windows: `agentcompass.exe`, `%USERPROFILE%\.local\bin`), and runs
+   `<it> roll`.
+
+Cindy connection bindings come from that `router.json`, else from `~/.agent-compass/cindy-plugin/account-map.json` (same format as
+`--account-map` below), else none: a routed account then needs a Cindy connection of the same name. If AgentCompass is not found
+the `roll` call fails with that explanation and nothing is routed.
+
+### From source, bound to one install
 
 1. Install AgentCompass (`uv tool install agentcompass`, the Windows installer, or a source checkout) and run `agentcompass setup`.
 2. Build the plugin source:
@@ -74,16 +94,25 @@ Full setup, support boundary, the 2026-11-03 real acceptance on Cindy 0.1.121 an
 ## Tests
 
 ```sh
-npm test                    # node: plugin boundary + real worker.cjs bridge; python: build script + hotfix refusals
+npm test                    # node: market gate + plugin boundary + real worker.cjs bridge; python: build script + hotfix refusals
 npm run test:sandbox        # end-to-end in an isolated home: build -> fake Cindy host -> real worker.cjs -> real agentcompass roll
 npm run test:sandbox:linux  # the same plus unit tests in the WSL docker-desktop distro, in a /run tmpfs with musl Node and Python
 ```
 
+`test/test_market_contract.mjs` checks `plugin/` against the makecindy/cindy-official-plugins CI gate: the pinned Cindy
+`validateGhostManifest` (vendored unmodified under `test/vendor/`, Apache-2.0) plus the repository's id, version, tool, icon,
+locale and package rules.
+
 `test/sandbox-e2e.mjs` substitutes only the Cindy host (`test/zero_cindy_host.mjs`), the classifier's model (a local OpenAI-compatible
-fixture) and a discovery placeholder for the provider CLI; the router's classifier client, allocator and ledger run for real. Set
-`AGENTCOMPASS_CHECKOUT` to the AgentCompass checkout (default `../route_manager`). The latest Windows and Linux runs are in
-[docs/sandbox-e2e-report.json](docs/sandbox-e2e-report.json), with every scenario's input and host record under `docs/sandbox-artifacts/`.
-These are fixture-host results, not a real Cindy run.
+fixture whose profile a `FIXTURE-PROFILE:` line selects) and discovery placeholders for the provider CLIs; the router's classifier
+client, allocator and ledger run for real. It covers the market gate; a zero-configuration install (`plugin/` copied as is, an
+installed-style `agentcompass` launcher on `PATH`, `account-map.json`); Codex, Claude (`max` and `high`) and Pi routes chosen by the
+real router; `split` passed through unchanged; concurrent rolls, a forged `session_context`, 12 message pages, a 2.6 MB reply, stop to
+a confirmed `cancelled` state, archive and `manual_cleanup_required` cleanup, and drafts that fail verification. `self` and a fast-mode
+route are not produced by the public `roll` in the sandbox (fast mode needs live capacity telemetry or `--fast`), so those two come
+from `test/fixture_router.cjs`, labelled as such. Set `AGENTCOMPASS_CHECKOUT` to the AgentCompass checkout (default
+`../route_manager`). The latest Windows and Linux runs are in [docs/sandbox-e2e-report.json](docs/sandbox-e2e-report.json), with every
+scenario's input and host record under `docs/sandbox-artifacts/`. These are fixture-host results, not a real Cindy run.
 
 ## How AgentCompass fits with the other hosts
 

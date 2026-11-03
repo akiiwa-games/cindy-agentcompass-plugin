@@ -1,0 +1,185 @@
+{
+ "results": [
+  {
+   "label": "self",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": true,
+     "result": {
+      "status": "self",
+      "fixture_router": true,
+      "parent_id": "cindy-session-1",
+      "next_action": "Do this task in the current session; no worker is started."
+     }
+    }
+   ]
+  },
+  {
+   "label": "fast",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": true,
+     "result": {
+      "status": "running",
+      "operation": "10fc3eade588d1e0530f2d71bc25f4ff2eefdd40",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "automatic_callback": false,
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "10fc3eade588d1e0530f2d71bc25f4ff2eefdd40"
+       }
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "create",
+   "requestKey": "10fc3eade588d1e0530f2d71bc25f4ff2eefdd40:create",
+   "route": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": true
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  {
+   "name": "send",
+   "taskId": "task-1",
+   "expectedRevision": 1,
+   "requestKey": "10fc3eade588d1e0530f2d71bc25f4ff2eefdd40:send",
+   "chars": 490
+  }
+ ],
+ "nodeCalls": [
+  "prepare",
+  "prepare",
+  "save",
+  "save",
+  "save"
+ ],
+ "sent": [
+  {
+   "runId": "run-1",
+   "file": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-sandbox-win-final\\report\\cindy\\cindy-sent-run-1.txt",
+   "sha256": "d86d0bf126edb42b9701c6a5a8db2bdd7dd0fbc64e063d691f53ed931f972b43",
+   "chars": 490
+  }
+ ],
+ "prepared": {
+  "operation": "10fc3eade588d1e0530f2d71bc25f4ff2eefdd40",
+  "parent": "cindy-session-1",
+  "state": "running",
+  "router": {
+   "status": "native",
+   "fixture_router": true,
+   "parent_host": "native",
+   "parent_id": "cindy-session-1",
+   "parent_address": "cindy-session-1",
+   "worker_prompt_file": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-sandbox-win-final\\tmp\\fixture-router-zXBa8F\\worker-prompt.md",
+   "route": {
+    "bundle": {
+     "provider": "codex",
+     "harness": "codex",
+     "account": "codex",
+     "model": "gpt-6.1-sol",
+     "effort": "high",
+     "fast": true
+    }
+   }
+  },
+  "bundle": {
+   "provider": "codex",
+   "harness": "codex",
+   "account": "codex",
+   "model": "gpt-6.1-sol",
+   "effort": "high",
+   "fast": true,
+   "modeId": "full-access"
+  },
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [370d20da]\nFIXTURE-SCENARIO: ok fast\nFIXTURE-ROUTER: fast\n\nParent session agent ID: `cindy-session-1`\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "directory": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-sandbox-win-final\\work dir",
+  "mappings": [],
+  "route": {
+   "agentKind": "codex",
+   "providerId": "codex",
+   "model": "gpt-6.1-sol",
+   "effort": "high",
+   "fastMode": true
+  },
+  "createRequest": {
+   "requestKey": "10fc3eade588d1e0530f2d71bc25f4ff2eefdd40:create",
+   "title": "AgentCompass 10fc3eade588",
+   "route": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": true
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  "taskId": "task-1",
+  "sendRequest": {
+   "taskId": "task-1",
+   "expectedRevision": 1,
+   "requestKey": "10fc3eade588d1e0530f2d71bc25f4ff2eefdd40:send",
+   "text": "Rename the helper foo to bar in util.py and update its two callers. [370d20da]\nFIXTURE-SCENARIO: ok fast\nFIXTURE-ROUTER: fast\n\nParent session agent ID: `cindy-session-1`\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
+  },
+  "runId": "run-1"
+ },
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [
+  {
+   "taskId": "task-1",
+   "revision": 2,
+   "resolvedConfig": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": true
+   },
+   "permissionMode": "bypassPermissions",
+   "planModeEnabled": false,
+   "workingDir": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-sandbox-win-final\\work dir"
+  }
+ ],
+ "runs": [
+  {
+   "runId": "run-1",
+   "taskId": "task-1",
+   "status": "running",
+   "acceptedConfig": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": true
+   }
+  }
+ ],
+ "workerStderr": ""
+}

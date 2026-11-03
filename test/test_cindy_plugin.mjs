@@ -183,3 +183,63 @@ test('archive is optional for dispatch and cancellation; inactive cleanup is hon
   assert.equal(f.calls.filter(c=>c[0]==='archive').length,archive?1:0);
   }
 });
+// Each harness Cindy runs, as the router names it, reaches exactly one catalog row with the bypass permission.
+function routed(bundle,catalogRoute,{mappings=[],supportsFastMode=true}={}) {
+  const f=fixture({prepared:{parent:ctx.session_id,state:'prepared',router:{status:'native'},bundle,prompt:'p',mappings}});
+  f.cindy.tasks.models=async()=>({models:[{route:{...catalogRoute,fastMode:false},efforts:[catalogRoute.effort],supportsFastMode},
+    {route:{...catalogRoute,model:catalogRoute.model+'-nearby',fastMode:false},efforts:[catalogRoute.effort],supportsFastMode}]});
+  f.task.resolvedConfig={...catalogRoute};
+  return f;
+}
+test('claude routes become Cindy cc with bypassPermissions and keep effort high or max',async()=>{
+  for (const effort of ['high','max']) {
+    const want={agentKind:'cc',providerId:'claude',model:'claude-opus-5-5',effort,fastMode:false};
+    const f=routed({provider:'claude',account:'claude',harness:'claude',model:'claude-opus-5-5',effort,modeId:'bypassPermissions'},want);
+    const reply=await f.send('roll',{task:'x'});
+    assert.equal(reply.ok,true,JSON.stringify(reply));
+    const create=f.calls.find(c=>c[0]==='create')[1];
+    assert.deepEqual(create.route,want);
+    assert.equal(create.permissionMode,'bypassPermissions');
+  }
+});
+test('pi runs the launch model on the mapped Cindy connection; without a mapping it is refused',async()=>{
+  const bundle={provider:'pi',account:'codex',harness:'pi',model:'gpt-6.1-sol',launch_model:'openai-codex/gpt-6.1-sol',effort:'high',modeId:'full-access'};
+  const want={agentKind:'pi',providerId:'openai-conn',model:'openai-codex/gpt-6.1-sol',effort:'high',fastMode:false};
+  const mapped=routed(bundle,want,{mappings:[{routerProvider:'pi',routerAccount:'codex',providerId:'openai-conn',agentKind:'pi'}]});
+  const ok=await mapped.send('roll',{task:'x'});
+  assert.equal(ok.ok,true,JSON.stringify(ok));
+  assert.deepEqual(mapped.calls.find(c=>c[0]==='create')[1].route,want);
+  const unmapped=routed(bundle,want);
+  const refused=await unmapped.send('roll',{task:'x'});
+  assert.equal(refused.ok,false);
+  assert.match(refused.message,/No explicit Cindy provider\/account binding/);
+  const wrongKind=routed(bundle,want,{mappings:[{routerProvider:'pi',routerAccount:'codex',providerId:'openai-conn',agentKind:'codex'}]});
+  assert.match((await wrongKind.send('roll',{task:'x'})).message,/changes the routed harness/);
+  assert.equal([unmapped,wrongKind].flatMap(f=>f.calls).filter(c=>c[0]==='create').length,0);
+});
+test('a codex fast route asks Cindy for fast mode, and only on a row that supports it',async()=>{
+  const bundle={provider:'codex',account:'codex',harness:'codex',model:'gpt-6.1-sol',effort:'high',fast:true,modeId:'full-access'};
+  const want={agentKind:'codex',providerId:'codex',model:'gpt-6.1-sol',effort:'high',fastMode:true};
+  const f=routed(bundle,want);
+  const reply=await f.send('roll',{task:'x'});
+  assert.equal(reply.ok,true,JSON.stringify(reply));
+  assert.deepEqual(f.calls.find(c=>c[0]==='create')[1].route,want);
+  const slow=routed(bundle,want,{supportsFastMode:false});
+  assert.equal((await slow.send('roll',{task:'x'})).ok,false);
+  assert.equal(slow.calls.filter(c=>c[0]==='create').length,0);
+  const plain=routed({...bundle,fast:false},{...want,fastMode:false});
+  await plain.send('roll',{task:'x'});
+  assert.equal(plain.calls.find(c=>c[0]==='create')[1].route.fastMode,false);
+});
+test('stop reports stopping honestly, then status reports the confirmed cancelled terminal state',async()=>{
+  const f=fixture();const first=await f.send('roll',{task:'x'});
+  const args={operation:first.result.operation};
+  const stopping=(await f.send('stop',args)).result;
+  assert.equal(stopping.status,'stopping');
+  assert.equal((await f.send('status',args)).result.next_action.includes('No automatic callback'),true,'stopping is not terminal');
+  f.run.status='cancelled';
+  const cancelled=(await f.send('status',args)).result;
+  assert.equal(cancelled.status,'cancelled');
+  assert.match(cancelled.next_action,/Cleanup archives/);
+  assert.equal(cancelled.output_available,false);
+});

@@ -23,7 +23,9 @@ class BuildPluginTests(unittest.TestCase):
             output = Path(tmp) / 'plugin src'
             code, doc = build('--output', output, '--router-cmd', json.dumps([sys.executable, '-m', 'agentcompass', 'roll']))
             self.assertEqual(code, 0, doc)
-            self.assertEqual(sorted(p.name for p in output.iterdir()), ['ghost.json', 'main.js', 'router.json', 'worker.cjs'])
+            shipped = sorted(p.relative_to(output).as_posix() for p in output.rglob('*') if p.is_file())
+            self.assertEqual(shipped, ['assets/icon.png', 'ghost.json', 'locales/en.json', 'locales/ja.json', 'locales/ko.json',
+                                       'locales/zh-CN.json', 'main.js', 'router.json', 'worker.cjs'])
             config = json.loads((output / 'router.json').read_text(encoding='utf-8'))
             self.assertEqual(config['command'][1:], ['-m', 'agentcompass', 'roll'])
             self.assertTrue(Path(config['command'][0]).is_absolute())
@@ -36,8 +38,9 @@ class BuildPluginTests(unittest.TestCase):
             self.assertTrue(manifest['agent']['tasks'])
             self.assertEqual([t['name'] for t in manifest['tools']], ['roll', 'status', 'stop', 'cleanup'])
             self.assertNotIn('skill', manifest)  # upstream deprecated new bundled skills
-            for name in ('ghost.json', 'main.js', 'worker.cjs'):
-                self.assertEqual((output / name).read_bytes(), (REPO / 'plugin' / name).read_bytes())
+            for name in shipped:
+                if name != 'router.json':
+                    self.assertEqual((output / name).read_bytes(), (REPO / 'plugin' / name).read_bytes(), name)
             self.assertFalse((Path(tmp) / '.cindy').exists())
 
     def test_checkout_path_runs_its_package_with_this_python(self):

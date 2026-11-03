@@ -79,15 +79,30 @@ const baseEnv = {
   ROUTER_DISPATCH_DB: path.join(state, 'dispatch.sqlite3'), ROUTER_USAGE_CACHE: path.join(state, 'usage.json'), ROUTER_SCORE_CACHE: 'off',
   PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1', NO_COLOR: '1',
 };
-// A discovery placeholder for the routed CLI with synthetic sign-in data; nothing executes it (Cindy runs the worker).
+// Discovery placeholders for the routed CLIs with synthetic sign-in data; nothing executes them (Cindy runs the worker).
+for (const name of ['codex', 'claude', 'pi']) {
+  const cli = path.join(bin, WIN ? `${name}.exe` : name);
+  fs.writeFileSync(cli, WIN ? 'fixture discovery placeholder' : `#!/bin/sh\necho "${name} 0.0.0-fixture"\n`);
+  fs.chmodSync(cli, 0o755);
+}
 fs.mkdirSync(baseEnv.CODEX_HOME, {recursive: true});
-const cli = path.join(bin, WIN ? 'codex.exe' : 'codex');
-fs.writeFileSync(cli, WIN ? 'fixture discovery placeholder' : '#!/bin/sh\necho "codex-cli 0.0.0-fixture"\n');
-fs.chmodSync(cli, 0o755);
+fs.mkdirSync(baseEnv.CLAUDE_CONFIG_DIR, {recursive: true});
+fs.writeFileSync(path.join(baseEnv.CLAUDE_CONFIG_DIR, '.credentials.json'), JSON.stringify({claudeAiOauth: {accessToken: 'fixture-only',
+  subscriptionType: 'max', rateLimitTier: 'default_claude_max_20x'}}));
+// The Pi scenario routes with only the Codex sign-in: with Claude signed in, this fleet prefers Claude for exploration.
+const noClaude = D('claude-signed-out');
 const claims = Buffer.from(JSON.stringify({'https://api.openai.com/auth': {chatgpt_plan_type: 'plus', chatgpt_account_id: 'fixture'}})).toString('base64url');
 fs.writeFileSync(path.join(baseEnv.CODEX_HOME, 'auth.json'), JSON.stringify({tokens: {account_id: 'fixture', access_token: 'fixture-only', id_token: `e30.${claims}.fixture`}}));
 
-// ---- the model behind the classifier
+// ---- the model behind the classifier: a fixed small-edit profile, changed by a `FIXTURE-PROFILE: <name>` line in the task
+// so each harness is reached through the real allocator (profiles found by probing this fleet; the router decides).
+const PROFILES = {
+  deep: {work_kind: 'direction_reasoning', reasoning_depth: 4, hallucination_risk: 3, error_cost: 3, divergence: 3, context_scale: 3,
+    code_complexity: 3, expected_hours: 3, reason: 'fixture: deep open-ended design'},
+  review: {work_kind: 'debug_review', reasoning_depth: 3, reason: 'fixture: a focused review'},
+  explore: {work_kind: 'exploration_analysis', interaction_style: 'exploration', reason: 'fixture: read-only exploration'},
+  split: {multi_task: true, task_count: '2', reason: 'fixture: two independent deliverables'},
+};
 const scorerRequests = [];
 const scorer = http.createServer((req, res) => {
   const chunks = [];
@@ -99,6 +114,9 @@ const scorer = http.createServer((req, res) => {
       hallucination_risk: 2, error_cost: 2, needs_visual: false, needs_gui: false, local_only: false, expected_hours: 0.5,
       hours_confidence: 'medium', urgency: 'normal', interaction_style: 'engineering', multi_task: false, task_count: '1',
       reason: 'fixture classification of a small bounded edit'};
+    const marker = (/FIXTURE-PROFILE: (\w+)/.exec(user) || [])[1];
+    Object.assign(profile, PROFILES[marker] || {});
+    scorerRequests.at(-1).profile = marker || 'default';
     const raw = JSON.stringify({choices: [{message: {content: JSON.stringify(profile)}}]});
     res.writeHead(200, {'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(raw)});
     res.end(raw);
@@ -126,10 +144,10 @@ const parse = text => {try {return JSON.parse(text);} catch {const i = text.inde
 const task = (note = '') => `${TASK_BODY} [${crypto.createHash('sha256').update(`${Date.now()}${note}${Math.random()}`).digest('hex').slice(0, 8)}]\nFIXTURE-SCENARIO: ok ${note}\n`;
 const readJson = file => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
 
-async function drive(plugin, name, steps, session = SESSION) {
+async function drive(plugin, name, steps, {session = SESSION, env = {}} = {}) {
   const scenario = path.join(art, `${name}.scenario.json`), out = path.join(art, `${name}.out.json`);
   fs.writeFileSync(scenario, JSON.stringify({workdir: work, session, steps}));
-  const result = await run([process.execPath, path.join(REPO, 'test', 'zero_cindy_host.mjs'), plugin, scenario, out]);
+  const result = await run([process.execPath, path.join(REPO, 'test', 'zero_cindy_host.mjs'), plugin, scenario, out], {env});
   return {record: readJson(out), result};
 }
 const count = (record, name) => (record.calls || []).filter(c => c.name === name).length;
@@ -150,10 +168,11 @@ try {
   check('the public AgentCompass entry runs from the checkout', version.code === 0 && /^\d+\.\d+\.\d+/.test(version.stdout.trim()), version.stdout + version.stderr);
 
   operation('unit tests', 'the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox');
-  const nodeUnits = await run([process.execPath, '--test', path.join(REPO, 'test', 'test_cindy_plugin.mjs'), path.join(REPO, 'test', 'test_worker_bridge.mjs')], {cwd: REPO});
+  const nodeUnits = await run([process.execPath, '--test', ...['test_market_contract.mjs', 'test_cindy_plugin.mjs', 'test_worker_bridge.mjs'].map(f => path.join(REPO, 'test', f))],
+    {cwd: REPO, env: {AGENTCOMPASS_PYTHON: python.exe}});
   const [nodePass, nodeFail] = ['pass', 'fail'].map(k => Number((nodeUnits.stdout.match(new RegExp(`ℹ ${k} (\\d+)`)) || [])[1]));
   report.unit_tests = {node: {pass: nodePass, fail: nodeFail}};
-  check(`node --test: ${nodePass} passed, ${nodeFail} failed`, nodeUnits.code === 0 && nodePass >= 14 && nodeFail === 0, nodeUnits.stdout.slice(-1500) + nodeUnits.stderr.slice(-500));
+  check(`node --test: ${nodePass} passed, ${nodeFail} failed`, nodeUnits.code === 0 && nodePass >= 30 && nodeFail === 0, nodeUnits.stdout.slice(-1500) + nodeUnits.stderr.slice(-500));
   const pyUnits = await run([python.exe, '-X', 'utf8', '-m', 'unittest', 'discover', '-s', path.join(REPO, 'test'), '-p', 'test_*.py'], {cwd: REPO});
   const ran = Number((pyUnits.stderr.match(/Ran (\d+) tests?/) || [])[1]);
   report.unit_tests.python = {ran, ok: pyUnits.code === 0};
@@ -191,6 +210,21 @@ try {
   fs.writeFileSync(bad, JSON.stringify([{routerProvider: 'codex'}]));
   const refused = await run([...builder, '--output', path.join(ROOT, 'cindy bad src'), '--account-map', bad, '--router-cmd', CHECKOUT]);
   check('an incomplete account map is refused and nothing is written', refused.code !== 0 && !fs.existsSync(path.join(ROOT, 'cindy bad src')), refused.stdout.slice(0, 200));
+
+  operation('market contract gate', 'plugin/ as the market packs it, and the built source, pass the official repository gate (pinned validateGhostManifest, locales, icon, package rules)');
+  const gate = async dir => {
+    const done = await run([process.execPath, '--test', path.join(REPO, 'test', 'test_market_contract.mjs')], {cwd: REPO, env: dir ? {CINDY_MARKET_PLUGIN_DIR: dir} : {}});
+    return {done, pass: Number((done.stdout.match(/ℹ pass (\d+)/) || [])[1]), fail: Number((done.stdout.match(/ℹ fail (\d+)/) || [])[1])};
+  };
+  const rawGate = await gate(null), builtGate = await gate(plugin);
+  check(`plugin/ passes the gate (${rawGate.pass} checks)`, rawGate.done.code === 0 && rawGate.pass >= 7 && rawGate.fail === 0, rawGate.done.stdout.slice(-1500));
+  check(`the built source passes the gate (${builtGate.pass} checks)`, builtGate.done.code === 0 && builtGate.pass >= 6 && builtGate.fail === 0, builtGate.done.stdout.slice(-1500));
+  const shipped = JSON.parse(fs.readFileSync(path.join(REPO, 'plugin', 'ghost.json'), 'utf8'));
+  const icon = fs.readFileSync(path.join(REPO, 'plugin', shipped.icon));
+  check('id agentcompass, name AgentCompass, a 256 px PNG icon and exactly en/ja/ko/zh-CN locales',
+    shipped.id === 'agentcompass' && shipped.name === 'AgentCompass' && icon.subarray(1, 4).toString() === 'PNG' && [128, 256].includes(icon.readUInt32BE(16)) &&
+    JSON.stringify(Object.keys(shipped.locales).sort()) === '["en","ja","ko","zh-CN"]', {id: shipped.id, name: shipped.name, locales: shipped.locales});
+  report.market = {id: shipped.id, version: shipped.version, icon: {bytes: icon.length, px: icon.readUInt32BE(16)}, locales: Object.keys(shipped.locales)};
 
   // -------------------------------------------------------------------------------------------------------------
   operation('AgentCompass core: stock Cindy shell', 'raw shell roll in Cindy has no addressable parent: the core refuses instead of routing a provider thread to Paseo');
@@ -232,6 +266,8 @@ try {
   const bundle = stored.bundle || {};
   check('the plugin made the launcher permission explicit for the routed harness',
     ({claude: 'bypassPermissions', codex: 'full-access', pi: 'full-access'})[bundle.harness] === bundle.modeId, bundle);
+  check('codex: the router chose codex/gpt-6.1-sol, full-access, without fast mode',
+    bundle.provider === 'codex' && bundle.harness === 'codex' && bundle.model === 'gpt-6.1-sol' && bundle.modeId === 'full-access' && !bundle.fast, bundle);
   const created = (record.calls || []).find(c => c.name === 'create') || {};
   check("the create request carries the router's exact model/effort and the bypass permission",
     created.route?.model === (bundle.launch_model || bundle.model) && created.route?.effort === bundle.effort && created.permissionMode === 'bypassPermissions', {created, bundle});
@@ -389,6 +425,138 @@ try {
     {messages_complete: p1.messages_complete, status: p1.status});
   check('the second status finishes all twelve pages and finds the exact final message', p2.messages_complete === true && (p2.full_result_artifacts || []).length === 12 && p2.output_available === true,
     {messages_complete: p2.messages_complete, output_available: p2.output_available});
+
+  // -------------------------------------------------------------------------------------------------------------
+  operation('stop to a confirmed cancelled state, cleanup with and without archive', 'stop says stopping; only a host-confirmed cancelled run is terminal; cleanup archives, or hands back the exact task ID');
+  ({record, result} = await drive(plugin, 'cancelled', [
+    {label: 'roll', call: 'roll', args: {task: task('cancel-a')}},
+    {label: 'stop', call: 'stop', args: {operation: '@operation:roll'}},
+    {label: 'status while stopping', call: 'status', args: {operation: '@operation:roll'}},
+    {label: 'host confirms cancellation', fixture: {runStatus: 'cancelled'}},
+    {label: 'status after cancel', call: 'status', args: {operation: '@operation:roll'}},
+    {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
+  ]));
+  r = replies(record);
+  const sw = first(r, 'status while stopping').result || {}, sc = first(r, 'status after cancel').result || {};
+  check('stop reports stopping and status keeps it non-terminal', first(r, 'stop').result?.status === 'stopping' && sw.status === 'stopping' &&
+    (sw.next_action || '').includes('No automatic callback'), {stop: r.stop, sw});
+  check('after the host confirms, status reports cancelled as terminal with no invented output', sc.status === 'cancelled' && sc.output_available === false &&
+    (sc.next_action || '').includes('Cleanup archives'), sc);
+  check('cleanup archives the cancelled task', first(r, 'cleanup').result?.status === 'cleaned' && count(record, 'archive') === 1, r.cleanup);
+  ({record, result} = await drive(plugin, 'manual-cleanup', [
+    {label: 'host without archive', fixture: {capabilities: 'no-archive'}},
+    {label: 'roll', call: 'roll', args: {task: task('cancel-b')}},
+    {label: 'stop', call: 'stop', args: {operation: '@operation:roll'}},
+    {label: 'host confirms cancellation', fixture: {runStatus: 'cancelled'}},
+    {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
+    {label: 'cleanup again', call: 'cleanup', args: {operation: '@operation:roll'}},
+  ]));
+  r = replies(record);
+  const mc = first(r, 'cleanup').result || {};
+  const taskId = (record.tasks || [])[0]?.taskId;
+  check('without an archive API cleanup returns manual_cleanup_required with the exact task ID, repeatably', mc.status === 'manual_cleanup_required' &&
+    mc.archived === false && taskId && mc.taskId === taskId && first(r, 'cleanup again').result?.taskId === taskId && count(record, 'archive') === 0,
+    {mc, taskId, stderr: result.stderr.slice(-300)});
+
+  // -------------------------------------------------------------------------------------------------------------
+  operation('zero-config market install', 'plugin/ copied as is (no router.json, no build): the worker finds `agentcompass` on PATH, reads ~/.agent-compass/cindy-plugin/account-map.json, then roll -> status -> cleanup');
+  const market = path.join(ROOT, 'market install', 'agentcompass');
+  fs.cpSync(path.join(REPO, 'plugin'), market, {recursive: true});
+  check('the installed copy has no router.json', !fs.existsSync(path.join(market, 'router.json')), fs.readdirSync(market));
+  const zcBin = D('installed bin');
+  const made = await run([python.exe, '-X', 'utf8', path.join(REPO, 'test', 'make_launcher.py'), zcBin, python.exe, '-X', 'utf8', path.join(CHECKOUT, 'agentcompass')]);
+  const launcherFile = made.stdout.trim();
+  check(`an installed-style \`agentcompass\` launcher is on PATH (${path.basename(launcherFile)})`, made.code === 0 && fs.existsSync(launcherFile) &&
+    path.basename(launcherFile) === (WIN ? 'agentcompass.exe' : 'agentcompass'), made.stdout + made.stderr);
+  const stateHome = path.join(home, '.agent-compass', 'cindy-plugin');
+  fs.mkdirSync(stateHome, {recursive: true});
+  const accountMap = [{routerProvider: 'codex', routerAccount: 'codex', providerId: 'codex-connection', agentKind: 'codex'},
+                      {routerProvider: 'pi', routerAccount: 'codex', providerId: 'pi-openai-connection', agentKind: 'pi'}];
+  fs.writeFileSync(path.join(stateHome, 'account-map.json'), JSON.stringify(accountMap));
+  const zcEnv = {PATH: [zcBin, baseEnv.PATH].join(path.delimiter)};
+  const zcTask = task('zero-config') + '零配置 market install\n';
+  ({record, result} = await drive(market, 'zero-config', [
+    {label: 'roll', call: 'roll', args: {task: zcTask}},
+    {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
+    {label: 'finished', fixture: {runStatus: 'completed', outputMessageId: 'out-final', pages: 2, finalText: '[Worker final report] zero-config result'}},
+    {label: 'status after completion', call: 'status', args: {operation: '@operation:roll'}},
+    {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
+  ], {env: zcEnv}));
+  r = replies(record);
+  const zr = first(r, 'roll'), zop = zr.result?.operation || 'none';
+  const zReceipt = readJson(path.join(stateHome, zop, 'receipt.json'));
+  check('roll starts a run through the discovered command', zr.ok && zr.result?.status === 'running' && count(record, 'create') === 1 && count(record, 'send') === 1,
+    JSON.stringify(zr).slice(0, 500) + result.stderr.slice(-300) + (record.workerStderr || ''));
+  check('the real router answered natively for the Cindy session', zReceipt.router?.status === 'native' && zReceipt.router?.parent_id === SESSION, zReceipt.router);
+  check('the account map from the home directory was applied to the exact catalog route',
+    JSON.stringify(zReceipt.mappings) === JSON.stringify(accountMap) && (record.calls || []).find(c => c.name === 'create')?.route?.providerId === 'codex-connection',
+    {mappings: zReceipt.mappings, create: (record.calls || []).find(c => c.name === 'create')});
+  const zDone = first(r, 'status after completion').result || {};
+  check('status collects the exact final message and cleanup archives', zDone.status === 'completed' && zDone.output_available &&
+    (zDone.final_result_summary || '').includes('zero-config result') && first(r, 'cleanup').result?.status === 'cleaned', zDone);
+  check('the receipt is under ~/.agent-compass/cindy-plugin and the installed copy is unchanged', fs.existsSync(path.join(stateHome, zop, 'receipt.json')) &&
+    !fs.existsSync(path.join(market, 'router.json')), fs.readdirSync(market));
+
+  // -------------------------------------------------------------------------------------------------------------
+  operation('every Cindy harness through the real router', 'Claude max and high, and Pi, reach exact catalog routes with Cindy bypassPermissions; codex is the first operation');
+  const harness = async (name, profile, plug, env = {}) => {
+    const out = await drive(plug, `harness-${name}`, [
+      {label: 'roll', call: 'roll', args: {task: task(name) + `FIXTURE-PROFILE: ${profile}\n`}},
+      {label: 'finished', fixture: {runStatus: 'completed', outputMessageId: 'out-final', finalText: `[Worker final report] ${name}`}},
+      {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
+      {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
+    ], {env});
+    const rr = replies(out.record);
+    const op = first(rr, 'roll').result?.operation || 'none';
+    return {...out, r: rr, receipt: readJson(path.join(stateHome, op, 'receipt.json')), create: (out.record.calls || []).find(c => c.name === 'create') || {}};
+  };
+  const lifecycle = h => first(h.r, 'roll').result?.status === 'running' && first(h.r, 'status').result?.status === 'completed' &&
+    first(h.r, 'status').result?.output_available === true && first(h.r, 'cleanup').result?.status === 'cleaned';
+  for (const [name, profile, effort] of [['claude-max', 'deep', 'max'], ['claude-high', 'review', 'high']]) {
+    const h = await harness(name, profile, plugin);
+    const b = h.receipt.bundle || {};
+    check(`${name}: the router chose claude/claude-opus-5-5 at ${effort} and the plugin made bypassPermissions explicit`,
+      b.provider === 'claude' && b.harness === 'claude' && b.model === 'claude-opus-5-5' && b.effort === effort && b.modeId === 'bypassPermissions',
+      {bundle: b, router: h.receipt.router?.status, stderr: h.result.stderr.slice(-300)});
+    check(`${name}: Cindy creates cc/claude/claude-opus-5-5/${effort} with bypassPermissions and the run completes`,
+      JSON.stringify(h.create.route) === JSON.stringify({agentKind: 'cc', providerId: 'claude', model: 'claude-opus-5-5', effort, fastMode: false}) &&
+      h.create.permissionMode === 'bypassPermissions' && lifecycle(h), {create: h.create, replies: JSON.stringify(h.r).slice(0, 600)});
+  }
+  const pi = await harness('pi', 'explore', market, {...zcEnv, CLAUDE_CONFIG_DIR: noClaude});
+  const pb = pi.receipt.bundle || {};
+  check('pi: the router chose the Pi harness on the codex account with its launch model; the fixed full-tool worker is full-access',
+    pb.provider === 'pi' && pb.harness === 'pi' && pb.account === 'codex' && pb.launch_model === 'openai-codex/gpt-6.1-sol' && pb.modeId === 'full-access',
+    {bundle: pb, router: pi.receipt.router?.status, stderr: pi.result.stderr.slice(-300)});
+  check('pi: Cindy creates the exact pi route on the mapped connection with bypassPermissions and the run completes',
+    JSON.stringify(pi.create.route) === JSON.stringify({agentKind: 'pi', providerId: 'pi-openai-connection', model: 'openai-codex/gpt-6.1-sol', effort: pb.effort, fastMode: false}) &&
+    pi.create.permissionMode === 'bypassPermissions' && lifecycle(pi), {create: pi.create, replies: JSON.stringify(pi.r).slice(0, 600)});
+
+  // -------------------------------------------------------------------------------------------------------------
+  operation('answers that are not a Cindy task, and fast mode', 'split (real router) and self come back unchanged and start nothing; a fast codex route maps to Cindy fastMode');
+  ({record, result} = await drive(plugin, 'split', [{label: 'roll', call: 'roll', args: {task: task('split') + 'FIXTURE-PROFILE: split\n'}}]));
+  const sp = first(replies(record), 'roll');
+  check('split from the real router is returned as is (task_count 2) and nothing is created', sp.ok && sp.result?.status === 'split' && String(sp.result?.task_count) === '2' &&
+    count(record, 'create') === 0 && count(record, 'send') === 0 && count(record, 'models') === 0, JSON.stringify(sp).slice(0, 500) + result.stderr.slice(-300));
+  // The public roll command has no path that answers `self`, and turns fast mode on only with live capacity telemetry or
+  // --fast; both are therefore driven by test/fixture_router.cjs, a stand-in for the router, through the real worker.
+  const fixturePlugin = path.join(ROOT, 'cindy plugin fixture router');
+  const fixtureBuild = await run([...builder, '--output', fixturePlugin, '--router-cmd', JSON.stringify([process.execPath, path.join(REPO, 'test', 'fixture_router.cjs')])]);
+  check('a plugin bound to the fixture router builds', fixtureBuild.code === 0, fixtureBuild.stdout.slice(0, 300) + fixtureBuild.stderr.slice(-300));
+  ({record, result} = await drive(fixturePlugin, 'self-and-fast', [
+    {label: 'self', call: 'roll', args: {task: task('self') + 'FIXTURE-ROUTER: self\n'}},
+    {label: 'fast', call: 'roll', args: {task: task('fast') + 'FIXTURE-ROUTER: fast\n'}},
+  ]));
+  r = replies(record);
+  const selfReply = first(r, 'self');
+  check('self (fixture router) is returned as is and starts nothing', selfReply.ok && selfReply.result?.status === 'self' && selfReply.result?.fixture_router === true &&
+    (selfReply.result?.next_action || '').includes('current session'), JSON.stringify(selfReply).slice(0, 400) + result.stderr.slice(-300));
+  const fastCreate = (record.calls || []).find(c => c.name === 'create') || {};
+  check('only the fast route created a task: one create, one send', count(record, 'create') === 1 && count(record, 'send') === 1, (record.calls || []).map(c => c.name));
+  check('fast (fixture router): codex/gpt-6.1-sol fast becomes Cindy fastMode true with bypassPermissions', first(r, 'fast').ok &&
+    JSON.stringify(fastCreate.route) === JSON.stringify({agentKind: 'codex', providerId: 'codex', model: 'gpt-6.1-sol', effort: 'high', fastMode: true}) &&
+    fastCreate.permissionMode === 'bypassPermissions', {fast: first(r, 'fast'), create: fastCreate});
+  report.fast_mode_note = 'The real router chose no fast route in this sandbox: fast mode needs live, non-stale capacity telemetry ' +
+    'for the codex window or an explicit --fast, which the plugin does not pass. The fast mapping is verified through test/fixture_router.cjs.';
 } catch (error) {
   operation('driver error', 'the sandbox driver itself failed');
   check('the driver completed', false, error.stack || String(error));

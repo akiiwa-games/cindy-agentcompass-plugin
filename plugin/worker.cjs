@@ -8,8 +8,56 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const {spawn,spawnSync} = require('node:child_process');
 const readline = require('node:readline');
-const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'router.json'), 'utf8'));
-const root = config.stateRoot || path.join(os.homedir(), '.agent-compass', 'cindy-plugin');
+const HOME_STATE = path.join(os.homedir(), '.agent-compass', 'cindy-plugin');
+// Configuration, first found wins: router.json next to this file (scripts/build_plugin.py), then
+// ~/.agent-compass/cindy-plugin/router.json. With neither (a market install) the router command is
+// discovered on every roll, so AgentCompass installed after the plugin is still found.
+const config = (() => {
+  for (const file of [path.join(__dirname, 'router.json'), path.join(HOME_STATE, 'router.json')]) {
+    if (!fs.existsSync(file)) continue;
+    try {return {...JSON.parse(fs.readFileSync(file, 'utf8')), source:file};}
+    catch (error) {return {source:file, error:'Unreadable plugin configuration '+file+': '+error.message};}
+  }
+  return {source:null};
+})();
+const root = config.stateRoot || HOME_STATE;
+// `agentcompass` on PATH, then ~/.local/bin where `uv tool install` and the installer put it. On Windows only the
+// .exe: a .cmd/.bat shim cannot be spawned without a shell, and the arguments must not pass through one.
+function discover() {
+  const name = process.platform==='win32' ? 'agentcompass.exe' : 'agentcompass';
+  const dirs = [...(process.env.PATH || '').split(path.delimiter), path.join(os.homedir(), '.local', 'bin')];
+  for (const dir of dirs.filter(d=>d && path.isAbsolute(d))) {
+    const file = path.join(dir, name);
+    try {
+      if (!fs.statSync(file).isFile()) continue;
+      if (process.platform!=='win32') fs.accessSync(file, fs.constants.X_OK);
+      return file;
+    } catch {}
+  }
+  return null;
+}
+function routerCommand() {
+  if (config.error) throw Error(config.error);
+  if (config.source) return config.command;
+  const found = discover();
+  if (!found) throw Error('AgentCompass was not found: install it (`uv tool install agentcompass` or the installer) so ' +
+    '`agentcompass` is on PATH or in ~/.local/bin, or write '+path.join(HOME_STATE, 'router.json')+'. Nothing was routed.');
+  return [found, 'roll'];
+}
+// Cindy connection bindings: the configuration's own, else ~/.agent-compass/cindy-plugin/account-map.json, else none
+// (a routed account then needs a Cindy connection of the same name).
+function accountMappings() {
+  if (config.accountMappings !== undefined) return config.accountMappings;
+  const file = path.join(HOME_STATE, 'account-map.json');
+  if (!fs.existsSync(file)) return [];
+  const rows = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const keys = ['agentKind', 'providerId', 'routerAccount', 'routerProvider'];
+  if (!Array.isArray(rows) || rows.some(row => !row || typeof row!=='object' ||
+      JSON.stringify(Object.keys(row).sort())!==JSON.stringify(keys) || !['cc', 'codex', 'pi'].includes(row.agentKind) ||
+      keys.some(key => typeof row[key]!=='string' || !row[key].trim())))
+    throw Error(file+' must be a JSON array of routerProvider/routerAccount/providerId/agentKind bindings');
+  return rows;
+}
 // The worker runs as a Cindy task in the parent's local project directory: a remote worker cannot.
 const LOCAL_ONLY = 'The worker runs as a Cindy task in the parent session\'s local project directory.';
 // Launcher defaults the router leaves implicit; Pi's fixed full-tool worker is expressed as full-access.
@@ -64,7 +112,7 @@ function contract(result, ctx) {
 async function route(task, ctx, dir) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
     !/^(PASEO_|HC_|ORCA_|T3_|ROUTER_PARENT_|ROUTER_CINDY_CONTEXT)/.test(key)));
-  const command = config.command;
+  const command = routerCommand();
   if (!Array.isArray(command) || !command.length || command.some(v=>typeof v!=='string')) throw Error('Invalid public router command');
   const argv=[...command.slice(1), '--parent-host', 'native', '--parent-id', ctx.session_id, '--parent-address', ctx.session_id,
     '--local-only', LOCAL_ONLY, '--task', '-', '--verbose'];
@@ -101,11 +149,12 @@ async function handle(method, params) {
     fs.mkdirSync(dir,{recursive:true});
     const file=path.join(dir,'receipt.json');
     if (fs.existsSync(file)) return {operation,...JSON.parse(fs.readFileSync(file,'utf8'))};
+    const mappings=accountMappings();
     const result=await route(params.task,ctx,dir);
     // self/split/a router-side launch are the router's answer to the parent, not a Cindy task.
     const {bundle,prompt}=result.status==='native' ? contract(result,ctx) : {bundle:null,prompt:''};
     const record={parent:ctx.session_id, state:'prepared', router:result, bundle, prompt,
-                  directory:ctx.workdir, mappings:config.accountMappings || []};
+                  directory:ctx.workdir, mappings};
     atomic(file,record);
     return {operation,...record};
   }
