@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-03T07:21:52.848Z",
+   "started_at": "2026-11-03T09:03:04.293Z",
    "operations": [
     {
      "name": "isolation",
@@ -33,7 +33,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 30 passed, 0 failed",
+       "name": "node --test: 53 passed, 0 failed",
        "ok": true
       },
       {
@@ -95,11 +95,11 @@
      "intent": "plugin/ as the market packs it, and the built source, pass the official repository gate (pinned validateGhostManifest, locales, icon, package rules)",
      "checks": [
       {
-       "name": "plugin/ passes the gate (7 checks)",
+       "name": "plugin/ passes the gate (8 checks)",
        "ok": true
       },
       {
-       "name": "the built source passes the gate (6 checks)",
+       "name": "the built source passes the gate (7 checks)",
        "ok": true
       },
       {
@@ -179,7 +179,7 @@
        "ok": true
       },
       {
-       "name": "cleanup of a running task is refused",
+       "name": "cleanup of a running task is refused and names the run",
        "ok": true
       },
       {
@@ -332,10 +332,10 @@
     },
     {
      "name": "the draft changed under us",
-     "intent": "a stale expectedRevision is rejected by the host: no run exists, nothing is resent",
+     "intent": "a stale expectedRevision is a coded host refusal: send_rejected, the draft archived, no run exists, nothing is resent",
      "checks": [
       {
-       "name": "the send conflict is reported as unknown_send with the host's reason",
+       "name": "the send conflict is reported as send_rejected with the host's code, and the draft is archived",
        "ok": true
       },
       {
@@ -357,7 +357,7 @@
        "ok": true
       },
       {
-       "name": "cleanup of a stopping run is refused",
+       "name": "cleanup of a stopping run is refused and points to stop",
        "ok": true
       },
       {
@@ -365,11 +365,19 @@
        "ok": true
       },
       {
-       "name": "the first status stops at the page bound and says collection is incomplete",
+       "name": "review 4: the first status stops at the page bound, says collection is incomplete and points to status, not cleanup",
        "ok": true
       },
       {
-       "name": "the second status finishes all twelve pages and finds the exact final message",
+       "name": "review 4: cleanup before all pages are read is refused",
+       "ok": true
+      },
+      {
+       "name": "the second status finishes all twelve pages, finds the exact final message and points to cleanup",
+       "ok": true
+      },
+      {
+       "name": "cleanup after all pages archives",
        "ok": true
       }
      ]
@@ -397,23 +405,169 @@
      ]
     },
     {
-     "name": "zero-config market install",
-     "intent": "plugin/ copied as is (no router.json, no build): the worker finds `agentcompass` on PATH, reads ~/.agent-compass/cindy-plugin/account-map.json, then roll -> status -> cleanup",
+     "name": "zero-config market install: built-in engine",
+     "intent": "plugin/ copied as is: no router.json, no AgentCompass CLI anywhere, no account map; the built-in engine routes over the real Cindy 0.1.121 catalog, then roll -> status -> cleanup",
      "checks": [
       {
-       "name": "the installed copy has no router.json",
+       "name": "the installed copy has no router.json, no config.json or account map, and no AgentCompass CLI is reachable",
        "ok": true
       },
+      {
+       "name": "roll starts one run through the built-in engine",
+       "ok": true
+      },
+      {
+       "name": "Cindy creates a row of its own catalog (codex on the openai connection) with bypassPermissions",
+       "ok": true
+      },
+      {
+       "name": "the decision is explained: work kind, score, alternatives, quota source",
+       "ok": true
+      },
+      {
+       "name": "the text sent to Cindy is the whole task byte for byte plus the return channel",
+       "ok": true
+      },
+      {
+       "name": "status reports running, then collects the exact final message; cleanup archives",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "built-in engine: every Cindy harness",
+     "intent": "codex for an edit, Pi for read-and-report exploration, Claude (cc) for a review; each an exact catalog row with bypassPermissions, through to cleanup",
+     "checks": [
+      {
+       "name": "codex: the built-in engine chose codex (gpt-6.1-sol/high) with launcher mode full-access",
+       "ok": true
+      },
+      {
+       "name": "codex: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "pi: the built-in engine chose pi (chatgpt/gpt-6.1-terra/high) with launcher mode full-access",
+       "ok": true
+      },
+      {
+       "name": "pi: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "claude: the built-in engine chose cc (claude-opus-5-5/max) with launcher mode bypassPermissions",
+       "ok": true
+      },
+      {
+       "name": "claude: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "built-in split, self, fast and quota",
+     "intent": "split and self come back from the built-in engine and start nothing; fast mode follows the signal word and the Codex quota telemetry; an exhausted Codex window moves the route to Claude",
+     "checks": [
+      {
+       "name": "split: task_count 2 and 3 from the built-in engine, with the next action for the parent",
+       "ok": true
+      },
+      {
+       "name": "self: both come back as self from the built-in engine",
+       "ok": true
+      },
+      {
+       "name": "split and self created nothing and sent nothing",
+       "ok": true
+      },
+      {
+       "name": "fast with fresh telemetry (12% used): Cindy creates codex fastMode true on a row that supports it",
+       "ok": true
+      },
+      {
+       "name": "fast asked but the Codex window is 70% used: no fast mode",
+       "ok": true
+      },
+      {
+       "name": "fast asked with no telemetry at all: no fast mode",
+       "ok": true
+      },
+      {
+       "name": "quota: with the Codex window 97% used the edit goes to Claude on its own connection",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "review 1: receipt save fails after an accepted send",
+     "intent": "the run exists although its receipt could not be written: roll returns operation, task_id and run_id; status settles the `sending` receipt from the host runs; nothing is resent",
+     "checks": [
+      {
+       "name": "roll answers with the handles and says the receipt was not saved",
+       "ok": true
+      },
+      {
+       "name": "status settles it to that run without a second send",
+       "ok": true
+      },
+      {
+       "name": "a persisted `sending` receipt with no runId is settled by status (and cleanup first settles it, then refuses the running run)",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "review 2: definite refusal versus unknown delivery",
+     "intent": "a coded refusal before any run exists is send_rejected and the draft is archived; a lost answer is unknown_send and a run is claimed only if its input message is this prompt",
+     "checks": [
+      {
+       "name": "REVISION_CONFLICT is send_rejected with its code, the draft archived, no run",
+       "ok": true
+      },
+      {
+       "name": "status keeps send_rejected and points to cleanup; cleanup reports it cleaned without archiving twice",
+       "ok": true
+      },
+      {
+       "name": "a run on the same route whose input is not this prompt is not claimed; cleanup refuses the unconfirmed delivery",
+       "ok": true
+      },
+      {
+       "name": "a lost answer is unknown_send; the run whose input message is this prompt is claimed by status, never resent",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "review 5: one slow route does not block other sessions",
+     "intent": "session A rolls through the real AgentCompass CLI (seconds of routing) while session B stops its own run: B is answered first",
+     "checks": [
+      {
+       "name": "B stop is answered before A finishes routing; both succeed",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "review 6: a router that ignores stdin",
+     "intent": "a configured router that exits without reading an 8 MB task (EPIPE) fails that roll only; the shared worker answers the next call",
+     "checks": [
+      {
+       "name": "both rolls fail with the router reason, and the worker still answers",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "CLI opt-in",
+     "intent": "config.json {\"engine\":\"cli\"}: the worker finds the installed `agentcompass` on PATH, applies ~/.agent-compass/cindy-plugin/account-map.json, then roll -> status -> cleanup",
+     "checks": [
       {
        "name": "an installed-style `agentcompass` launcher is on PATH (agentcompass)",
        "ok": true
       },
       {
-       "name": "roll starts a run through the discovered command",
-       "ok": true
-      },
-      {
-       "name": "the real router answered natively for the Cindy session",
+       "name": "roll starts a run through the discovered command; the real router answered natively for the Cindy session",
        "ok": true
       },
       {
@@ -423,16 +577,12 @@
       {
        "name": "status collects the exact final message and cleanup archives",
        "ok": true
-      },
-      {
-       "name": "the receipt is under ~/.agent-compass/cindy-plugin and the installed copy is unchanged",
-       "ok": true
       }
      ]
     },
     {
      "name": "every Cindy harness through the real router",
-     "intent": "Claude max and high, and Pi, reach exact catalog routes with Cindy bypassPermissions; codex is the first operation",
+     "intent": "Claude max and high (router.json build), and Pi (CLI opt-in), reach exact catalog routes with Cindy bypassPermissions; codex is the first operation",
      "checks": [
       {
        "name": "claude-max: the router chose claude/claude-opus-5-5 at max and the plugin made bypassPermissions explicit",
@@ -461,27 +611,25 @@
      ]
     },
     {
-     "name": "answers that are not a Cindy task, and fast mode",
-     "intent": "split (real router) and self come back unchanged and start nothing; a fast codex route maps to Cindy fastMode",
+     "name": "review 7: a fixed account map unblocks the retry",
+     "intent": "the routed account has no Cindy connection of its name: the roll fails before create; after account-map.json is written the same assignment is routed again and runs",
      "checks": [
       {
-       "name": "split from the real router is returned as is (task_count 2) and nothing is created",
+       "name": "the first roll is refused before any create",
        "ok": true
       },
       {
-       "name": "a plugin bound to the fixture router builds",
+       "name": "the retry re-reads the map, routes again and runs on the mapped connection",
        "ok": true
-      },
+      }
+     ]
+    },
+    {
+     "name": "CLI opt-in without the CLI installed",
+     "intent": "config.json asks for the CLI but none is installed: the built-in engine routes and says so; no error",
+     "checks": [
       {
-       "name": "self (fixture router) is returned as is and starts nothing",
-       "ok": true
-      },
-      {
-       "name": "only the fast route created a task: one create, one send",
-       "ok": true
-      },
-      {
-       "name": "fast (fixture router): codex/gpt-6.1-sol fast becomes Cindy fastMode true with bypassPermissions",
+       "name": "the built-in engine routed, with the fallback named",
        "ok": true
       }
      ]
@@ -494,13 +642,13 @@
     "node": "v24.22.2",
     "python": "3.12.16",
     "agentcompass_version": "0.3.5",
-    "agentcompass_checkout": "/run/cindy-sandbox/AgentCompass",
-    "sandbox_root": "/run/cindy-sandbox/e2e",
-    "scorer": "http://127.0.0.1:44459/v1"
+    "agentcompass_checkout": "<agentcompass-checkout>",
+    "sandbox_root": "<sandbox>",
+    "scorer": "http://127.0.0.1:38593/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 30,
+     "pass": 53,
      "fail": 0
     },
     "python": {
@@ -510,7 +658,7 @@
    },
    "market": {
     "id": "agentcompass",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "icon": {
      "bytes": 5217,
      "px": 256
@@ -522,20 +670,19 @@
      "ko"
     ]
    },
-   "fast_mode_note": "The real router chose no fast route in this sandbox: fast mode needs live, non-stale capacity telemetry for the codex window or an explicit --fast, which the plugin does not pass. The fast mapping is verified through test/fixture_router.cjs.",
-   "finished_at": "2026-11-03T07:22:08.493Z",
+   "finished_at": "2026-11-03T09:03:26.575Z",
    "summary": {
-    "operations": 20,
-    "checks": 90,
-    "passed": 90,
+    "operations": 28,
+    "checks": 115,
+    "passed": 115,
     "failed": 0,
-    "artifacts": "/run/cindy-sandbox/e2e/report/cindy"
+    "artifacts": "<sandbox>/report/cindy"
    }
   },
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-03T07:20:56.346Z",
+   "started_at": "2026-11-03T09:01:29.431Z",
    "operations": [
     {
      "name": "isolation",
@@ -564,7 +711,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 30 passed, 0 failed",
+       "name": "node --test: 53 passed, 0 failed",
        "ok": true
       },
       {
@@ -626,11 +773,11 @@
      "intent": "plugin/ as the market packs it, and the built source, pass the official repository gate (pinned validateGhostManifest, locales, icon, package rules)",
      "checks": [
       {
-       "name": "plugin/ passes the gate (7 checks)",
+       "name": "plugin/ passes the gate (8 checks)",
        "ok": true
       },
       {
-       "name": "the built source passes the gate (6 checks)",
+       "name": "the built source passes the gate (7 checks)",
        "ok": true
       },
       {
@@ -710,7 +857,7 @@
        "ok": true
       },
       {
-       "name": "cleanup of a running task is refused",
+       "name": "cleanup of a running task is refused and names the run",
        "ok": true
       },
       {
@@ -863,10 +1010,10 @@
     },
     {
      "name": "the draft changed under us",
-     "intent": "a stale expectedRevision is rejected by the host: no run exists, nothing is resent",
+     "intent": "a stale expectedRevision is a coded host refusal: send_rejected, the draft archived, no run exists, nothing is resent",
      "checks": [
       {
-       "name": "the send conflict is reported as unknown_send with the host's reason",
+       "name": "the send conflict is reported as send_rejected with the host's code, and the draft is archived",
        "ok": true
       },
       {
@@ -888,7 +1035,7 @@
        "ok": true
       },
       {
-       "name": "cleanup of a stopping run is refused",
+       "name": "cleanup of a stopping run is refused and points to stop",
        "ok": true
       },
       {
@@ -896,11 +1043,19 @@
        "ok": true
       },
       {
-       "name": "the first status stops at the page bound and says collection is incomplete",
+       "name": "review 4: the first status stops at the page bound, says collection is incomplete and points to status, not cleanup",
        "ok": true
       },
       {
-       "name": "the second status finishes all twelve pages and finds the exact final message",
+       "name": "review 4: cleanup before all pages are read is refused",
+       "ok": true
+      },
+      {
+       "name": "the second status finishes all twelve pages, finds the exact final message and points to cleanup",
+       "ok": true
+      },
+      {
+       "name": "cleanup after all pages archives",
        "ok": true
       }
      ]
@@ -928,23 +1083,169 @@
      ]
     },
     {
-     "name": "zero-config market install",
-     "intent": "plugin/ copied as is (no router.json, no build): the worker finds `agentcompass` on PATH, reads ~/.agent-compass/cindy-plugin/account-map.json, then roll -> status -> cleanup",
+     "name": "zero-config market install: built-in engine",
+     "intent": "plugin/ copied as is: no router.json, no AgentCompass CLI anywhere, no account map; the built-in engine routes over the real Cindy 0.1.121 catalog, then roll -> status -> cleanup",
      "checks": [
       {
-       "name": "the installed copy has no router.json",
+       "name": "the installed copy has no router.json, no config.json or account map, and no AgentCompass CLI is reachable",
        "ok": true
       },
+      {
+       "name": "roll starts one run through the built-in engine",
+       "ok": true
+      },
+      {
+       "name": "Cindy creates a row of its own catalog (codex on the openai connection) with bypassPermissions",
+       "ok": true
+      },
+      {
+       "name": "the decision is explained: work kind, score, alternatives, quota source",
+       "ok": true
+      },
+      {
+       "name": "the text sent to Cindy is the whole task byte for byte plus the return channel",
+       "ok": true
+      },
+      {
+       "name": "status reports running, then collects the exact final message; cleanup archives",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "built-in engine: every Cindy harness",
+     "intent": "codex for an edit, Pi for read-and-report exploration, Claude (cc) for a review; each an exact catalog row with bypassPermissions, through to cleanup",
+     "checks": [
+      {
+       "name": "codex: the built-in engine chose codex (gpt-6.1-sol/high) with launcher mode full-access",
+       "ok": true
+      },
+      {
+       "name": "codex: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "pi: the built-in engine chose pi (chatgpt/gpt-6.1-terra/high) with launcher mode full-access",
+       "ok": true
+      },
+      {
+       "name": "pi: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "claude: the built-in engine chose cc (claude-opus-5-5/max) with launcher mode bypassPermissions",
+       "ok": true
+      },
+      {
+       "name": "claude: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "built-in split, self, fast and quota",
+     "intent": "split and self come back from the built-in engine and start nothing; fast mode follows the signal word and the Codex quota telemetry; an exhausted Codex window moves the route to Claude",
+     "checks": [
+      {
+       "name": "split: task_count 2 and 3 from the built-in engine, with the next action for the parent",
+       "ok": true
+      },
+      {
+       "name": "self: both come back as self from the built-in engine",
+       "ok": true
+      },
+      {
+       "name": "split and self created nothing and sent nothing",
+       "ok": true
+      },
+      {
+       "name": "fast with fresh telemetry (12% used): Cindy creates codex fastMode true on a row that supports it",
+       "ok": true
+      },
+      {
+       "name": "fast asked but the Codex window is 70% used: no fast mode",
+       "ok": true
+      },
+      {
+       "name": "fast asked with no telemetry at all: no fast mode",
+       "ok": true
+      },
+      {
+       "name": "quota: with the Codex window 97% used the edit goes to Claude on its own connection",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "review 1: receipt save fails after an accepted send",
+     "intent": "the run exists although its receipt could not be written: roll returns operation, task_id and run_id; status settles the `sending` receipt from the host runs; nothing is resent",
+     "checks": [
+      {
+       "name": "roll answers with the handles and says the receipt was not saved",
+       "ok": true
+      },
+      {
+       "name": "status settles it to that run without a second send",
+       "ok": true
+      },
+      {
+       "name": "a persisted `sending` receipt with no runId is settled by status (and cleanup first settles it, then refuses the running run)",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "review 2: definite refusal versus unknown delivery",
+     "intent": "a coded refusal before any run exists is send_rejected and the draft is archived; a lost answer is unknown_send and a run is claimed only if its input message is this prompt",
+     "checks": [
+      {
+       "name": "REVISION_CONFLICT is send_rejected with its code, the draft archived, no run",
+       "ok": true
+      },
+      {
+       "name": "status keeps send_rejected and points to cleanup; cleanup reports it cleaned without archiving twice",
+       "ok": true
+      },
+      {
+       "name": "a run on the same route whose input is not this prompt is not claimed; cleanup refuses the unconfirmed delivery",
+       "ok": true
+      },
+      {
+       "name": "a lost answer is unknown_send; the run whose input message is this prompt is claimed by status, never resent",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "review 5: one slow route does not block other sessions",
+     "intent": "session A rolls through the real AgentCompass CLI (seconds of routing) while session B stops its own run: B is answered first",
+     "checks": [
+      {
+       "name": "B stop is answered before A finishes routing; both succeed",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "review 6: a router that ignores stdin",
+     "intent": "a configured router that exits without reading an 8 MB task (EPIPE) fails that roll only; the shared worker answers the next call",
+     "checks": [
+      {
+       "name": "both rolls fail with the router reason, and the worker still answers",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "CLI opt-in",
+     "intent": "config.json {\"engine\":\"cli\"}: the worker finds the installed `agentcompass` on PATH, applies ~/.agent-compass/cindy-plugin/account-map.json, then roll -> status -> cleanup",
+     "checks": [
       {
        "name": "an installed-style `agentcompass` launcher is on PATH (agentcompass.exe)",
        "ok": true
       },
       {
-       "name": "roll starts a run through the discovered command",
-       "ok": true
-      },
-      {
-       "name": "the real router answered natively for the Cindy session",
+       "name": "roll starts a run through the discovered command; the real router answered natively for the Cindy session",
        "ok": true
       },
       {
@@ -954,16 +1255,12 @@
       {
        "name": "status collects the exact final message and cleanup archives",
        "ok": true
-      },
-      {
-       "name": "the receipt is under ~/.agent-compass/cindy-plugin and the installed copy is unchanged",
-       "ok": true
       }
      ]
     },
     {
      "name": "every Cindy harness through the real router",
-     "intent": "Claude max and high, and Pi, reach exact catalog routes with Cindy bypassPermissions; codex is the first operation",
+     "intent": "Claude max and high (router.json build), and Pi (CLI opt-in), reach exact catalog routes with Cindy bypassPermissions; codex is the first operation",
      "checks": [
       {
        "name": "claude-max: the router chose claude/claude-opus-5-5 at max and the plugin made bypassPermissions explicit",
@@ -992,27 +1289,25 @@
      ]
     },
     {
-     "name": "answers that are not a Cindy task, and fast mode",
-     "intent": "split (real router) and self come back unchanged and start nothing; a fast codex route maps to Cindy fastMode",
+     "name": "review 7: a fixed account map unblocks the retry",
+     "intent": "the routed account has no Cindy connection of its name: the roll fails before create; after account-map.json is written the same assignment is routed again and runs",
      "checks": [
       {
-       "name": "split from the real router is returned as is (task_count 2) and nothing is created",
+       "name": "the first roll is refused before any create",
        "ok": true
       },
       {
-       "name": "a plugin bound to the fixture router builds",
+       "name": "the retry re-reads the map, routes again and runs on the mapped connection",
        "ok": true
-      },
+      }
+     ]
+    },
+    {
+     "name": "CLI opt-in without the CLI installed",
+     "intent": "config.json asks for the CLI but none is installed: the built-in engine routes and says so; no error",
+     "checks": [
       {
-       "name": "self (fixture router) is returned as is and starts nothing",
-       "ok": true
-      },
-      {
-       "name": "only the fast route created a task: one create, one send",
-       "ok": true
-      },
-      {
-       "name": "fast (fixture router): codex/gpt-6.1-sol fast becomes Cindy fastMode true with bypassPermissions",
+       "name": "the built-in engine routed, with the fallback named",
        "ok": true
       }
      ]
@@ -1025,13 +1320,13 @@
     "node": "v24.12.0",
     "python": "3.13.7",
     "agentcompass_version": "0.3.5",
-    "agentcompass_checkout": "E:\\PROJECTS\\route_manager",
-    "sandbox_root": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-sandbox-win-final",
-    "scorer": "http://127.0.0.1:10192/v1"
+    "agentcompass_checkout": "<agentcompass-checkout>",
+    "sandbox_root": "<sandbox>",
+    "scorer": "http://127.0.0.1:7662/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 30,
+     "pass": 53,
      "fail": 0
     },
     "python": {
@@ -1041,7 +1336,7 @@
    },
    "market": {
     "id": "agentcompass",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "icon": {
      "bytes": 5217,
      "px": 256
@@ -1053,31 +1348,30 @@
      "ko"
     ]
    },
-   "fast_mode_note": "The real router chose no fast route in this sandbox: fast mode needs live, non-stale capacity telemetry for the codex window or an explicit --fast, which the plugin does not pass. The fast mapping is verified through test/fixture_router.cjs.",
-   "finished_at": "2026-11-03T07:21:31.440Z",
+   "finished_at": "2026-11-03T09:02:33.096Z",
    "summary": {
-    "operations": 20,
-    "checks": 90,
-    "passed": 90,
+    "operations": 28,
+    "checks": 115,
+    "passed": 115,
     "failed": 0,
-    "artifacts": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-sandbox-win-final\\report\\cindy"
+    "artifacts": "<sandbox>\\report\\cindy"
    }
   }
  },
  "summary": {
   "linux": {
-   "operations": 20,
-   "checks": 90,
-   "passed": 90,
+   "operations": 28,
+   "checks": 115,
+   "passed": 115,
    "failed": 0,
-   "artifacts": "/run/cindy-sandbox/e2e/report/cindy"
+   "artifacts": "<sandbox>/report/cindy"
   },
   "win32": {
-   "operations": 20,
-   "checks": 90,
-   "passed": 90,
+   "operations": 28,
+   "checks": 115,
+   "passed": 115,
    "failed": 0,
-   "artifacts": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-sandbox-win-final\\report\\cindy"
+   "artifacts": "<sandbox>\\report\\cindy"
   }
  }
 }

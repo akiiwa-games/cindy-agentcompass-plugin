@@ -1,26 +1,38 @@
 'use strict';
 // Official Cindy JSON-RPC stdio worker. No Electron/private IPC or credentials.
-// It asks the public AgentCompass `roll` for a route on behalf of the host-verified
-// Cindy session and turns the native result into an explicit Cindy task contract.
+// It routes the task for the host-verified Cindy session - with the built-in AgentCompass engine (engine/route.mjs) by
+// default, or the external `agentcompass roll` when configured - and turns the native route into an explicit Cindy task
+// contract.
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const {spawn,spawnSync} = require('node:child_process');
 const readline = require('node:readline');
+const {pathToFileURL} = require('node:url');
 const HOME_STATE = path.join(os.homedir(), '.agent-compass', 'cindy-plugin');
-// Configuration, first found wins: router.json next to this file (scripts/build_plugin.py), then
-// ~/.agent-compass/cindy-plugin/router.json. With neither (a market install) the router command is
-// discovered on every roll, so AgentCompass installed after the plugin is still found.
-const config = (() => {
+// Configuration, read again on every request so a fix made after a failed roll applies to its retry. First found wins:
+//   router.json next to this file (scripts/build_plugin.py), then ~/.agent-compass/cindy-plugin/router.json:
+//     {"command": [...complete roll command...], "accountMappings": [...], "stateRoot": "..."}  the external CLI
+//   ~/.agent-compass/cindy-plugin/config.json {"engine": "cli"}: the external CLI found on PATH or in ~/.local/bin, the
+//     built-in engine when it is not installed
+//   none of them (a market install): the built-in engine
+function settings() {
   for (const file of [path.join(__dirname, 'router.json'), path.join(HOME_STATE, 'router.json')]) {
     if (!fs.existsSync(file)) continue;
-    try {return {...JSON.parse(fs.readFileSync(file, 'utf8')), source:file};}
+    try {return {...JSON.parse(fs.readFileSync(file, 'utf8')), engine:'cli', source:file};}
     catch (error) {return {source:file, error:'Unreadable plugin configuration '+file+': '+error.message};}
   }
-  return {source:null};
-})();
-const root = config.stateRoot || HOME_STATE;
+  const file = path.join(HOME_STATE, 'config.json');
+  if (!fs.existsSync(file)) return {engine:'builtin', source:null};
+  try {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const engine = value?.engine ?? 'builtin';
+    if (!['builtin', 'cli'].includes(engine)) throw Error('"engine" must be "builtin" or "cli"');
+    return {engine, source:null, optIn:file};
+  } catch (error) {return {source:file, error:'Unreadable plugin configuration '+file+': '+error.message};}
+}
+const stateRoot = conf => conf.stateRoot || HOME_STATE;
 // `agentcompass` on PATH, then ~/.local/bin where `uv tool install` and the installer put it. On Windows only the
 // .exe: a .cmd/.bat shim cannot be spawned without a shell, and the arguments must not pass through one.
 function discover() {
@@ -36,18 +48,11 @@ function discover() {
   }
   return null;
 }
-function routerCommand() {
-  if (config.error) throw Error(config.error);
-  if (config.source) return config.command;
-  const found = discover();
-  if (!found) throw Error('AgentCompass was not found: install it (`uv tool install agentcompass` or the installer) so ' +
-    '`agentcompass` is on PATH or in ~/.local/bin, or write '+path.join(HOME_STATE, 'router.json')+'. Nothing was routed.');
-  return [found, 'roll'];
-}
-// Cindy connection bindings: the configuration's own, else ~/.agent-compass/cindy-plugin/account-map.json, else none
-// (a routed account then needs a Cindy connection of the same name).
-function accountMappings() {
-  if (config.accountMappings !== undefined) return config.accountMappings;
+// Cindy connection bindings for the external CLI's account names: the configuration's own, else
+// ~/.agent-compass/cindy-plugin/account-map.json, else none (a routed account then needs a Cindy connection of the same
+// name). The built-in engine routes to catalog connections directly and needs none.
+function accountMappings(conf) {
+  if (conf.accountMappings !== undefined) return conf.accountMappings;
   const file = path.join(HOME_STATE, 'account-map.json');
   if (!fs.existsSync(file)) return [];
   const rows = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -75,7 +80,6 @@ function stop(child) {
 process.on('exit',()=>{for(const child of children) stop(child);});
 process.on('SIGTERM',()=>{for(const child of children) stop(child);process.exit(143);});
 process.on('SIGINT',()=>{for(const child of children) stop(child);process.exit(130);});
-fs.mkdirSync(root, {recursive:true});
 const digest = text => crypto.createHash('sha256').update(text).digest('hex');
 const atomic = (file, value) => {
   const tmp = file + '.' + crypto.randomUUID() + '.tmp';
@@ -89,7 +93,7 @@ function context(value) {
     throw Error('A host-verified writable local session_context is required. Remote/read-only contexts are unsupported.');
   return value;
 }
-function owned(operation, ctx) {
+function owned(root, operation, ctx) {
   if (typeof operation !== 'string' || !/^[a-f0-9]{40}$/.test(operation)) throw Error('Invalid operation');
   const dir = path.join(root, operation);
   const record = JSON.parse(fs.readFileSync(path.join(dir, 'receipt.json'), 'utf8'));
@@ -97,7 +101,7 @@ function owned(operation, ctx) {
   return {dir, record};
 }
 // A native route becomes an explicit Cindy contract; anything Cindy cannot reproduce is refused, never widened.
-function contract(result, ctx) {
+function contract(result, ctx, task) {
   if (result.parent_id!==undefined && result.parent_id!==ctx.session_id) throw Error('Router answered for a different parent session');
   const bundle=result.route_bundle || result.route?.bundle;
   if (!bundle || typeof bundle!=='object') throw Error('Router returned no route bundle');
@@ -105,14 +109,24 @@ function contract(result, ctx) {
   if (!MODES[harness]) throw Error('Cindy cannot run routed harness '+JSON.stringify(harness)+'; reroute to an exact supported Cindy catalog route, do not substitute.');
   const modeId=bundle.modeId ?? MODES[harness];
   if (modeId!==MODES[harness]) throw Error('Cindy cannot reproduce '+harness+' permission mode '+JSON.stringify(modeId)+'; reroute, an explicitly restricted route is not widened.');
-  if (!result.worker_prompt_file) throw Error('Router returned no worker prompt file');
-  const prompt=fs.readFileSync(result.worker_prompt_file,'utf8')+RETURN_CHANNEL;
-  return {bundle:{...bundle,harness,modeId},prompt};
+  // The external router writes its worker prompt to a file; the built-in engine sends the assignment unchanged.
+  let prompt;
+  if (result.worker_prompt_file) prompt=fs.readFileSync(result.worker_prompt_file,'utf8');
+  else if (result.engine==='builtin') prompt=task;
+  else throw Error('Router returned no worker prompt file');
+  return {bundle:{...bundle,harness,modeId},prompt:prompt+RETURN_CHANNEL};
 }
-async function route(task, ctx, dir) {
+let engine=null;
+async function builtin(task, catalog, dir) {
+  engine ||= import(pathToFileURL(path.join(__dirname, 'engine', 'route.mjs')).href);
+  const result=(await engine).routeTask(task, catalog, {env:process.env});
+  fs.writeFileSync(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
+  if (result.status==='blocked') throw Error(result.error);
+  return result;
+}
+async function external(command, task, ctx, dir) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
     !/^(PASEO_|HC_|ORCA_|T3_|ROUTER_PARENT_|ROUTER_CINDY_CONTEXT)/.test(key)));
-  const command = routerCommand();
   if (!Array.isArray(command) || !command.length || command.some(v=>typeof v!=='string')) throw Error('Invalid public router command');
   const argv=[...command.slice(1), '--parent-host', 'native', '--parent-id', ctx.session_id, '--parent-address', ctx.session_id,
     '--local-only', LOCAL_ONLY, '--task', '-', '--verbose'];
@@ -121,9 +135,13 @@ async function route(task, ctx, dir) {
       {cwd:ctx.workdir, env, windowsHide:true, detached:process.platform!=='win32',stdio:['pipe','pipe','pipe']});
     children.add(child);
     const stdout=[], stderr=[];
+    let stdinError=null;
     const timer=setTimeout(()=>stop(child), 110000);
     child.stdout.on('data',data=>stdout.push(data));
     child.stderr.on('data',data=>stderr.push(data));
+    // A router that exits before reading the whole task (EPIPE, EOF) fails this roll only; it must not take the shared
+    // worker down. The exit code and output still decide the answer.
+    child.stdin.on('error',error=>{stdinError=error;});
     child.on('error',error=>{clearTimeout(timer);children.delete(child);reject(error);});
     child.on('close',code=>{
       clearTimeout(timer);
@@ -134,31 +152,63 @@ async function route(task, ctx, dir) {
       try {
         const result=JSON.parse(text);
         if (code && !['self','split'].includes(result.status)) throw Error(result.error || result.next || 'Router blocked');
-        resolve(result);
-      } catch(error) { reject(Error('Router returned no usable route; inspect '+dir+': '+error.message)); }
+        resolve({...result, engine:'cli'});
+      } catch(error) {
+        reject(Error('Router returned no usable route; inspect '+dir+': '+error.message+
+          (stdinError ? ' (the router stopped reading the task: '+stdinError.code+')' : '')));
+      }
     });
     child.stdin.end(task, 'utf8');
   });
 }
+// The engine for this roll: the configured CLI, an opted-in CLI when it is installed, otherwise the built-in engine.
+async function route(conf, task, ctx, dir, catalog) {
+  if (conf.engine==='cli' && conf.command) return await external(conf.command, task, ctx, dir);
+  if (conf.engine==='cli') {
+    const found=discover();
+    if (found) return await external([found, 'roll'], task, ctx, dir);
+    const result=await builtin(task, catalog, dir);
+    return {...result, engine_note:'config.json asks for the AgentCompass CLI, which is not installed: the built-in engine routed this task.'};
+  }
+  return await builtin(task, catalog, dir);
+}
+// One preparation per operation at a time; different operations never wait for each other.
+const busy=new Map();
+function exclusive(key, work) {
+  const run=(busy.get(key) || Promise.resolve()).then(work, work);
+  const tail=run.catch(()=>{});
+  busy.set(key, tail);
+  tail.then(()=>{if (busy.get(key)===tail) busy.delete(key);});
+  return run;
+}
 async function handle(method, params) {
   const ctx=context(params.context);
+  const conf=settings();
+  if (conf.error) throw Error(conf.error);
+  const root=stateRoot(conf);
+  fs.mkdirSync(root, {recursive:true});
   if (method==='prepare') {
     if (typeof params.task!=='string' || !params.task.trim()) throw Error('Task is empty');
     const operation=digest(ctx.session_id+'\0'+params.task).slice(0,40);
     const dir=path.join(root,operation);
     fs.mkdirSync(dir,{recursive:true});
+    return await exclusive(dir, async()=>{
     const file=path.join(dir,'receipt.json');
-    if (fs.existsSync(file)) return {operation,...JSON.parse(fs.readFileSync(file,'utf8'))};
-    const mappings=accountMappings();
-    const result=await route(params.task,ctx,dir);
+    const old=fs.existsSync(file) ? JSON.parse(fs.readFileSync(file,'utf8')) : null;
+    if (old && old.state!=='prepared') return {operation,...old};
+    // Nothing was created yet: route again with the current configuration, account map and catalog, so a retry after
+    // a fix is not stuck on the answer that failed.
+    const mappings=accountMappings(conf);
+    const result=await route(conf,params.task,ctx,dir,params.catalog);
     // self/split/a router-side launch are the router's answer to the parent, not a Cindy task.
-    const {bundle,prompt}=result.status==='native' ? contract(result,ctx) : {bundle:null,prompt:''};
-    const record={parent:ctx.session_id, state:'prepared', router:result, bundle, prompt,
-                  directory:ctx.workdir, mappings};
+    const {bundle,prompt}=result.status==='native' ? contract(result,ctx,params.task) : {bundle:null,prompt:''};
+    const record={parent:ctx.session_id, state:'prepared', engine:result.engine, router:result, bundle, prompt,
+                  directory:ctx.workdir, mappings, attempts:(old?.attempts || 0)+1};
     atomic(file,record);
     return {operation,...record};
+    });
   }
-  const {dir,record}=owned(params.operation,ctx);
+  const {dir,record}=owned(root,params.operation,ctx);
   if (method==='load') return record;
   if (method==='save') {
     const update=params.record;
@@ -173,17 +223,14 @@ async function handle(method, params) {
   }
   throw Error('Unsupported method');
 }
-// Cindy shares one worker across sessions; serialize preparation/persistence.
-let queue=Promise.resolve();
+// Cindy shares one worker across sessions. Requests run concurrently: a slow route for one session never delays
+// another session's status, stop or cleanup. The logic page orders the calls of one operation.
+const reply=message=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',...message})+'\n');
 readline.createInterface({input:process.stdin}).on('line', line=>{
-  queue=queue.then(async()=>{
-    let request;
-    try {
-      request=JSON.parse(line);
-      const result=await handle(request.method,request.params || {});
-      process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:request.id,result})+'\n');
-    } catch(error) {
-      process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:request?.id,error:{code:-32000,message:error.message}})+'\n');
-    }
-  });
+  let request;
+  try {request=JSON.parse(line);}
+  catch(error) {reply({id:null,error:{code:-32700,message:'Parse error: '+error.message}});return;}
+  Promise.resolve().then(()=>handle(request.method,request.params || {})).then(
+    result=>reply({id:request.id,result}),
+    error=>reply({id:request.id,error:{code:-32000,message:error.message}}));
 });

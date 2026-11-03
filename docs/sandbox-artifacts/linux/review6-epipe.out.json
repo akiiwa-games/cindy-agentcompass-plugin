@@ -1,0 +1,69 @@
+{
+ "results": [
+  {
+   "label": "roll",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": false,
+     "errorCode": "ROUTER_BLOCKED",
+     "message": "Router returned no usable route; inspect <sandbox>/epipe state/595c9b91203489de33f40ce69a65b2e0bd919129: Unexpected end of JSON input (the router stopped reading the task: EPIPE) Check plugin permissions, task directory and exact account mapping; no automatic retry."
+    }
+   ]
+  },
+  {
+   "label": "roll again",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": false,
+     "errorCode": "ROUTER_BLOCKED",
+     "message": "Router returned no usable route; inspect <sandbox>/epipe state/b2f3caf9c2007834dff8fae40f6412fe4290c357: Unexpected end of JSON input (the router stopped reading the task: EPIPE) Check plugin permissions, task directory and exact account mapping; no automatic retry."
+    }
+   ]
+  },
+  {
+   "label": "status",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": false,
+     "errorCode": "ROUTER_BLOCKED",
+     "message": "ENOENT: no such file or directory, open '<sandbox>/epipe state/ffffffffffffffffffffffffffffffffffffffff/receipt.json' Check plugin permissions, task directory and exact account mapping; no automatic retry."
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "capabilities"
+  }
+ ],
+ "nodeCalls": [
+  "prepare",
+  "prepare",
+  "load"
+ ],
+ "sent": [],
+ "prepared": null,
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [],
+ "runs": [],
+ "workerStderr": ""
+}

@@ -1,0 +1,389 @@
+{
+ "results": [
+  {
+   "label": "catalog",
+   "fixture": {
+    "catalog": "real+claude"
+   }
+  },
+  {
+   "label": "roll",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": true,
+     "result": {
+      "status": "running",
+      "operation": "053c0ba628ddd090c7dfca33e0cc157063c45e5d",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "task_id": "task-1",
+      "run_id": "run-1",
+      "error": null,
+      "error_code": null,
+      "automatic_callback": false,
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "053c0ba628ddd090c7dfca33e0cc157063c45e5d"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "label": "status while running",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": true,
+     "result": {
+      "status": "running",
+      "operation": "053c0ba628ddd090c7dfca33e0cc157063c45e5d",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "outputMessageId": null,
+      "output_available": false,
+      "messages_complete": false,
+      "message_pages_read": 0,
+      "final_result_summary": "",
+      "summary_shortened": false,
+      "full_result_artifacts": [],
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "053c0ba628ddd090c7dfca33e0cc157063c45e5d"
+       }
+      },
+      "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
+     }
+    }
+   ]
+  },
+  {
+   "label": "finished",
+   "fixture": {
+    "runStatus": "completed",
+    "outputMessageId": "out-final",
+    "pages": 2,
+    "finalText": "[Worker final report] quota-exhausted"
+   }
+  },
+  {
+   "label": "status",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": true,
+     "result": {
+      "status": "completed",
+      "operation": "053c0ba628ddd090c7dfca33e0cc157063c45e5d",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "outputMessageId": "out-final",
+      "output_available": true,
+      "messages_complete": true,
+      "message_pages_read": 2,
+      "final_result_summary": "[Worker final report] quota-exhausted",
+      "summary_shortened": false,
+      "full_result_artifacts": [
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\053c0ba628ddd090c7dfca33e0cc157063c45e5d\\messages-178c06b913bd1266.json",
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\053c0ba628ddd090c7dfca33e0cc157063c45e5d\\messages-2a33e9f73c5c192e.json"
+      ],
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "cleanup",
+       "args": {
+        "operation": "053c0ba628ddd090c7dfca33e0cc157063c45e5d"
+       }
+      },
+      "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
+     }
+    }
+   ]
+  },
+  {
+   "label": "cleanup",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-4",
+     "ok": true,
+     "result": {
+      "status": "cleaned",
+      "operation": "053c0ba628ddd090c7dfca33e0cc157063c45e5d"
+     }
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "create",
+   "requestKey": "053c0ba628ddd090c7dfca33e0cc157063c45e5d:create",
+   "route": {
+    "agentKind": "cc",
+    "providerId": "anthropic",
+    "model": "claude-sonnet-5-5",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  {
+   "name": "send",
+   "taskId": "task-1",
+   "expectedRevision": 1,
+   "requestKey": "053c0ba628ddd090c7dfca33e0cc157063c45e5d:send",
+   "chars": 411
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "readMessages",
+   "after": null
+  },
+  {
+   "name": "readMessages",
+   "after": "1"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "listRuns",
+   "taskId": "task-1"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "archive",
+   "taskId": "task-1"
+  }
+ ],
+ "nodeCalls": [
+  "prepare",
+  "load",
+  "save",
+  "save",
+  "save",
+  "load",
+  "save",
+  "load",
+  "output",
+  "save",
+  "output",
+  "save",
+  "save",
+  "load",
+  "save"
+ ],
+ "sent": [
+  {
+   "runId": "run-1",
+   "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
+   "sha256": "40a28bddc81ec5a6039cc662ed5fd30e7ebc4eca92676bbe33bfb3f6812bda9f",
+   "chars": 411
+  }
+ ],
+ "prepared": {
+  "operation": "053c0ba628ddd090c7dfca33e0cc157063c45e5d",
+  "parent": "cindy-session-1",
+  "state": "prepared",
+  "engine": "builtin",
+  "router": {
+   "status": "native",
+   "engine": "builtin",
+   "route": {
+    "bundle": {
+     "provider": "claude",
+     "harness": "claude",
+     "account": "anthropic",
+     "providerId": "anthropic",
+     "model": "claude-sonnet-5-5",
+     "effort": "high",
+     "fast": false,
+     "modeId": "bypassPermissions"
+    }
+   },
+   "decision": {
+    "work_kind": "general_implementation",
+    "difficulty": "hard",
+    "required_ability": 3.4016,
+    "profile": {
+     "work_kind": "general_implementation",
+     "reasoning_depth": 2,
+     "code_complexity": 2,
+     "context_scale": 1,
+     "divergence": 1,
+     "hallucination_risk": 2,
+     "error_cost": 2,
+     "needs_visual": false,
+     "needs_gui": false,
+     "local_only": false,
+     "interaction_style": "engineering",
+     "expected_hours": 0.8,
+     "hours_confidence": "medium",
+     "urgency": "unknown",
+     "reason": "deterministic profile: work_kind=general_implementation, depth=2, code=2, scale=1, div=1",
+     "multi_task": false,
+     "task_count": "1"
+    },
+    "canonical_model": "claude-sonnet-5-5",
+    "score": 0.3347,
+    "components": {
+     "fit": 0.821,
+     "route_fit": 0.6,
+     "vector_fit": 1,
+     "subjective_fit": 0.78,
+     "ability": 1,
+     "ability_value": 3.9,
+     "required_ability": 3.402,
+     "quality_bonus": 0,
+     "effort_penalty": 0,
+     "overqualification": 0.0116,
+     "shortfall": 0
+    },
+    "wants_fast": false,
+    "quota": {
+     "source": "codex-cli-sessions",
+     "status": "exhausted",
+     "used_percent": 97,
+     "observed_at": "2026-11-03T09:02:11.704Z",
+     "plan": "pro",
+     "file": "<sandbox>\\codex home drained\\sessions\\2026\\11\\03\\rollout-sandbox.jsonl"
+    },
+    "quota_penalized_routes": 24,
+    "alternatives": [
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.3312,
+      "notes": []
+     },
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-opus-5-5",
+      "effort": "low",
+      "fast": false,
+      "score": 0.3174,
+      "notes": []
+     },
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-opus-5-5",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.3106,
+      "notes": []
+     },
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "fast": false,
+      "score": 0.3043,
+      "notes": []
+     },
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "effort": "low",
+      "fast": false,
+      "score": 0.2745,
+      "notes": []
+     }
+    ]
+   }
+  },
+  "bundle": {
+   "provider": "claude",
+   "harness": "claude",
+   "account": "anthropic",
+   "providerId": "anthropic",
+   "model": "claude-sonnet-5-5",
+   "effort": "high",
+   "fast": false,
+   "modeId": "bypassPermissions"
+  },
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [drained-1793696531703]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "directory": "<sandbox>\\work dir",
+  "mappings": [],
+  "attempts": 1
+ },
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [
+  {
+   "taskId": "task-1",
+   "revision": 2,
+   "resolvedConfig": {
+    "agentKind": "cc",
+    "providerId": "anthropic",
+    "model": "claude-sonnet-5-5",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions",
+   "planModeEnabled": false,
+   "workingDir": "<sandbox>\\work dir",
+   "archived": true
+  }
+ ],
+ "runs": [
+  {
+   "runId": "run-1",
+   "taskId": "task-1",
+   "inputMessageId": "plugin-task:run-1",
+   "status": "completed",
+   "acceptedConfig": {
+    "agentKind": "cc",
+    "providerId": "anthropic",
+    "model": "claude-sonnet-5-5",
+    "effort": "high",
+    "fastMode": false
+   },
+   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [drained-1793696531703]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "outputMessageId": "out-final"
+  }
+ ],
+ "workerStderr": ""
+}

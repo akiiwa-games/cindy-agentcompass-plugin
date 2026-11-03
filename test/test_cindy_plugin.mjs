@@ -1,45 +1,65 @@
 // Official API fixtures at the plugin boundary. This is not a Cindy runtime test.
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 const source=fs.readFileSync(new URL('../plugin/main.js',import.meta.url),'utf8');
 const ctx={session_id:'true-parent',workdir:'E:/project',workdir_is_local:true,workdir_is_read_only:false};
 const route={agentKind:'codex',providerId:'codex',model:'gpt-test',effort:'high',fastMode:false};
+const PROMPT='完整原文\r\nunchanged';
+const opOf=(session,task)=>crypto.createHash('sha256').update(session+'\0'+task).digest('hex').slice(0,40);
+const coded=(code,message=code)=>Object.assign(Error(message),{code});
+// options.prepared: the receipt prepare writes (an object, or a function of the call number for a retry that re-reads).
+// options.prepareGate(task): a promise prepare waits for. options.saveFails(record): a save that throws.
 function fixture(options={}) {
   const records=new Map(), calls=[], messages=[], waiters=new Map();
-  let handler, serial=0;
+  let handler, serial=0, prepares=0;
   const task={taskId:'child-task',revision:4,resolvedConfig:{...route},permissionMode:'bypassPermissions',workingDir:ctx.workdir};
-  const run={runId:'run-1',taskId:task.taskId,status:'running',acceptedConfig:route};
+  const run={runId:'run-1',taskId:task.taskId,status:'running',acceptedConfig:route,inputMessageId:'plugin-task:run-1'};
+  const host={runs:[run],pages:2,input:PROMPT};
   const cindy={
     node:{request:async request=>{
       calls.push(['node',request.method]);
       const {method,params}=request;
       if (method==='prepare') {
-        const operation='a'.repeat(40);
-        if (!records.has(operation)) records.set(operation,options.prepared || {parent:ctx.session_id,state:'prepared',
+        calls.push(['prepare',{task:params.task,catalog:params.catalog}]);
+        if (options.prepareGate) await options.prepareGate(params.task,params.context);
+        const operation=opOf(params.context.session_id,params.task);
+        prepares++;
+        const fresh=typeof options.prepared==='function' ? options.prepared(prepares) : options.prepared;
+        if (!records.has(operation) || records.get(operation).state==='prepared') records.set(operation,fresh || {parent:params.context.session_id,state:'prepared',
           bundle:{provider:'codex',account:'codex',harness:'codex',model:'gpt-test',effort:'high',modeId:'full-access'},
-          prompt:'完整原文\r\nunchanged',router:{status:'native'},mappings:[]});
+          prompt:PROMPT,router:{status:'native'},mappings:[]});
         return {ok:true,result:{operation,...structuredClone(records.get(operation))}};
       }
       const record=records.get(params.operation);
       if (record?.parent!==params.context.session_id) return {ok:false,message:'parent ownership mismatch'};
-      if (method==='save') {records.set(params.operation,structuredClone(params.record));return {ok:true,result:{saved:true}};}
+      if (method==='save') {
+        if (options.saveFails?.(params.record)) return {ok:false,message:'disk full'};
+        records.set(params.operation,structuredClone(params.record));return {ok:true,result:{saved:true}};
+      }
       if (method==='load') return {ok:true,result:structuredClone(record)};
-      if (method==='output') return {ok:true,result:{artifact:'/test/full-message-page.json'}};
+      if (method==='output') return {ok:true,result:{artifact:'/test/full-message-page-'+(serial++)+'.json'}};
       throw Error('unexpected node method');
     }},
     tasks:{
       capabilities:async()=>({operations:['models','create','send','get','getRun','listRuns','readMessages','cancel','archive'],exactRoute:true,createPermissionMode:true}),
       models:async()=>({models:[{route,efforts:['high'],supportsFastMode:true}]}),
       create:async request=>{calls.push(['create',structuredClone(request)]);return structuredClone(task);},
-      send:async request=>{calls.push(['send',structuredClone(request)]);if(options.uncertain) throw Error('DELIVERY_UNCERTAIN');return structuredClone(run);},
-      getRun:async request=>{calls.push(['getRun',request]);return structuredClone(run);},
-      listRuns:async()=>({items:[structuredClone(run)],nextCursor:null}),
-      readMessages:async request=>{calls.push(['readMessages',request]);return request.after ?
-        {items:[{id:'out-exact',role:'assistant',content:'[Worker final report] '+ '实'.repeat(6000)}],nextCursor:null} :
-        {items:[{id:'unrelated',content:'wrong output'}],nextCursor:'page-2'};},
-      cancel:async request=>{calls.push(['cancel',request]);run.status='stopping';return structuredClone(run);},
+      send:async request=>{calls.push(['send',structuredClone(request)]);if(options.sendError) throw options.sendError;if(options.uncertain) throw Error('DELIVERY_UNCERTAIN');return structuredClone(run);},
+      getRun:async request=>{calls.push(['getRun',request]);return structuredClone(host.runs.find(r=>r.runId===request.runId));},
+      listRuns:async()=>{calls.push(['listRuns']);return {items:structuredClone(host.runs),nextCursor:null};},
+      // Page 0 holds the run's input message; the last page holds the exact output.
+      readMessages:async request=>{
+        calls.push(['readMessages',request]);
+        const index=request.after ? Number(request.after.slice('page-'.length)) : 0;
+        const last=index>=host.pages-1;
+        const items=index===0 ? [{id:'plugin-task:run-1',role:'user',content:host.input},{id:'unrelated',role:'assistant',content:'wrong output'}] :
+          [{id:last ? 'out-exact' : 'noise-'+index,role:'assistant',content:last ? '[Worker final report] '+'实'.repeat(6000) : 'page '+index}];
+        return {items,nextCursor:last ? null : 'page-'+(index+1)};
+      },
+      cancel:async request=>{calls.push(['cancel',request]);run.status=options.cancelTo || 'stopping';return structuredClone(run);},
       archive:async request=>{calls.push(['archive',request]);return task;}
     },
     onHostMessage:callback=>{handler=callback;},
@@ -50,32 +70,39 @@ function fixture(options={}) {
     const callId='call-'+(++serial);waiters.set(callId,resolve);
     handler({type:'tool-call',tool,callId,args:{...args,session_context:context}});
   });
-  return {cindy,task,run,send,calls,records};
+  const count=name=>calls.filter(c=>c[0]===name).length;
+  return {cindy,task,run,host,send,calls,records,count};
 }
+const noArchive=f=>{
+  const capabilities=f.cindy.tasks.capabilities;
+  f.cindy.tasks.capabilities=async()=>{const caps=await capabilities();return {...caps,operations:caps.operations.filter(op=>op!=='archive')};};
+  delete f.cindy.tasks.archive;
+};
 test('exact route/permission, unchanged task, concurrent repeats create and send once',async()=>{
   const f=fixture();
   const replies=await Promise.all([f.send('roll',{task:'x'}),f.send('roll',{task:'x'})]);
   assert.ok(replies.every(r=>r.ok));
-  assert.equal(f.calls.filter(c=>c[0]==='create').length,1);
-  assert.equal(f.calls.filter(c=>c[0]==='send').length,1);
+  assert.equal(f.count('create'),1);
+  assert.equal(f.count('send'),1);
   const request=f.calls.find(c=>c[0]==='send')[1];
   assert.equal(request.expectedRevision,4);
-  assert.equal(request.text,'完整原文\r\nunchanged');
+  assert.equal(request.text,PROMPT);
   assert.equal(replies[0].result.automatic_callback,false);
+  assert.deepEqual(f.calls.find(c=>c[0]==='prepare')[1].catalog.models[0].route,route,'the live catalog reaches the engine');
 });
 // CINDY_PUBLIC_ROUTE_FIXTURE: a receipt.json that the real worker.cjs prepared through the real public router.
 if (process.env.CINDY_PUBLIC_ROUTE_FIXTURE) test('actual public router route reaches explicit Cindy permission',async()=>{
   const receipt=JSON.parse(fs.readFileSync(process.env.CINDY_PUBLIC_ROUTE_FIXTURE,'utf8'));
   const kind={claude:'cc',codex:'codex',pi:'pi'}[receipt.bundle.harness];
-  const expected={agentKind:kind,providerId:receipt.bundle.account,model:receipt.bundle.launch_model || receipt.bundle.model,
-    effort:receipt.bundle.effort,fastMode:false};
+  const expected={agentKind:kind,providerId:receipt.bundle.providerId || receipt.bundle.account,model:receipt.bundle.launch_model || receipt.bundle.model,
+    effort:receipt.bundle.effort,fastMode:Boolean(receipt.bundle.fast)};
   // Only what prepare produced; a later receipt also holds its create/send/collection progress.
   const f=fixture({prepared:{parent:ctx.session_id,state:'prepared',router:receipt.router,bundle:receipt.bundle,prompt:receipt.prompt,mappings:[]}});
   f.cindy.tasks.models=async()=>({models:[{route:expected,efforts:[expected.effort],supportsFastMode:true}]});
   f.task.resolvedConfig=expected;
   const result=await f.send('roll',{task:'A fixture task'});
   assert.equal(result.ok,true,JSON.stringify(result));
-  assert.equal(f.calls.filter(c=>c[0]==='send').length,1);
+  assert.equal(f.count('send'),1);
   assert.equal(f.calls.find(c=>c[0]==='create')[1].permissionMode,'bypassPermissions');
   assert.equal(f.calls.find(c=>c[0]==='send')[1].text,receipt.prompt);
 });
@@ -98,13 +125,15 @@ test('completed result uses exact outputMessageId and persists all pages',async(
   assert.equal(reply.result.summary_shortened,true);
   assert.equal(reply.result.full_result_artifacts.length,2);
   assert.match(reply.result.final_result_summary,/Worker final report/);
+  assert.equal(reply.result.next_tool.tool,'cleanup');
 });
-test('unknown send is observed with listRuns and never sent twice',async()=>{
+test('unknown send is observed with listRuns and the run input message, and never sent twice',async()=>{
   const f=fixture({uncertain:true});const first=await f.send('roll',{task:'x'});
   assert.equal(first.result.status,'unknown_send');
   const recovered=await f.send('status',{operation:first.result.operation});
   assert.equal(recovered.result.runId,'run-1');
-  assert.equal(f.calls.filter(c=>c[0]==='send').length,1);
+  assert.equal(f.records.get(first.result.operation).delivery,'reconciled');
+  assert.equal(f.count('send'),1);
 });
 test('disabled/offline/old host cannot start anything',async()=>{
   for(const mode of ['missing','denied','no-cancel']) {
@@ -116,26 +145,22 @@ test('disabled/offline/old host cannot start anything',async()=>{
       f.cindy.tasks.capabilities=async()=>{const caps=await capabilities();return {...caps,operations:caps.operations.filter(op=>op!=='cancel')};};
     }
     assert.equal((await f.send('roll',{task:'x'})).ok,false);
-    assert.equal(f.calls.filter(c=>c[0]==='create').length,0);
+    assert.equal(f.count('create'),0);
   }
 });
 test('wrong model/provider/permission/directory cannot receive model input',async()=>{
   for(const archive of [true,false]) {
   for(const kind of ['model','provider','permission','directory']) {
     const f=fixture();
-    if(!archive) {
-      const capabilities=f.cindy.tasks.capabilities;
-      f.cindy.tasks.capabilities=async()=>{const caps=await capabilities();return {...caps,operations:caps.operations.filter(op=>op!=='archive')};};
-      delete f.cindy.tasks.archive;
-    }
+    if(!archive) noArchive(f);
     if(kind==='model') f.cindy.tasks.models=async()=>({models:[{route:{...route,model:'other'}}]});
     if(kind==='provider') f.cindy.tasks.models=async()=>({models:[{route:{...route,providerId:'other'}}]});
     if(kind==='permission') f.task.permissionMode='ask';
     if(kind==='directory') f.task.workingDir='E:/different';
     const reply=await f.send('roll',{task:'x'});
-    assert.equal(f.calls.filter(c=>c[0]==='send').length,0);
+    assert.equal(f.count('send'),0);
     if(['permission','directory'].includes(kind)) {
-      assert.equal(f.calls.filter(c=>c[0]==='archive').length,archive?1:0);
+      assert.equal(f.count('archive'),archive?1:0);
       assert.equal(reply.result.taskId,f.task.taskId);
       assert.equal(reply.result.draft_cleanup,archive?'archived':'manual_cleanup_required');
     }
@@ -148,7 +173,7 @@ test('lost create is not retried and a failed run preserves failure without inve
   assert.equal(first.result.status,'unknown_create');
   const observed=await f.send('status',{operation:first.result.operation});
   assert.equal(observed.result.status,'unknown_create');
-  assert.equal(f.calls.filter(c=>c[0]==='send').length,0);
+  assert.equal(f.count('send'),0);
   const other=fixture();const launched=await other.send('roll',{task:'x'});
   other.run.status='failed';other.run.error='upstream timeout';
   const failed=await other.send('status',{operation:launched.result.operation});
@@ -165,22 +190,21 @@ test('parent/session boundary and readonly/remote fail before dispatch',async()=
 test('archive is optional for dispatch and cancellation; inactive cleanup is honest and repeatable',async()=>{
   for (const archive of [true,false]) {
   const f=fixture();
-  if (!archive) {
-    const capabilities=f.cindy.tasks.capabilities;
-    f.cindy.tasks.capabilities=async()=>{const caps=await capabilities();return {...caps,operations:caps.operations.filter(op=>op!=='archive')};};
-    delete f.cindy.tasks.archive;
-  }
+  if (!archive) noArchive(f);
   const first=await f.send('roll',{task:'x'});assert.equal(first.ok,true);
   const args={operation:first.result.operation};
   assert.equal((await f.send('stop',args)).result.status,'stopping');
-  assert.equal((await f.send('cleanup',args)).ok,false);
+  const refused=(await f.send('cleanup',args)).result;
+  assert.equal(refused.status,'cleanup_refused');
+  assert.match(refused.reason,/run-1 is stopping/);
   f.run.status='cancelled';
+  assert.equal((await f.send('status',args)).result.messages_complete,true);
   for(let i=0;i<2;i++) {
     const cleaned=(await f.send('cleanup',args)).result;
     assert.equal(cleaned.status,archive?'cleaned':'manual_cleanup_required');
     if (!archive) {assert.equal(cleaned.taskId,f.task.taskId);assert.equal(cleaned.archived,false);}
   }
-  assert.equal(f.calls.filter(c=>c[0]==='archive').length,archive?1:0);
+  assert.equal(f.count('archive'),archive?1:0);
   }
 });
 // Each harness Cindy runs, as the router names it, reaches exactly one catalog row with the bypass permission.
@@ -189,6 +213,7 @@ function routed(bundle,catalogRoute,{mappings=[],supportsFastMode=true}={}) {
   f.cindy.tasks.models=async()=>({models:[{route:{...catalogRoute,fastMode:false},efforts:[catalogRoute.effort],supportsFastMode},
     {route:{...catalogRoute,model:catalogRoute.model+'-nearby',fastMode:false},efforts:[catalogRoute.effort],supportsFastMode}]});
   f.task.resolvedConfig={...catalogRoute};
+  f.run.acceptedConfig={...catalogRoute};
   return f;
 }
 test('claude routes become Cindy cc with bypassPermissions and keep effort high or max',async()=>{
@@ -201,6 +226,13 @@ test('claude routes become Cindy cc with bypassPermissions and keep effort high 
     assert.deepEqual(create.route,want);
     assert.equal(create.permissionMode,'bypassPermissions');
   }
+});
+test('the built-in engine names the catalog connection itself: no account map is needed',async()=>{
+  const want={agentKind:'pi',providerId:'openai',model:'chatgpt/gpt-6.1-terra',effort:'high',fastMode:false};
+  const f=routed({provider:'pi',harness:'pi',account:'openai',providerId:'openai',model:'chatgpt/gpt-6.1-terra',effort:'high',fast:false,modeId:'full-access'},want);
+  const reply=await f.send('roll',{task:'x'});
+  assert.equal(reply.ok,true,JSON.stringify(reply));
+  assert.deepEqual(f.calls.find(c=>c[0]==='create')[1].route,want);
 });
 test('pi runs the launch model on the mapped Cindy connection; without a mapping it is refused',async()=>{
   const bundle={provider:'pi',account:'codex',harness:'pi',model:'gpt-6.1-sol',launch_model:'openai-codex/gpt-6.1-sol',effort:'high',modeId:'full-access'};
@@ -226,20 +258,175 @@ test('a codex fast route asks Cindy for fast mode, and only on a row that suppor
   assert.deepEqual(f.calls.find(c=>c[0]==='create')[1].route,want);
   const slow=routed(bundle,want,{supportsFastMode:false});
   assert.equal((await slow.send('roll',{task:'x'})).ok,false);
-  assert.equal(slow.calls.filter(c=>c[0]==='create').length,0);
+  assert.equal(slow.count('create'),0);
   const plain=routed({...bundle,fast:false},{...want,fastMode:false});
   await plain.send('roll',{task:'x'});
   assert.equal(plain.calls.find(c=>c[0]==='create')[1].route.fastMode,false);
 });
-test('stop reports stopping honestly, then status reports the confirmed cancelled terminal state',async()=>{
+test('stop waits a bounded time for the host: stopping is reported as such, a confirmed cancel as terminal',async()=>{
   const f=fixture();const first=await f.send('roll',{task:'x'});
   const args={operation:first.result.operation};
   const stopping=(await f.send('stop',args)).result;
   assert.equal(stopping.status,'stopping');
+  assert.equal(stopping.confirmed_terminal,false);
+  assert.ok(f.count('getRun')>=10,'stop polled getRun after cancel');
   assert.equal((await f.send('status',args)).result.next_action.includes('No automatic callback'),true,'stopping is not terminal');
   f.run.status='cancelled';
   const cancelled=(await f.send('status',args)).result;
   assert.equal(cancelled.status,'cancelled');
   assert.match(cancelled.next_action,/Cleanup archives/);
   assert.equal(cancelled.output_available,false);
+  const quick=fixture({cancelTo:'cancelled'});const op=(await quick.send('roll',{task:'x'})).result.operation;
+  const confirmed=(await quick.send('stop',{operation:op})).result;
+  assert.deepEqual([confirmed.status,confirmed.confirmed_terminal],['cancelled',true]);
+});
+
+// ---- regressions from the PR #274 review (Greptile and Codex)
+test('review 1: a persisted `sending` receipt without runId is settled from the host runs, never resent',async()=>{
+  const f=fixture();const first=await f.send('roll',{task:'x'});
+  const op=first.result.operation;
+  const record=f.records.get(op);
+  // The process died after tasks.send succeeded and before the run was written down.
+  f.records.set(op,{...record,state:'sending',runId:undefined,delivery:undefined});
+  const status=(await f.send('status',{operation:op})).result;
+  assert.equal(status.runId,'run-1');
+  assert.equal(status.status,'running');
+  assert.equal(f.records.get(op).delivery,'reconciled');
+  assert.equal(f.count('send'),1);
+});
+test('review 1: a receipt save that fails after a successful send still returns operation, task_id and run_id',async()=>{
+  const f=fixture({saveFails:record=>record.state==='running' && record.delivery==='accepted'});
+  const reply=await f.send('roll',{task:'x'});
+  assert.equal(reply.ok,true,JSON.stringify(reply));
+  assert.equal(reply.result.operation,opOf(ctx.session_id,'x'));
+  assert.deepEqual([reply.result.task_id,reply.result.run_id,reply.result.receipt_saved],['child-task','run-1',false]);
+  assert.match(reply.result.receipt_error,/disk full/);
+  assert.equal(f.records.get(reply.result.operation).state,'sending','the disk still says sending');
+  const status=(await f.send('status',{operation:reply.result.operation})).result;
+  assert.equal(status.runId,'run-1');
+  assert.equal(f.count('send'),1);
+});
+test('review 2: a definite send refusal is send_rejected and the draft is discarded, not unknown_send',async()=>{
+  for (const code of ['REVISION_CONFLICT','INVALID_REQUEST','PERMISSION_DENIED']) {
+  for (const archive of [true,false]) {
+    const f=fixture({sendError:coded(code,'Task configuration changed')});
+    if (!archive) noArchive(f);
+    f.host.runs=[];
+    const reply=(await f.send('roll',{task:'x'})).result;
+    assert.equal(reply.status,'send_rejected',code);
+    assert.equal(reply.error_code,code);
+    assert.equal(reply.draft_cleanup,archive ? 'archived' : 'manual_cleanup_required');
+    assert.equal(reply.next_tool.tool,'cleanup');
+    const cleaned=(await f.send('cleanup',{operation:reply.operation})).result;
+    assert.equal(cleaned.status,archive ? 'cleaned' : 'manual_cleanup_required');
+    assert.equal(f.count('archive'),archive ? 1 : 0,'archived once');
+  }
+  }
+  // A refusal code while the task already has a run is not proof: it stays unknown and is reconciled.
+  const f=fixture({sendError:coded('PERMISSION_DENIED','Account changed')});
+  const reply=(await f.send('roll',{task:'x'})).result;
+  assert.equal(reply.status,'unknown_send');
+  assert.equal(f.count('archive'),0);
+  // A transport error without a code is unknown, never rejected.
+  const lost=fixture({sendError:Error('socket hang up')});lost.host.runs=[];
+  assert.equal((await lost.send('roll',{task:'x'})).result.status,'unknown_send');
+});
+test('review 2: a run on the same route is claimed only when its input message is this prompt',async()=>{
+  const f=fixture({uncertain:true});
+  f.host.input='a message the user typed into the draft';
+  const first=(await f.send('roll',{task:'x'})).result;
+  const status=(await f.send('status',{operation:first.operation})).result;
+  assert.equal(status.status,'unknown_send','route match and one run are not enough');
+  assert.equal(f.records.get(first.operation).runId,undefined);
+  assert.equal((await f.send('cleanup',{operation:first.operation})).result.status,'cleanup_refused');
+  f.host.input=PROMPT;
+  const claimed=(await f.send('status',{operation:first.operation})).result;
+  assert.equal(claimed.runId,'run-1');
+  // Two runs on the route: the one whose input message carries the prompt is claimed.
+  const two=fixture({uncertain:true});
+  two.host.runs=[{runId:'run-0',taskId:'child-task',status:'completed',acceptedConfig:route,inputMessageId:'plugin-task:run-0'},two.run];
+  const op=(await two.send('roll',{task:'x'})).result.operation;
+  assert.equal((await two.send('status',{operation:op})).result.runId,'run-1');
+  assert.equal(two.count('send'),1);
+});
+test('review 3: cleanup refuses unconfirmed receipts and tasks with any active run, even without a runId',async()=>{
+  const lostCreate=fixture();lostCreate.cindy.tasks.create=async()=>{throw Error('transport lost');};
+  const a=(await lostCreate.send('roll',{task:'x'})).result.operation;
+  assert.equal((await lostCreate.send('cleanup',{operation:a})).result.status,'cleanup_refused');
+  for (const state of ['creating','sending','unknown_send']) {
+    const f=fixture({uncertain:true});f.host.runs=[];
+    const op=(await f.send('roll',{task:'x'})).result.operation;
+    f.records.set(op,{...f.records.get(op),state});
+    const reply=(await f.send('cleanup',{operation:op})).result;
+    assert.equal(reply.status,'cleanup_refused',state);
+    assert.equal(f.count('archive'),0,state);
+  }
+  // A blocked draft has no runId; another input running on it still makes it active.
+  const f=fixture();f.task.workingDir='E:/different';noArchive(f);
+  const op=(await f.send('roll',{task:'x'})).result.operation;
+  f.host.runs=[{...f.run,runId:'run-other',status:'running'}];
+  const busy=(await f.send('cleanup',{operation:op})).result;
+  assert.equal(busy.status,'cleanup_refused');
+  assert.match(busy.reason,/run-other is running/);
+  f.host.runs=[];
+  assert.equal((await f.send('cleanup',{operation:op})).result.status,'manual_cleanup_required');
+  // listRuns unavailable: idleness is unproven, so nothing is archived.
+  const g=fixture();g.task.workingDir='E:/different';
+  const gop=(await g.send('roll',{task:'x'})).result.operation;
+  g.records.set(gop,{...g.records.get(gop),draft_cleanup:'needs_cleanup'});
+  g.cindy.tasks.listRuns=async()=>{throw coded('HOST_NOT_READY');};
+  assert.equal((await g.send('cleanup',{operation:gop})).ok,false);
+  assert.equal(g.count('archive'),1,'only the draft discard at roll time');
+});
+test('review 4: a terminal run with unread message pages points to status, and cleanup waits for messages_complete',async()=>{
+  const f=fixture();f.host.pages=12;
+  const op=(await f.send('roll',{task:'x'})).result.operation;
+  f.run.status='completed';f.run.outputMessageId='out-exact';
+  const partial=(await f.send('status',{operation:op})).result;
+  assert.equal(partial.messages_complete,false);
+  assert.equal(partial.message_pages_read,10);
+  assert.equal(partial.next_tool.tool,'status');
+  assert.doesNotMatch(partial.next_action,/[Cc]leanup archives/);
+  assert.match(partial.next_action,/Call status again/);
+  const early=(await f.send('cleanup',{operation:op})).result;
+  assert.equal(early.status,'cleanup_refused');
+  assert.match(early.reason,/messages_complete/);
+  const rest=(await f.send('status',{operation:op})).result;
+  assert.deepEqual([rest.messages_complete,rest.message_pages_read,rest.output_available,rest.next_tool.tool],[true,12,true,'cleanup']);
+  assert.equal((await f.send('cleanup',{operation:op})).result.status,'cleaned');
+});
+test('review 5: a roll stuck in routing for session A does not delay session B stop, nor A\'s own other operations',async()=>{
+  let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  const f=fixture({cancelTo:'cancelled',prepareGate:(task)=>task==='slow' ? gate : null});
+  const b={...ctx,session_id:'session-b'};
+  const bop=(await f.send('roll',{task:'x'},b)).result.operation;
+  const aop=(await f.send('roll',{task:'earlier'})).result.operation;
+  const stuck=f.send('roll',{task:'slow'});
+  let routed=false;stuck.then(()=>{routed=true;});
+  const stopped=await f.send('stop',{operation:bop},b);
+  assert.equal(stopped.result.status,'cancelled');
+  assert.equal((await f.send('status',{operation:aop})).ok,true);
+  assert.equal(routed,false,'session A is still routing');
+  release();
+  assert.equal((await stuck).ok,true);
+});
+test('review 7: a prepared receipt is routed again on retry, so a fixed account map is used',async()=>{
+  const bundle={provider:'pi',account:'codex',harness:'pi',model:'gpt-6.1-sol',launch_model:'openai-codex/gpt-6.1-sol',effort:'high',modeId:'full-access'};
+  const want={agentKind:'pi',providerId:'openai-conn',model:'openai-codex/gpt-6.1-sol',effort:'high',fastMode:false};
+  const map=[{routerProvider:'pi',routerAccount:'codex',providerId:'openai-conn',agentKind:'pi'}];
+  // The worker re-reads account-map.json for a receipt that never reached create: the first read has no file.
+  const f=routed(bundle,want);
+  f.records.clear();
+  const fixtureOptions=n=>({parent:ctx.session_id,state:'prepared',router:{status:'native'},bundle,prompt:'p',mappings:n===1 ? [] : map});
+  const g=fixture({prepared:fixtureOptions});
+  g.cindy.tasks.models=f.cindy.tasks.models;g.task.resolvedConfig={...want};g.run.acceptedConfig={...want};
+  const failed=await g.send('roll',{task:'x'});
+  assert.equal(failed.ok,false);
+  assert.match(failed.message,/No explicit Cindy provider\/account binding/);
+  assert.equal(g.records.get(opOf(ctx.session_id,'x')).state,'prepared');
+  const retried=await g.send('roll',{task:'x'});
+  assert.equal(retried.ok,true,JSON.stringify(retried));
+  assert.deepEqual(g.calls.find(c=>c[0]==='create')[1].route,want);
+  assert.equal(g.count('prepare'),2);
 });

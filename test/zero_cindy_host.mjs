@@ -1,15 +1,22 @@
 // A stand-in for the CINDY HOST around the REAL plugin that scripts/build_plugin.py produced.
 //
 //   real:     the built main.js (run as Cindy runs a logic page), the real worker.cjs (a real `node` child speaking
-//             JSON-RPC over stdio, as Cindy's node bridge does), and through it the real public `agentcompass roll`
+//             JSON-RPC over stdio, as Cindy's node bridge does), and through it the built-in engine or the real public
+//             `agentcompass roll`
 //   fixture:  the host itself - trusted session_context injection and the experimental `cindy.tasks` API.
 //             Production behavior is validated separately (see docs/CINDY_REAL_ACCEPTANCE_AND_CANCEL_FIX.md).
 //
 // usage: node zero_cindy_host.mjs <plugin dir> <scenario.json> <out.json>
 // scenario: {workdir, session, steps:[...]}. A step is
 //   {label, call: "roll"|"status"|"stop"|"cleanup", args, inject?: false, context?: {...}, parallel?: n, as?: <other session id>}
+//   or {label, concurrent: [call steps]}   started together; `order` records which reply came first
 //   or {label, fixture: {...changes to the fake Cindy...}}   e.g. {capabilities, catalog, workingDir, staleRevision, runStatus, outputMessageId, pages, archiveFails}
 //   capabilities: 'full' | 'missing' | 'denied' | 'no-cancel' | 'no-archive' | 'no-exact'
+//   catalog: 'matching' (the routed row, on the connection the account map or `connection` names) | 'real' (the catalog
+//            Cindy 0.1.121 reported, test/fixtures) | 'real+claude' (that plus a Claude connection) | 'other-model' | 'empty'
+//   sendFault: 'lost-answer' (the run is stored, its answer never arrives)   inputOverride: text the run's input message shows
+//   saveFault: 'after-send' (the receipt save after an accepted send fails once)
+//   accountMap: [...] writes ~/.agent-compass/cindy-plugin/account-map.json   receiptPatch: {operation, set, unset}
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -40,23 +47,34 @@ const rpc = (method, params) => new Promise(resolve => {
 // ---- the fake Cindy
 const host = {
   capabilities: 'full', catalog: 'matching', workingDir: null, staleRevision: false, archiveFails: false, createFault: null, finalRepeat: null,
+  connection: null, sendFault: null, saveFault: null, inputOverride: null,
   tasks: new Map(), runs: new Map(), createKeys: new Map(), sendKeys: new Map(), pages: 1,
   calls: [], prepared: null, nodeCalls: [], sent: [],
 };
 const log = (name, detail) => host.calls.push({ name, ...detail });
+const publicRun = run => { if (!run) return run; const { inputText, ...rest } = run; return rest; };
 const ALL_OPS = ['models', 'create', 'send', 'get', 'getRun', 'listRuns', 'readMessages', 'cancel', 'archive'];
 
 // The catalog row a correctly configured Cindy shows for the routed account: its connection is the mapped one, else
 // the connection named like the router account.
 function routeOf(bundle, mappings = []) {
   const mapped = mappings.find(m => m.routerProvider === bundle.provider && m.routerAccount === bundle.account);
-  return { agentKind: { claude: 'cc', codex: 'codex', pi: 'pi' }[bundle.harness], providerId: mapped ? mapped.providerId : bundle.account,
+  return { agentKind: { claude: 'cc', codex: 'codex', pi: 'pi' }[bundle.harness], providerId: mapped ? mapped.providerId : (host.connection || bundle.account),
     model: bundle.launch_model || bundle.model, effort: bundle.effort, fastMode: Boolean(bundle.fast) };
 }
+const REAL = JSON.parse(fs.readFileSync(new URL('./fixtures/cindy-0.1.121-catalog.json', import.meta.url), 'utf8'));
+const CLAUDE_ROWS = ['claude-opus-5-5', 'claude-sonnet-5-5'].map(model => ({ route: { agentKind: 'cc', providerId: 'anthropic', model, effort: 'high', fastMode: false },
+  efforts: ['low', 'medium', 'high', 'max'], supportsFastMode: false }));
+const coded = (code, message) => Object.assign(Error(code + ': ' + message), { code });
+const stateHome = path.join(process.env.HOME || process.env.USERPROFILE, '.agent-compass', 'cindy-plugin');
 const cindy = {
   node: {
     request: async ({ method, params }) => {
       host.nodeCalls.push(method);
+      if (method === 'save' && host.saveFault === 'after-send' && params.record?.delivery === 'accepted') {
+        host.saveFault = null; log('saveFault', { operation: params.operation });
+        return { ok: false, message: 'EIO: the receipt could not be written' };
+      }
       const reply = await rpc(method, params);
       if (reply.error) return { ok: false, message: reply.error.message };
       if (method === 'prepare' && reply.result?.bundle) host.prepared = reply.result;
@@ -73,6 +91,8 @@ const cindy = {
     },
     models: async () => {
       log('models', {});
+      if (host.catalog === 'real') return structuredClone({ models: REAL.models });
+      if (host.catalog === 'real+claude') return structuredClone({ models: [...REAL.models, ...CLAUDE_ROWS] });
       const route = host.prepared ? routeOf(host.prepared.bundle, host.prepared.mappings) : null;
       if (!route || host.catalog === 'empty') return { models: [] };
       const shown = host.catalog === 'other-model' ? { ...route, model: route.model + '-other' } : route;
@@ -93,26 +113,33 @@ const cindy = {
       log('send', { taskId: request.taskId, expectedRevision: request.expectedRevision, requestKey: request.requestKey, chars: request.text.length });
       if (!task) throw Error('TASK_NOT_FOUND');
       if (host.sendKeys.has(request.requestKey)) { host.duplicateSend = (host.duplicateSend || 0) + 1; return structuredClone(host.runs.get(host.sendKeys.get(request.requestKey))); }
-      if (request.expectedRevision !== task.revision) throw Error('REVISION_CONFLICT: expected ' + request.expectedRevision + ', task is at ' + task.revision);
-      const run = { runId: 'run-' + (host.runs.size + 1), taskId: task.taskId, status: 'running', acceptedConfig: { ...task.resolvedConfig } };
+      // Cindy refuses before it stores anything, with a coded error (the SDK throws `error.code`).
+      if (request.expectedRevision !== task.revision) throw coded('REVISION_CONFLICT', 'Task configuration changed: expected ' + request.expectedRevision + ', task is at ' + task.revision);
+      const id = 'run-' + (host.runs.size + 1);
+      const run = { runId: id, taskId: task.taskId, inputMessageId: 'plugin-task:' + id, status: 'running', acceptedConfig: { ...task.resolvedConfig } };
+      run.inputText = host.inputOverride ?? request.text;
       host.runs.set(run.runId, run); host.sendKeys.set(request.requestKey, run.runId); task.revision += 1;
       const file = path.join(path.dirname(outFile), `cindy-sent-${run.runId}.txt`);
       fs.writeFileSync(file, request.text, 'utf8');
       host.sent.push({ runId: run.runId, file, sha256: crypto.createHash('sha256').update(request.text, 'utf8').digest('hex'), chars: request.text.length });
-      return structuredClone(run);
+      if (host.sendFault === 'lost-answer') { host.sendFault = null; throw Error('CONNECTION_LOST after the input was accepted'); }
+      return structuredClone(publicRun(run));
     },
-    getRun: async request => { log('getRun', { runId: request.runId }); return structuredClone(host.runs.get(request.runId)); },
-    listRuns: async request => { log('listRuns', { taskId: request.taskId }); return { items: [...host.runs.values()].filter(r => r.taskId === request.taskId).map(r => structuredClone(r)), nextCursor: null }; },
+    getRun: async request => { log('getRun', { runId: request.runId }); return structuredClone(publicRun(host.runs.get(request.runId))); },
+    listRuns: async request => { log('listRuns', { taskId: request.taskId }); return { items: [...host.runs.values()].filter(r => r.taskId === request.taskId).map(r => structuredClone(publicRun(r))), nextCursor: null }; },
+    // As Cindy 0.1.121 stores them: page 0 opens with the run's input message (`id` = the run's inputMessageId, role
+    // user, the sent text), the last page holds the output message.
     readMessages: async request => {
       log('readMessages', { after: request.after || null });
       const index = request.after ? Number(request.after) : 0;
       const last = index >= host.pages - 1;
-      const run = [...host.runs.values()][0];
+      const run = [...host.runs.values()].find(r => r.taskId === request.taskId);
       const items = [{ id: last ? (run?.outputMessageId || 'out-final') : 'noise-' + index, role: 'assistant',
         content: last ? (host.finalRepeat ? host.finalRepeat.unit.repeat(host.finalRepeat.count) : (host.finalText || '[Worker final report] fixture result')) : 'intermediate page ' + index }];
+      if (index === 0 && run) items.unshift({ id: run.inputMessageId, role: 'user', content: run.inputText });
       return { items, nextCursor: last ? null : String(index + 1) };
     },
-    cancel: async request => { log('cancel', { runId: request.runId }); const run = host.runs.get(request.runId); run.status = 'stopping'; return structuredClone(run); },
+    cancel: async request => { log('cancel', { runId: request.runId }); const run = host.runs.get(request.runId); run.status = 'stopping'; return structuredClone(publicRun(run)); },
     archive: async request => {
       log('archive', { taskId: request.taskId });
       if (host.archiveFails) throw Error('ARCHIVE_FAILED');
@@ -133,6 +160,8 @@ function callTool(step) {
     const callId = 'call-' + (++serial);
     host.waiters.set(callId, resolve);
     const args = { ...(step.args || {}) };
+    // {repeat, count}: a large task built here, so the scenario file stays small.
+    if (args.task && typeof args.task === 'object') args.task = args.task.repeat.repeat(args.task.count);
     // "@operation" is the operation the previous roll returned; "@operation:<label>" the one a labelled step returned.
     if (typeof args.operation === 'string' && args.operation.startsWith('@operation'))
       args.operation = args.operation === '@operation' ? operations.last : operations[args.operation.slice('@operation:'.length)];
@@ -147,7 +176,16 @@ try {
   for (const step of scenario.steps) {
     if (step.fixture) {
       const f = step.fixture;
-      for (const key of ['capabilities', 'catalog', 'workingDir', 'staleRevision', 'archiveFails', 'pages', 'finalText', 'finalRepeat', 'createFault']) if (key in f) host[key] = f[key];
+      for (const key of ['capabilities', 'catalog', 'workingDir', 'staleRevision', 'archiveFails', 'pages', 'finalText', 'finalRepeat', 'createFault',
+        'connection', 'sendFault', 'saveFault', 'inputOverride']) if (key in f) host[key] = f[key];
+      if (f.accountMap) { fs.mkdirSync(stateHome, { recursive: true }); fs.writeFileSync(path.join(stateHome, 'account-map.json'), JSON.stringify(f.accountMap)); }
+      if (f.receiptPatch) {
+        const op = f.receiptPatch.operation.startsWith('@operation:') ? operations[f.receiptPatch.operation.slice('@operation:'.length)] : f.receiptPatch.operation;
+        const file = path.join(stateHome, op, 'receipt.json');
+        const receipt = { ...JSON.parse(fs.readFileSync(file, 'utf8')), ...(f.receiptPatch.set || {}) };
+        for (const key of f.receiptPatch.unset || []) delete receipt[key];
+        fs.writeFileSync(file, JSON.stringify(receipt, null, 2));
+      }
       if (f.capabilities === 'missing') delete cindy.tasks;
       for (const run of host.runs.values()) {
         if ('runStatus' in f) run.status = f.runStatus;
@@ -155,6 +193,17 @@ try {
         if ('error' in f) run.error = f.error;
       }
       results.push({ label: step.label, fixture: f });
+      continue;
+    }
+    if (step.concurrent) {
+      const order = [];
+      const replies = await Promise.all(step.concurrent.map(s => callTool(s).then(reply => { order.push(s.label); return reply; })));
+      step.concurrent.forEach((s, i) => {
+        const operation = replies[i].ok && replies[i].result?.operation;
+        if (operation) operations[s.label] = operation;
+        results.push({ label: s.label, replies: [replies[i]] });
+      });
+      results.push({ label: step.label, order });
       continue;
     }
     const n = step.parallel || 1;

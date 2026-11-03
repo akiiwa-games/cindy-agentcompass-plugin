@@ -1,14 +1,14 @@
 {
   "name": "cindy-agentcompass-plugin",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Cindy plugin that delegates work from a Cindy session through the public AgentCompass router and collects exact Cindy task results.",
+  "description": "Cindy plugin that delegates work from a Cindy session through the built-in AgentCompass engine (or the public AgentCompass router) and collects exact Cindy task results.",
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test test/test_market_contract.mjs test/test_cindy_plugin.mjs test/test_worker_bridge.mjs && python -X utf8 -m unittest discover -s test -p \"test_*.py\"",
+    "test": "node --test test/test_market_contract.mjs test/test_engine.mjs test/test_cindy_plugin.mjs test/test_worker_bridge.mjs && python -X utf8 -m unittest discover -s test -p \"test_*.py\"",
     "build": "python -X utf8 scripts/build_plugin.py",
     "test:sandbox": "node test/sandbox-e2e.mjs",
     "test:sandbox:linux": "node scripts/run-linux-sandbox.mjs"

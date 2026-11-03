@@ -1,6 +1,8 @@
-// Sandbox end-to-end: scripts/build_plugin.py -> the built plugin (main.js in a fake Cindy host, the real worker.cjs as a
-// real node child over JSON-RPC stdio) -> the real public `agentcompass roll` -> the router's classifier, allocator and
-// ledger, in an isolated home with no credentials and no network beyond one local fixture port.
+// Sandbox end-to-end, in an isolated home with no credentials and no network beyond one local fixture port:
+//   the market install (plugin/ as is: main.js in a fake Cindy host, the real worker.cjs as a real node child over
+//   JSON-RPC stdio) -> the built-in AgentCompass engine over the catalog a real Cindy 0.1.121 reported;
+//   scripts/build_plugin.py and config.json {"engine":"cli"} -> the real public `agentcompass roll` -> the router's
+//   classifier, allocator and ledger.
 //
 //   node test/sandbox-e2e.mjs
 //
@@ -168,11 +170,11 @@ try {
   check('the public AgentCompass entry runs from the checkout', version.code === 0 && /^\d+\.\d+\.\d+/.test(version.stdout.trim()), version.stdout + version.stderr);
 
   operation('unit tests', 'the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox');
-  const nodeUnits = await run([process.execPath, '--test', ...['test_market_contract.mjs', 'test_cindy_plugin.mjs', 'test_worker_bridge.mjs'].map(f => path.join(REPO, 'test', f))],
+  const nodeUnits = await run([process.execPath, '--test', ...['test_market_contract.mjs', 'test_engine.mjs', 'test_cindy_plugin.mjs', 'test_worker_bridge.mjs'].map(f => path.join(REPO, 'test', f))],
     {cwd: REPO, env: {AGENTCOMPASS_PYTHON: python.exe}});
   const [nodePass, nodeFail] = ['pass', 'fail'].map(k => Number((nodeUnits.stdout.match(new RegExp(`ℹ ${k} (\\d+)`)) || [])[1]));
   report.unit_tests = {node: {pass: nodePass, fail: nodeFail}};
-  check(`node --test: ${nodePass} passed, ${nodeFail} failed`, nodeUnits.code === 0 && nodePass >= 30 && nodeFail === 0, nodeUnits.stdout.slice(-1500) + nodeUnits.stderr.slice(-500));
+  check(`node --test: ${nodePass} passed, ${nodeFail} failed`, nodeUnits.code === 0 && nodePass >= 50 && nodeFail === 0, nodeUnits.stdout.slice(-1500) + nodeUnits.stderr.slice(-500));
   const pyUnits = await run([python.exe, '-X', 'utf8', '-m', 'unittest', 'discover', '-s', path.join(REPO, 'test'), '-p', 'test_*.py'], {cwd: REPO});
   const ran = Number((pyUnits.stderr.match(/Ran (\d+) tests?/) || [])[1]);
   report.unit_tests.python = {ran, ok: pyUnits.code === 0};
@@ -282,7 +284,8 @@ try {
   const running = first(r, 'status while running');
   check('status while running says there is no automatic callback and names the next call', running.ok && running.result?.status === 'running' &&
     running.result?.next_tool?.tool === 'status' && (running.result?.next_action || '').includes('No automatic callback'), running);
-  check('cleanup of a running task is refused', first(r, 'cleanup while running').ok === false, r['cleanup while running']);
+  check('cleanup of a running task is refused and names the run', first(r, 'cleanup while running').result?.status === 'cleanup_refused' &&
+    /run-1 is running/.test(first(r, 'cleanup while running').result?.reason || '') && count(record, 'archive') === 1, r['cleanup while running']);
   const done = first(r, 'status after completion'), outcome = done.result || {};
   check('status after completion returns the exact final message with all pages saved', done.ok && outcome.status === 'completed' && outcome.output_available &&
     outcome.messages_complete && (outcome.full_result_artifacts || []).length === 3 && outcome.summary_shortened && (outcome.final_result_summary || '').includes('[Worker final report]'),
@@ -312,11 +315,11 @@ try {
   const [one, st, rep, cl] = ['roll', 'status', 'roll again', 'cleanup'].map(k => first(r, k));
   check("roll reports unknown_create with the host's reason and the next call", one.ok && one.result?.status === 'unknown_create' && (one.result?.error || '').includes('CONNECTION_LOST') && one.result?.next_tool,
     JSON.stringify(one).slice(0, 400) + result.stderr.slice(-300));
-  check('status keeps saying unknown_create and tells the caller to inspect, not resend', st.ok && st.result?.status === 'unknown_create' && (st.result?.cause || '').includes('do not resend'), st);
+  check('status keeps saying unknown_create and tells the caller to inspect, not resend', st.ok && st.result?.status === 'unknown_create' && (st.result?.next_action || '').includes('nothing is created again'), st);
   check('rolling the same assignment again creates nothing new', rep.ok && rep.result?.status === 'unknown_create' && count(record, 'create') === 1, (record.calls || []).map(c => c.name));
   check('no input was ever sent and no run exists', count(record, 'send') === 0 && !(record.runs || []).length, record.calls);
-  check('the orphan draft exists in the host and the plugin refuses to archive what it never saw', (record.tasks || []).length === 1 && cl.ok === false &&
-    (cl.message || '').includes('No confirmed task') && count(record, 'archive') === 0, {tasks: (record.tasks || []).length, cleanup: cl});
+  check('the orphan draft exists in the host and the plugin refuses to archive what it never saw', (record.tasks || []).length === 1 && cl.ok &&
+    cl.result?.status === 'cleanup_refused' && (cl.result?.reason || '').includes('Inspect the Cindy task list') && count(record, 'archive') === 0, {tasks: (record.tasks || []).length, cleanup: cl});
 
   operation('a very large final reply', 'about 2.6 MB of final output crosses the real JSON-RPC bridge: a bounded summary, the complete text on disk');
   const unit = '[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n', times = 50000;
@@ -392,7 +395,7 @@ try {
     JSON.stringify(w2).slice(0, 400));
   check('the stuck draft is archived by the cleanup tool', first(r, 'cleanup the stuck draft').ok === true && count(record, 'archive') === 3, (record.calls || []).map(c => c.name));
 
-  operation('the draft changed under us', 'a stale expectedRevision is rejected by the host: no run exists, nothing is resent');
+  operation('the draft changed under us', 'a stale expectedRevision is a coded host refusal: send_rejected, the draft archived, no run exists, nothing is resent');
   ({record, result} = await drive(plugin, 'revision', [
     {label: 'stale', fixture: {staleRevision: true}},
     {label: 'roll', call: 'roll', args: {task: task('revision')}},
@@ -401,8 +404,8 @@ try {
   ]));
   r = replies(record);
   const rv = first(r, 'roll');
-  check("the send conflict is reported as unknown_send with the host's reason", rv.ok && rv.result?.status === 'unknown_send' && (rv.result?.error || '').includes('REVISION_CONFLICT'),
-    JSON.stringify(rv).slice(0, 400) + result.stderr.slice(-300));
+  check("the send conflict is reported as send_rejected with the host's code, and the draft is archived", rv.ok && rv.result?.status === 'send_rejected' &&
+    rv.result?.error_code === 'REVISION_CONFLICT' && rv.result?.draft_cleanup === 'archived' && count(record, 'archive') === 1, JSON.stringify(rv).slice(0, 400) + result.stderr.slice(-300));
   check('no run exists and the input was offered exactly once', !(record.runs || []).length && count(record, 'send') === 1, record.calls);
   check('collecting status never resends', count(record, 'send') === 1 && first(r, 'status again').ok === true, (record.calls || []).map(c => c.name));
 
@@ -414,17 +417,25 @@ try {
     {label: 'foreign status', call: 'status', args: {operation: '@operation:roll'}, as: 'someone-else'},
     {label: 'finished', fixture: {runStatus: 'completed', outputMessageId: 'out-final', pages: 12, finalText: '[Worker final report] twelve pages'}},
     {label: 'first status', call: 'status', args: {operation: '@operation:roll'}},
+    {label: 'cleanup before all pages', call: 'cleanup', args: {operation: '@operation:roll'}},
     {label: 'second status', call: 'status', args: {operation: '@operation:roll'}},
+    {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
   ]));
   r = replies(record);
   check('stop answers stopping, which is not a claim that the run ended', first(r, 'stop').ok && first(r, 'stop').result?.status === 'stopping' && count(record, 'cancel') === 1, r.stop);
-  check('cleanup of a stopping run is refused', first(r, 'cleanup of a stopping run').ok === false, r['cleanup of a stopping run']);
+  check('cleanup of a stopping run is refused and points to stop', first(r, 'cleanup of a stopping run').result?.status === 'cleanup_refused' &&
+    first(r, 'cleanup of a stopping run').result?.next_tool?.tool === 'stop', r['cleanup of a stopping run']);
   check('another session cannot read the operation', first(r, 'foreign status').ok === false, r['foreign status']);
   const p1 = first(r, 'first status').result || {}, p2 = first(r, 'second status').result || {};
-  check('the first status stops at the page bound and says collection is incomplete', p1.messages_complete === false && (p1.full_result_artifacts || []).length === 10,
-    {messages_complete: p1.messages_complete, status: p1.status});
-  check('the second status finishes all twelve pages and finds the exact final message', p2.messages_complete === true && (p2.full_result_artifacts || []).length === 12 && p2.output_available === true,
+  check('review 4: the first status stops at the page bound, says collection is incomplete and points to status, not cleanup', p1.messages_complete === false &&
+    (p1.full_result_artifacts || []).length === 10 && p1.next_tool?.tool === 'status' && !/Cleanup archives/.test(p1.next_action || '') && /Call status again/.test(p1.next_action || ''),
+    {messages_complete: p1.messages_complete, status: p1.status, next_tool: p1.next_tool, next_action: p1.next_action});
+  check('review 4: cleanup before all pages are read is refused', first(r, 'cleanup before all pages').result?.status === 'cleanup_refused' &&
+    /messages_complete/.test(first(r, 'cleanup before all pages').result?.reason || ''), r['cleanup before all pages']);
+  check('the second status finishes all twelve pages, finds the exact final message and points to cleanup', p2.messages_complete === true &&
+    (p2.full_result_artifacts || []).length === 12 && p2.output_available === true && p2.next_tool?.tool === 'cleanup',
     {messages_complete: p2.messages_complete, output_available: p2.output_available});
+  check('cleanup after all pages archives', first(r, 'cleanup').result?.status === 'cleaned', r.cleanup);
 
   // -------------------------------------------------------------------------------------------------------------
   operation('stop to a confirmed cancelled state, cleanup with and without archive', 'stop says stopping; only a host-confirmed cancelled run is terminal; cleanup archives, or hands back the exact task ID');
@@ -448,6 +459,7 @@ try {
     {label: 'roll', call: 'roll', args: {task: task('cancel-b')}},
     {label: 'stop', call: 'stop', args: {operation: '@operation:roll'}},
     {label: 'host confirms cancellation', fixture: {runStatus: 'cancelled'}},
+    {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
     {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
     {label: 'cleanup again', call: 'cleanup', args: {operation: '@operation:roll'}},
   ]));
@@ -459,104 +471,287 @@ try {
     {mc, taskId, stderr: result.stderr.slice(-300)});
 
   // -------------------------------------------------------------------------------------------------------------
-  operation('zero-config market install', 'plugin/ copied as is (no router.json, no build): the worker finds `agentcompass` on PATH, reads ~/.agent-compass/cindy-plugin/account-map.json, then roll -> status -> cleanup');
+  // The market install: plugin/ copied as is. No router.json, no AgentCompass CLI, no account map: the built-in engine
+  // routes over the catalog Cindy 0.1.121 really reported (test/fixtures), with no Codex quota telemetry unless a
+  // scenario writes one.
   const market = path.join(ROOT, 'market install', 'agentcompass');
   fs.cpSync(path.join(REPO, 'plugin'), market, {recursive: true});
-  check('the installed copy has no router.json', !fs.existsSync(path.join(market, 'router.json')), fs.readdirSync(market));
-  const zcBin = D('installed bin');
-  const made = await run([python.exe, '-X', 'utf8', path.join(REPO, 'test', 'make_launcher.py'), zcBin, python.exe, '-X', 'utf8', path.join(CHECKOUT, 'agentcompass')]);
-  const launcherFile = made.stdout.trim();
-  check(`an installed-style \`agentcompass\` launcher is on PATH (${path.basename(launcherFile)})`, made.code === 0 && fs.existsSync(launcherFile) &&
-    path.basename(launcherFile) === (WIN ? 'agentcompass.exe' : 'agentcompass'), made.stdout + made.stderr);
   const stateHome = path.join(home, '.agent-compass', 'cindy-plugin');
-  fs.mkdirSync(stateHome, {recursive: true});
-  const accountMap = [{routerProvider: 'codex', routerAccount: 'codex', providerId: 'codex-connection', agentKind: 'codex'},
-                      {routerProvider: 'pi', routerAccount: 'codex', providerId: 'pi-openai-connection', agentKind: 'pi'}];
-  fs.writeFileSync(path.join(stateHome, 'account-map.json'), JSON.stringify(accountMap));
-  const zcEnv = {PATH: [zcBin, baseEnv.PATH].join(path.delimiter)};
-  const zcTask = task('zero-config') + '零配置 market install\n';
-  ({record, result} = await drive(market, 'zero-config', [
-    {label: 'roll', call: 'roll', args: {task: zcTask}},
-    {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
-    {label: 'finished', fixture: {runStatus: 'completed', outputMessageId: 'out-final', pages: 2, finalText: '[Worker final report] zero-config result'}},
-    {label: 'status after completion', call: 'status', args: {operation: '@operation:roll'}},
-    {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
-  ], {env: zcEnv}));
-  r = replies(record);
-  const zr = first(r, 'roll'), zop = zr.result?.operation || 'none';
-  const zReceipt = readJson(path.join(stateHome, zop, 'receipt.json'));
-  check('roll starts a run through the discovered command', zr.ok && zr.result?.status === 'running' && count(record, 'create') === 1 && count(record, 'send') === 1,
-    JSON.stringify(zr).slice(0, 500) + result.stderr.slice(-300) + (record.workerStderr || ''));
-  check('the real router answered natively for the Cindy session', zReceipt.router?.status === 'native' && zReceipt.router?.parent_id === SESSION, zReceipt.router);
-  check('the account map from the home directory was applied to the exact catalog route',
-    JSON.stringify(zReceipt.mappings) === JSON.stringify(accountMap) && (record.calls || []).find(c => c.name === 'create')?.route?.providerId === 'codex-connection',
-    {mappings: zReceipt.mappings, create: (record.calls || []).find(c => c.name === 'create')});
-  const zDone = first(r, 'status after completion').result || {};
-  check('status collects the exact final message and cleanup archives', zDone.status === 'completed' && zDone.output_available &&
-    (zDone.final_result_summary || '').includes('zero-config result') && first(r, 'cleanup').result?.status === 'cleaned', zDone);
-  check('the receipt is under ~/.agent-compass/cindy-plugin and the installed copy is unchanged', fs.existsSync(path.join(stateHome, zop, 'receipt.json')) &&
-    !fs.existsSync(path.join(market, 'router.json')), fs.readdirSync(market));
-
-  // -------------------------------------------------------------------------------------------------------------
-  operation('every Cindy harness through the real router', 'Claude max and high, and Pi, reach exact catalog routes with Cindy bypassPermissions; codex is the first operation');
-  const harness = async (name, profile, plug, env = {}) => {
-    const out = await drive(plug, `harness-${name}`, [
-      {label: 'roll', call: 'roll', args: {task: task(name) + `FIXTURE-PROFILE: ${profile}\n`}},
-      {label: 'finished', fixture: {runStatus: 'completed', outputMessageId: 'out-final', finalText: `[Worker final report] ${name}`}},
+  const REAL = readJson(path.join(REPO, 'test', 'fixtures', 'cindy-0.1.121-catalog.json'));
+  const builtinEnv = {CODEX_HOME: D('codex home without telemetry')};
+  // A Codex CLI rate-limit snapshot, as codex writes it into ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl.
+  const telemetry = (name, used) => {
+    const dir = D(`codex home ${name}`), day = path.join(dir, 'sessions', '2026', '11', '03');
+    fs.mkdirSync(day, {recursive: true});
+    fs.writeFileSync(path.join(day, 'rollout-sandbox.jsonl'), JSON.stringify({type: 'event_msg', payload: {type: 'token_count', rate_limits: {limit_id: 'codex',
+      primary: {used_percent: used, window_minutes: 300, resets_at: Math.floor(Date.now() / 1000) + 7200}, secondary: null, plan_type: 'pro'}}}) + '\n');
+    return {CODEX_HOME: dir};
+  };
+  const cliName = WIN ? 'agentcompass.exe' : 'agentcompass';
+  const reachable = env => [...(env.PATH || baseEnv.PATH).split(path.delimiter), path.join(home, '.local', 'bin')].filter(d => fs.existsSync(path.join(d, cliName)));
+  const isRow = (route, catalog) => catalog.models.some(row => ['agentKind', 'providerId', 'model'].every(k => row.route[k] === route?.[k]) &&
+    (row.efforts || [row.route.effort]).includes(route.effort) && (!route.fastMode || row.supportsFastMode));
+  const builtinLife = async (name, taskText, {catalog = 'real', env = builtinEnv} = {}) => {
+    const out = await drive(market, `builtin-${name}`, [
+      {label: 'catalog', fixture: {catalog}},
+      {label: 'roll', call: 'roll', args: {task: taskText}},
+      {label: 'status while running', call: 'status', args: {operation: '@operation:roll'}},
+      {label: 'finished', fixture: {runStatus: 'completed', outputMessageId: 'out-final', pages: 2, finalText: `[Worker final report] ${name}`}},
       {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
       {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
     ], {env});
     const rr = replies(out.record);
     const op = first(rr, 'roll').result?.operation || 'none';
-    return {...out, r: rr, receipt: readJson(path.join(stateHome, op, 'receipt.json')), create: (out.record.calls || []).find(c => c.name === 'create') || {}};
+    const sent = (out.record.sent || [])[0];
+    return {...out, r: rr, receipt: readJson(path.join(stateHome, op, 'receipt.json')), create: (out.record.calls || []).find(c => c.name === 'create') || {},
+      sentText: sent ? fs.readFileSync(sent.file, 'utf8') : ''};
   };
   const lifecycle = h => first(h.r, 'roll').result?.status === 'running' && first(h.r, 'status').result?.status === 'completed' &&
-    first(h.r, 'status').result?.output_available === true && first(h.r, 'cleanup').result?.status === 'cleaned';
-  for (const [name, profile, effort] of [['claude-max', 'deep', 'max'], ['claude-high', 'review', 'high']]) {
-    const h = await harness(name, profile, plugin);
+    first(h.r, 'status').result?.output_available === true && first(h.r, 'status').result?.messages_complete === true && first(h.r, 'cleanup').result?.status === 'cleaned';
+
+  operation('zero-config market install: built-in engine', 'plugin/ copied as is: no router.json, no AgentCompass CLI anywhere, no account map; the built-in engine routes over the real Cindy 0.1.121 catalog, then roll -> status -> cleanup');
+  check('the installed copy has no router.json, no config.json or account map, and no AgentCompass CLI is reachable', !fs.existsSync(path.join(market, 'router.json')) &&
+    !fs.existsSync(path.join(stateHome, 'config.json')) && !fs.existsSync(path.join(stateHome, 'account-map.json')) && reachable(baseEnv).length === 0, reachable(baseEnv));
+  const zcTask = task('zero-config') + '零配置 market install\n';
+  const zc = await builtinLife('zero-config', zcTask);
+  check('roll starts one run through the built-in engine', first(zc.r, 'roll').ok && zc.receipt.engine === 'builtin' && zc.receipt.router?.status === 'native' &&
+    zc.receipt.router?.engine === 'builtin' && count(zc.record, 'create') === 1 && count(zc.record, 'send') === 1,
+    JSON.stringify(first(zc.r, 'roll')).slice(0, 500) + zc.result.stderr.slice(-300) + (zc.record.workerStderr || ''));
+  check('Cindy creates a row of its own catalog (codex on the openai connection) with bypassPermissions', isRow(zc.create.route, REAL) &&
+    zc.create.route.agentKind === 'codex' && zc.create.route.providerId === 'openai' && zc.create.permissionMode === 'bypassPermissions', zc.create);
+  check('the decision is explained: work kind, score, alternatives, quota source', Boolean(zc.receipt.router?.decision?.work_kind && zc.receipt.router.decision.alternatives?.length &&
+    zc.receipt.router.decision.quota?.source === 'codex-cli-sessions'), zc.receipt.router?.decision);
+  check('the text sent to Cindy is the whole task byte for byte plus the return channel', zc.sentText.startsWith(zcTask) && zc.sentText.includes('Cindy plugin task return channel') &&
+    zc.receipt.prompt === zc.sentText, [zc.sentText.length, zcTask.length]);
+  check('status reports running, then collects the exact final message; cleanup archives', first(zc.r, 'status while running').result?.status === 'running' && lifecycle(zc) &&
+    (first(zc.r, 'status').result?.final_result_summary || '').includes('zero-config'), JSON.stringify(zc.r).slice(0, 700));
+
+  operation('built-in engine: every Cindy harness', 'codex for an edit, Pi for read-and-report exploration, Claude (cc) for a review; each an exact catalog row with bypassPermissions, through to cleanup');
+  const WITH_CLAUDE = {models: [...REAL.models, {route: {agentKind: 'cc', providerId: 'anthropic', model: 'claude-opus-5-5'}, efforts: ['low', 'medium', 'high', 'max']},
+    {route: {agentKind: 'cc', providerId: 'anthropic', model: 'claude-sonnet-5-5'}, efforts: ['low', 'medium', 'high', 'max']}]};
+  // Pi on the Codex-only catalog Cindy reported: with Claude signed in too, this engine prefers Claude for exploration.
+  for (const [name, text, kind, mode, catalog] of [
+    ['codex', 'Rename the helper foo to bar in util.py and update its two callers.', 'codex', 'full-access', 'real+claude'],
+    ['pi', 'Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only.', 'pi', 'full-access', 'real'],
+    ['claude', 'Review the diff in src/auth for security regressions and subtle bugs (read-only review).', 'cc', 'bypassPermissions', 'real+claude']]) {
+    const h = await builtinLife(`harness-${name}`, `${text} [${name}-${Date.now()}]`, {catalog});
     const b = h.receipt.bundle || {};
-    check(`${name}: the router chose claude/claude-opus-5-5 at ${effort} and the plugin made bypassPermissions explicit`,
-      b.provider === 'claude' && b.harness === 'claude' && b.model === 'claude-opus-5-5' && b.effort === effort && b.modeId === 'bypassPermissions',
-      {bundle: b, router: h.receipt.router?.status, stderr: h.result.stderr.slice(-300)});
-    check(`${name}: Cindy creates cc/claude/claude-opus-5-5/${effort} with bypassPermissions and the run completes`,
-      JSON.stringify(h.create.route) === JSON.stringify({agentKind: 'cc', providerId: 'claude', model: 'claude-opus-5-5', effort, fastMode: false}) &&
+    check(`${name}: the built-in engine chose ${kind} (${b.model}/${b.effort}) with launcher mode ${mode}`, h.create.route?.agentKind === kind && b.modeId === mode && b.providerId === h.create.route?.providerId,
+      {bundle: b, kind: h.receipt.router?.decision?.work_kind, stderr: h.result.stderr.slice(-300)});
+    check(`${name}: Cindy creates that exact catalog row with bypassPermissions and the run completes`, isRow(h.create.route, WITH_CLAUDE) &&
       h.create.permissionMode === 'bypassPermissions' && lifecycle(h), {create: h.create, replies: JSON.stringify(h.r).slice(0, 600)});
   }
-  const pi = await harness('pi', 'explore', market, {...zcEnv, CLAUDE_CONFIG_DIR: noClaude});
-  const pb = pi.receipt.bundle || {};
-  check('pi: the router chose the Pi harness on the codex account with its launch model; the fixed full-tool worker is full-access',
-    pb.provider === 'pi' && pb.harness === 'pi' && pb.account === 'codex' && pb.launch_model === 'openai-codex/gpt-6.1-sol' && pb.modeId === 'full-access',
-    {bundle: pb, router: pi.receipt.router?.status, stderr: pi.result.stderr.slice(-300)});
-  check('pi: Cindy creates the exact pi route on the mapped connection with bypassPermissions and the run completes',
-    JSON.stringify(pi.create.route) === JSON.stringify({agentKind: 'pi', providerId: 'pi-openai-connection', model: 'openai-codex/gpt-6.1-sol', effort: pb.effort, fastMode: false}) &&
-    pi.create.permissionMode === 'bypassPermissions' && lifecycle(pi), {create: pi.create, replies: JSON.stringify(pi.r).slice(0, 600)});
+
+  operation('built-in split, self, fast and quota', 'split and self come back from the built-in engine and start nothing; fast mode follows the signal word and the Codex quota telemetry; an exhausted Codex window moves the route to Claude');
+  ({record, result} = await drive(market, 'builtin-split-self', [
+    {label: 'catalog', fixture: {catalog: 'real'}},
+    {label: 'split', call: 'roll', args: {task: 'Two independent tasks:\n1. Add a dark theme to the settings page.\n2. Fix the CSV export encoding bug in report.py.'}},
+    {label: 'split zh', call: 'roll', args: {task: '以下是互不相关的任务：\n1. 给设置页加深色主题\n2. 修复 report.py 的 CSV 编码\n3. 升级 lodash'}},
+    {label: 'self', call: 'roll', args: {task: 'What is the difference between a mutex and a semaphore?'}},
+    {label: 'self zh', call: 'roll', args: {task: '直接回答：Python 的 GIL 是什么？'}},
+  ], {env: builtinEnv}));
+  r = replies(record);
+  check('split: task_count 2 and 3 from the built-in engine, with the next action for the parent', first(r, 'split').result?.status === 'split' && first(r, 'split').result?.task_count === '2' &&
+    first(r, 'split zh').result?.task_count === '3' && first(r, 'split').result?.engine === 'builtin' && (first(r, 'split').result?.next_action || '').includes('Split it'),
+    JSON.stringify(r).slice(0, 600) + result.stderr.slice(-300));
+  check('self: both come back as self from the built-in engine', ['self', 'self zh'].every(k => first(r, k).result?.status === 'self' && first(r, k).result?.engine === 'builtin'), JSON.stringify(r).slice(0, 600));
+  check('split and self created nothing and sent nothing', count(record, 'create') === 0 && count(record, 'send') === 0, (record.calls || []).map(c => c.name));
+  const fastTask = n => `Use fast mode: rename the helper foo to bar in util.py and update its two callers. [${n}-${Date.now()}]`;
+  const fast = await builtinLife('fast', fastTask('fast'), {env: telemetry('fast', 12)});
+  check('fast with fresh telemetry (12% used): Cindy creates codex fastMode true on a row that supports it', fast.create.route?.agentKind === 'codex' && fast.create.route?.fastMode === true &&
+    isRow(fast.create.route, REAL) && fast.receipt.router?.decision?.quota?.used_percent === 12 && lifecycle(fast), {create: fast.create, quota: fast.receipt.router?.decision?.quota});
+  const busy = await builtinLife('fast-busy', fastTask('busy'), {env: telemetry('busy', 70)});
+  check('fast asked but the Codex window is 70% used: no fast mode', busy.create.route?.fastMode === false && lifecycle(busy), busy.create);
+  const blind = await builtinLife('fast-blind', fastTask('blind'));
+  check('fast asked with no telemetry at all: no fast mode', blind.create.route?.fastMode === false && blind.receipt.router?.decision?.quota?.status === 'unknown' && lifecycle(blind), blind.create);
+  const drained = await builtinLife('quota-exhausted', `Rename the helper foo to bar in util.py and update its two callers. [drained-${Date.now()}]`,
+    {catalog: 'real+claude', env: telemetry('drained', 97)});
+  check('quota: with the Codex window 97% used the edit goes to Claude on its own connection', drained.create.route?.agentKind === 'cc' &&
+    drained.receipt.router?.decision?.quota?.status === 'exhausted' && drained.receipt.router.decision.quota_penalized_routes >= 10 && lifecycle(drained),
+    {create: drained.create, quota: drained.receipt.router?.decision?.quota});
 
   // -------------------------------------------------------------------------------------------------------------
-  operation('answers that are not a Cindy task, and fast mode', 'split (real router) and self come back unchanged and start nothing; a fast codex route maps to Cindy fastMode');
-  ({record, result} = await drive(plugin, 'split', [{label: 'roll', call: 'roll', args: {task: task('split') + 'FIXTURE-PROFILE: split\n'}}]));
-  const sp = first(replies(record), 'roll');
-  check('split from the real router is returned as is (task_count 2) and nothing is created', sp.ok && sp.result?.status === 'split' && String(sp.result?.task_count) === '2' &&
-    count(record, 'create') === 0 && count(record, 'send') === 0 && count(record, 'models') === 0, JSON.stringify(sp).slice(0, 500) + result.stderr.slice(-300));
-  // The public roll command has no path that answers `self`, and turns fast mode on only with live capacity telemetry or
-  // --fast; both are therefore driven by test/fixture_router.cjs, a stand-in for the router, through the real worker.
-  const fixturePlugin = path.join(ROOT, 'cindy plugin fixture router');
-  const fixtureBuild = await run([...builder, '--output', fixturePlugin, '--router-cmd', JSON.stringify([process.execPath, path.join(REPO, 'test', 'fixture_router.cjs')])]);
-  check('a plugin bound to the fixture router builds', fixtureBuild.code === 0, fixtureBuild.stdout.slice(0, 300) + fixtureBuild.stderr.slice(-300));
-  ({record, result} = await drive(fixturePlugin, 'self-and-fast', [
-    {label: 'self', call: 'roll', args: {task: task('self') + 'FIXTURE-ROUTER: self\n'}},
-    {label: 'fast', call: 'roll', args: {task: task('fast') + 'FIXTURE-ROUTER: fast\n'}},
+  operation('review 1: receipt save fails after an accepted send', 'the run exists although its receipt could not be written: roll returns operation, task_id and run_id; status settles the `sending` receipt from the host runs; nothing is resent');
+  ({record, result} = await drive(market, 'review1-save', [
+    {label: 'catalog', fixture: {catalog: 'real', saveFault: 'after-send'}},
+    {label: 'roll', call: 'roll', args: {task: task('review1-save')}},
+    {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
+  ], {env: builtinEnv}));
+  r = replies(record);
+  const sv = first(r, 'roll').result || {};
+  check('roll answers with the handles and says the receipt was not saved', first(r, 'roll').ok && sv.operation && sv.task_id && sv.run_id && sv.receipt_saved === false &&
+    count(record, 'saveFault') === 1, JSON.stringify(first(r, 'roll')).slice(0, 500) + result.stderr.slice(-300));
+  check('status settles it to that run without a second send', first(r, 'status').result?.runId === sv.run_id && first(r, 'status').result?.status === 'running' &&
+    count(record, 'send') === 1 && readJson(path.join(stateHome, sv.operation || 'none', 'receipt.json')).delivery === 'reconciled', first(r, 'status'));
+  ({record, result} = await drive(market, 'review1-crash', [
+    {label: 'catalog', fixture: {catalog: 'real'}},
+    {label: 'roll', call: 'roll', args: {task: task('review1-crash')}},
+    {label: 'crash between send and receipt', fixture: {receiptPatch: {operation: '@operation:roll', set: {state: 'sending'}, unset: ['runId', 'delivery']}}},
+    {label: 'cleanup before settling', call: 'cleanup', args: {operation: '@operation:roll'}},
+    {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
+  ], {env: builtinEnv}));
+  r = replies(record);
+  check('a persisted `sending` receipt with no runId is settled by status (and cleanup first settles it, then refuses the running run)',
+    first(r, 'cleanup before settling').result?.status === 'cleanup_refused' && first(r, 'status').result?.runId === 'run-1' && count(record, 'send') === 1 && count(record, 'archive') === 0,
+    JSON.stringify(r).slice(0, 700));
+
+  operation('review 2: definite refusal versus unknown delivery', 'a coded refusal before any run exists is send_rejected and the draft is archived; a lost answer is unknown_send and a run is claimed only if its input message is this prompt');
+  ({record, result} = await drive(market, 'review2-rejected', [
+    {label: 'catalog', fixture: {catalog: 'real', staleRevision: true}},
+    {label: 'roll', call: 'roll', args: {task: task('review2-rejected')}},
+    {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
+    {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
+  ], {env: builtinEnv}));
+  r = replies(record);
+  const rj = first(r, 'roll').result || {};
+  check('REVISION_CONFLICT is send_rejected with its code, the draft archived, no run', rj.status === 'send_rejected' && rj.error_code === 'REVISION_CONFLICT' && rj.draft_cleanup === 'archived' &&
+    !(record.runs || []).length && count(record, 'send') === 1, JSON.stringify(first(r, 'roll')).slice(0, 500) + result.stderr.slice(-300));
+  check('status keeps send_rejected and points to cleanup; cleanup reports it cleaned without archiving twice', first(r, 'status').result?.status === 'send_rejected' &&
+    first(r, 'status').result?.next_tool?.tool === 'cleanup' && first(r, 'cleanup').result?.status === 'cleaned' && count(record, 'archive') === 1, JSON.stringify(r).slice(0, 700));
+  ({record, result} = await drive(market, 'review2-foreign', [
+    {label: 'catalog', fixture: {catalog: 'real', sendFault: 'lost-answer', inputOverride: 'a message the user typed into the draft'}},
+    {label: 'roll', call: 'roll', args: {task: task('review2-foreign')}},
+    {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
+    {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
+  ], {env: builtinEnv}));
+  r = replies(record);
+  check('a run on the same route whose input is not this prompt is not claimed; cleanup refuses the unconfirmed delivery',
+    first(r, 'roll').result?.status === 'unknown_send' && first(r, 'status').result?.status === 'unknown_send' && first(r, 'cleanup').result?.status === 'cleanup_refused' &&
+    count(record, 'archive') === 0 && count(record, 'send') === 1, JSON.stringify(r).slice(0, 800));
+  ({record, result} = await drive(market, 'review2-claim', [
+    {label: 'catalog', fixture: {catalog: 'real', sendFault: 'lost-answer'}},
+    {label: 'roll', call: 'roll', args: {task: task('review2-claim')}},
+    {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
+  ], {env: builtinEnv}));
+  r = replies(record);
+  check('a lost answer is unknown_send; the run whose input message is this prompt is claimed by status, never resent',
+    first(r, 'roll').result?.status === 'unknown_send' && first(r, 'status').result?.runId === 'run-1' && count(record, 'send') === 1 && count(record, 'readMessages') >= 1,
+    JSON.stringify(r).slice(0, 600));
+
+  operation('review 5: one slow route does not block other sessions', 'session A rolls through the real AgentCompass CLI (seconds of routing) while session B stops its own run: B is answered first');
+  ({record, result} = await drive(plugin, 'review5-concurrency', [
+    {label: 'B roll', call: 'roll', args: {task: task('review5-b')}, as: 'session-b'},
+    {label: 'A rolls while B stops', concurrent: [
+      {label: 'A roll', call: 'roll', args: {task: task('review5-a')}},
+      {label: 'B stop', call: 'stop', args: {operation: '@operation:B roll'}, as: 'session-b'},
+    ]},
   ]));
   r = replies(record);
-  const selfReply = first(r, 'self');
-  check('self (fixture router) is returned as is and starts nothing', selfReply.ok && selfReply.result?.status === 'self' && selfReply.result?.fixture_router === true &&
-    (selfReply.result?.next_action || '').includes('current session'), JSON.stringify(selfReply).slice(0, 400) + result.stderr.slice(-300));
-  const fastCreate = (record.calls || []).find(c => c.name === 'create') || {};
-  check('only the fast route created a task: one create, one send', count(record, 'create') === 1 && count(record, 'send') === 1, (record.calls || []).map(c => c.name));
-  check('fast (fixture router): codex/gpt-6.1-sol fast becomes Cindy fastMode true with bypassPermissions', first(r, 'fast').ok &&
-    JSON.stringify(fastCreate.route) === JSON.stringify({agentKind: 'codex', providerId: 'codex', model: 'gpt-6.1-sol', effort: 'high', fastMode: true}) &&
-    fastCreate.permissionMode === 'bypassPermissions', {fast: first(r, 'fast'), create: fastCreate});
-  report.fast_mode_note = 'The real router chose no fast route in this sandbox: fast mode needs live, non-stale capacity telemetry ' +
-    'for the codex window or an explicit --fast, which the plugin does not pass. The fast mapping is verified through test/fixture_router.cjs.';
+  const order = (record.results || []).find(x => x.label === 'A rolls while B stops')?.order || [];
+  check('B stop is answered before A finishes routing; both succeed', order[0] === 'B stop' && first(r, 'B stop').result?.status === 'stopping' && first(r, 'A roll').result?.status === 'running',
+    {order, a: first(r, 'A roll'), b: first(r, 'B stop'), stderr: result.stderr.slice(-300)});
+
+  operation('review 6: a router that ignores stdin', 'a configured router that exits without reading an 8 MB task (EPIPE) fails that roll only; the shared worker answers the next call');
+  const epipe = path.join(ROOT, 'epipe plugin');
+  fs.cpSync(path.join(REPO, 'plugin'), epipe, {recursive: true});
+  fs.writeFileSync(path.join(epipe, 'router.json'), JSON.stringify({command: [process.execPath, '-e', 'process.exit(0)'], stateRoot: D('epipe state')}));
+  ({record, result} = await drive(epipe, 'review6-epipe', [
+    {label: 'roll', call: 'roll', args: {task: {repeat: 'x', count: 8 * 1024 * 1024}}},
+    {label: 'roll again', call: 'roll', args: {task: {repeat: 'y', count: 8 * 1024 * 1024}}},
+    {label: 'status', call: 'status', args: {operation: 'f'.repeat(40)}},
+  ]));
+  r = replies(record);
+  check('both rolls fail with the router reason, and the worker still answers', ['roll', 'roll again'].every(k => /Router returned no usable route/.test(first(r, k).message || '')) &&
+    /ENOENT|no such file/.test(first(r, 'status').message || '') && !/Node bridge unavailable/.test(JSON.stringify(r)), JSON.stringify(r).slice(0, 600) + (record.workerStderr || ''));
+
+  // -------------------------------------------------------------------------------------------------------------
+  // The external CLI on request: ~/.agent-compass/cindy-plugin/config.json {"engine":"cli"} for the scenarios below only.
+  const zcBin = D('installed bin');
+  const made = await run([python.exe, '-X', 'utf8', path.join(REPO, 'test', 'make_launcher.py'), zcBin, python.exe, '-X', 'utf8', path.join(CHECKOUT, 'agentcompass')]);
+  const launcherFile = made.stdout.trim();
+  const zcEnv = {PATH: [zcBin, baseEnv.PATH].join(path.delimiter)};
+  const optIn = path.join(stateHome, 'config.json');
+  fs.writeFileSync(optIn, JSON.stringify({engine: 'cli'}));
+  try {
+    operation('CLI opt-in', 'config.json {"engine":"cli"}: the worker finds the installed `agentcompass` on PATH, applies ~/.agent-compass/cindy-plugin/account-map.json, then roll -> status -> cleanup');
+    check(`an installed-style \`agentcompass\` launcher is on PATH (${path.basename(launcherFile)})`, made.code === 0 && fs.existsSync(launcherFile) &&
+      path.basename(launcherFile) === cliName, made.stdout + made.stderr);
+    const accountMap = [{routerProvider: 'codex', routerAccount: 'codex', providerId: 'codex-connection', agentKind: 'codex'},
+                        {routerProvider: 'pi', routerAccount: 'codex', providerId: 'pi-openai-connection', agentKind: 'pi'}];
+    fs.writeFileSync(path.join(stateHome, 'account-map.json'), JSON.stringify(accountMap));
+    ({record, result} = await drive(market, 'cli-opt-in', [
+      {label: 'roll', call: 'roll', args: {task: task('cli-opt-in')}},
+      {label: 'finished', fixture: {runStatus: 'completed', outputMessageId: 'out-final', pages: 2, finalText: '[Worker final report] cli opt-in result'}},
+      {label: 'status after completion', call: 'status', args: {operation: '@operation:roll'}},
+      {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
+    ], {env: zcEnv}));
+    r = replies(record);
+    const zr = first(r, 'roll'), zop = zr.result?.operation || 'none';
+    const zReceipt = readJson(path.join(stateHome, zop, 'receipt.json'));
+    check('roll starts a run through the discovered command; the real router answered natively for the Cindy session',
+      zr.ok && zr.result?.status === 'running' && zReceipt.engine === 'cli' && zReceipt.router?.status === 'native' && zReceipt.router?.parent_id === SESSION,
+      JSON.stringify(zr).slice(0, 500) + result.stderr.slice(-300) + (record.workerStderr || ''));
+    check('the account map from the home directory was applied to the exact catalog route',
+      JSON.stringify(zReceipt.mappings) === JSON.stringify(accountMap) && (record.calls || []).find(c => c.name === 'create')?.route?.providerId === 'codex-connection',
+      {mappings: zReceipt.mappings, create: (record.calls || []).find(c => c.name === 'create')});
+    const zDone = first(r, 'status after completion').result || {};
+    check('status collects the exact final message and cleanup archives', zDone.status === 'completed' && zDone.output_available &&
+      (zDone.final_result_summary || '').includes('cli opt-in result') && first(r, 'cleanup').result?.status === 'cleaned', zDone);
+
+    operation('every Cindy harness through the real router', 'Claude max and high (router.json build), and Pi (CLI opt-in), reach exact catalog routes with Cindy bypassPermissions; codex is the first operation');
+    const harness = async (name, profile, plug, env = {}) => {
+      const out = await drive(plug, `harness-${name}`, [
+        {label: 'roll', call: 'roll', args: {task: task(name) + `FIXTURE-PROFILE: ${profile}\n`}},
+        {label: 'finished', fixture: {runStatus: 'completed', outputMessageId: 'out-final', finalText: `[Worker final report] ${name}`}},
+        {label: 'status', call: 'status', args: {operation: '@operation:roll'}},
+        {label: 'cleanup', call: 'cleanup', args: {operation: '@operation:roll'}},
+      ], {env});
+      const rr = replies(out.record);
+      const op = first(rr, 'roll').result?.operation || 'none';
+      return {...out, r: rr, receipt: readJson(path.join(stateHome, op, 'receipt.json')), create: (out.record.calls || []).find(c => c.name === 'create') || {}};
+    };
+    for (const [name, profile, effort] of [['claude-max', 'deep', 'max'], ['claude-high', 'review', 'high']]) {
+      const h = await harness(name, profile, plugin);
+      const b = h.receipt.bundle || {};
+      check(`${name}: the router chose claude/claude-opus-5-5 at ${effort} and the plugin made bypassPermissions explicit`,
+        b.provider === 'claude' && b.harness === 'claude' && b.model === 'claude-opus-5-5' && b.effort === effort && b.modeId === 'bypassPermissions',
+        {bundle: b, router: h.receipt.router?.status, stderr: h.result.stderr.slice(-300)});
+      check(`${name}: Cindy creates cc/claude/claude-opus-5-5/${effort} with bypassPermissions and the run completes`,
+        JSON.stringify(h.create.route) === JSON.stringify({agentKind: 'cc', providerId: 'claude', model: 'claude-opus-5-5', effort, fastMode: false}) &&
+        h.create.permissionMode === 'bypassPermissions' && lifecycle(h), {create: h.create, replies: JSON.stringify(h.r).slice(0, 600)});
+    }
+    const pi = await harness('pi', 'explore', market, {...zcEnv, CLAUDE_CONFIG_DIR: noClaude});
+    const pb = pi.receipt.bundle || {};
+    check('pi: the router chose the Pi harness on the codex account with its launch model; the fixed full-tool worker is full-access',
+      pb.provider === 'pi' && pb.harness === 'pi' && pb.account === 'codex' && pb.launch_model === 'openai-codex/gpt-6.1-sol' && pb.modeId === 'full-access',
+      {bundle: pb, router: pi.receipt.router?.status, stderr: pi.result.stderr.slice(-300)});
+    check('pi: Cindy creates the exact pi route on the mapped connection with bypassPermissions and the run completes',
+      JSON.stringify(pi.create.route) === JSON.stringify({agentKind: 'pi', providerId: 'pi-openai-connection', model: 'openai-codex/gpt-6.1-sol', effort: pb.effort, fastMode: false}) &&
+      pi.create.permissionMode === 'bypassPermissions' && lifecycle(pi), {create: pi.create, replies: JSON.stringify(pi.r).slice(0, 600)});
+
+    operation('review 7: a fixed account map unblocks the retry', 'the routed account has no Cindy connection of its name: the roll fails before create; after account-map.json is written the same assignment is routed again and runs');
+    fs.rmSync(path.join(stateHome, 'account-map.json'));
+    const r7 = task('review7');
+    ({record, result} = await drive(market, 'review7-retry', [
+      {label: 'the Cindy connection has its own name', fixture: {connection: 'codex-connection'}},
+      {label: 'roll', call: 'roll', args: {task: r7}},
+      {label: 'write the account map', fixture: {accountMap: [{routerProvider: 'codex', routerAccount: 'codex', providerId: 'codex-connection', agentKind: 'codex'}]}},
+      {label: 'roll again', call: 'roll', args: {task: r7}},
+    ], {env: zcEnv}));
+    r = replies(record);
+    const r7op = first(r, 'roll again').result?.operation || 'none';
+    const r7receipt = readJson(path.join(stateHome, r7op, 'receipt.json'));
+    check('the first roll is refused before any create', first(r, 'roll').ok === false && /unavailable or ambiguous|No explicit/.test(first(r, 'roll').message || ''),
+      JSON.stringify(first(r, 'roll')).slice(0, 400) + result.stderr.slice(-300));
+    check('the retry re-reads the map, routes again and runs on the mapped connection', first(r, 'roll again').result?.status === 'running' && r7receipt.attempts === 2 &&
+      r7receipt.mappings?.[0]?.providerId === 'codex-connection' && (record.calls || []).find(c => c.name === 'create')?.route?.providerId === 'codex-connection' &&
+      count(record, 'create') === 1, {reply: first(r, 'roll again'), attempts: r7receipt.attempts});
+
+    operation('CLI opt-in without the CLI installed', 'config.json asks for the CLI but none is installed: the built-in engine routes and says so; no error');
+    fs.rmSync(path.join(stateHome, 'account-map.json'), {force: true});
+    ({record, result} = await drive(market, 'cli-fallback', [
+      {label: 'catalog', fixture: {catalog: 'real'}},
+      {label: 'roll', call: 'roll', args: {task: task('cli-fallback')}},
+    ], {env: builtinEnv}));
+    const fb = first(replies(record), 'roll');
+    const fbReceipt = readJson(path.join(stateHome, fb.result?.operation || 'none', 'receipt.json'));
+    check('the built-in engine routed, with the fallback named', fb.result?.status === 'running' && fbReceipt.engine === 'builtin' &&
+      /not installed: the built-in engine routed/.test(fbReceipt.router?.engine_note || '') && isRow((record.calls || []).find(c => c.name === 'create')?.route, REAL),
+      JSON.stringify(fb).slice(0, 400) + result.stderr.slice(-300));
+  } finally {
+    fs.rmSync(optIn, {force: true});
+    fs.rmSync(path.join(stateHome, 'account-map.json'), {force: true});
+  }
 } catch (error) {
   operation('driver error', 'the sandbox driver itself failed');
   check('the driver completed', false, error.stack || String(error));
@@ -569,13 +764,28 @@ report.finished_at = new Date().toISOString();
 report.summary = {operations: report.operations.length, checks: checks.length, passed: checks.filter(c => c.ok).length, failed: checks.filter(c => !c.ok).length,
   artifacts: art};
 if (report.summary.failed) exitCode = 1;
+
+// The report and artifacts are published: name the machine's own folders by role, never by their real paths.
+const PLACES = [[ROOT, '<sandbox>'], [CHECKOUT, '<agentcompass-checkout>'], [REPO, '<repo>'], [os.tmpdir(), '<tmp>'], [os.homedir(), '<home>']]
+  .filter(([p]) => p && p.length > 3).sort((a, b) => b[0].length - a[0].length);
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const redact = text => PLACES.reduce((out, [place, name]) => {
+  const forms = new Set([place, place.split(path.sep).join('/'), JSON.stringify(place).slice(1, -1)]);
+  return [...forms].reduce((acc, form) => acc.replace(new RegExp(escapeRe(form), 'gi'), name), out);
+}, text);
+for (const name of fs.readdirSync(art)) {
+  const file = path.join(art, name);
+  fs.writeFileSync(file, redact(fs.readFileSync(file, 'utf8')));
+}
+const published = JSON.parse(redact(JSON.stringify(report)));
+
 const reportFile = process.env.CINDY_SANDBOX_REPORT || path.join(ROOT, 'report', 'sandbox-e2e-report.json');
 fs.mkdirSync(path.dirname(reportFile), {recursive: true});
-fs.writeFileSync(reportFile, JSON.stringify(report, null, 1) + '\n');
+fs.writeFileSync(reportFile, JSON.stringify(published, null, 1) + '\n');
 if (process.env.CINDY_REPORT_MERGE_INTO) {
   const combined = readJson(process.env.CINDY_REPORT_MERGE_INTO);
   combined.kind = report.kind;
-  combined.runs = {...(combined.runs || {}), [LABEL]: report};
+  combined.runs = {...(combined.runs || {}), [LABEL]: published};
   combined.summary = Object.fromEntries(Object.entries(combined.runs).map(([k, v]) => [k, v.summary]));
   fs.writeFileSync(process.env.CINDY_REPORT_MERGE_INTO, JSON.stringify(combined, null, 1) + '\n');
 }

@@ -1,0 +1,191 @@
+{
+ "results": [
+  {
+   "label": "catalog",
+   "fixture": {
+    "catalog": "real"
+   }
+  },
+  {
+   "label": "split",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": true,
+     "result": {
+      "status": "split",
+      "engine": "builtin",
+      "task_count": "2",
+      "reason": "2 listed items marked as independent",
+      "profile": {
+       "work_kind": "debug_review",
+       "reasoning_depth": 2,
+       "code_complexity": 2,
+       "context_scale": 2,
+       "divergence": 1,
+       "hallucination_risk": 3,
+       "error_cost": 2,
+       "needs_visual": false,
+       "needs_gui": false,
+       "local_only": false,
+       "interaction_style": "engineering",
+       "expected_hours": 0.8,
+       "hours_confidence": "medium",
+       "urgency": "unknown",
+       "reason": "deterministic profile: work_kind=debug_review, depth=2, code=2, scale=2, div=1",
+       "multi_task": true,
+       "task_count": "2"
+      },
+      "next_action": "This assignment holds several independent deliverables. Split it and roll each task separately; nothing was started."
+     }
+    }
+   ]
+  },
+  {
+   "label": "split zh",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": true,
+     "result": {
+      "status": "split",
+      "engine": "builtin",
+      "task_count": "3",
+      "reason": "3 listed items marked as independent",
+      "profile": {
+       "work_kind": "debug_review",
+       "reasoning_depth": 2,
+       "code_complexity": 2,
+       "context_scale": 2,
+       "divergence": 1,
+       "hallucination_risk": 3,
+       "error_cost": 2,
+       "needs_visual": false,
+       "needs_gui": false,
+       "local_only": false,
+       "interaction_style": "engineering",
+       "expected_hours": 0.8,
+       "hours_confidence": "medium",
+       "urgency": "unknown",
+       "reason": "deterministic profile: work_kind=debug_review, depth=2, code=2, scale=2, div=1",
+       "multi_task": true,
+       "task_count": "3"
+      },
+      "next_action": "This assignment holds several independent deliverables. Split it and roll each task separately; nothing was started."
+     }
+    }
+   ]
+  },
+  {
+   "label": "self",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": true,
+     "result": {
+      "status": "self",
+      "engine": "builtin",
+      "reason": "a short question with no work to delegate",
+      "profile": {
+       "work_kind": "general_implementation",
+       "reasoning_depth": 2,
+       "code_complexity": 2,
+       "context_scale": 1,
+       "divergence": 1,
+       "hallucination_risk": 2,
+       "error_cost": 2,
+       "needs_visual": false,
+       "needs_gui": false,
+       "local_only": false,
+       "interaction_style": "engineering",
+       "expected_hours": 0.8,
+       "hours_confidence": "medium",
+       "urgency": "unknown",
+       "reason": "deterministic profile: work_kind=general_implementation, depth=2, code=2, scale=1, div=1",
+       "multi_task": false,
+       "task_count": "1"
+      },
+      "next_action": "Do this in the current session; no Cindy task was started."
+     }
+    }
+   ]
+  },
+  {
+   "label": "self zh",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-4",
+     "ok": true,
+     "result": {
+      "status": "self",
+      "engine": "builtin",
+      "reason": "the assignment asks to be answered in the current session",
+      "profile": {
+       "work_kind": "general_implementation",
+       "reasoning_depth": 2,
+       "code_complexity": 2,
+       "context_scale": 1,
+       "divergence": 1,
+       "hallucination_risk": 2,
+       "error_cost": 2,
+       "needs_visual": false,
+       "needs_gui": false,
+       "local_only": false,
+       "interaction_style": "engineering",
+       "expected_hours": 0.8,
+       "hours_confidence": "medium",
+       "urgency": "unknown",
+       "reason": "deterministic profile: work_kind=general_implementation, depth=2, code=2, scale=1, div=1",
+       "multi_task": false,
+       "task_count": "1"
+      },
+      "next_action": "Do this in the current session; no Cindy task was started."
+     }
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  }
+ ],
+ "nodeCalls": [
+  "prepare",
+  "prepare",
+  "prepare",
+  "prepare"
+ ],
+ "sent": [],
+ "prepared": null,
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [],
+ "runs": [],
+ "workerStderr": ""
+}

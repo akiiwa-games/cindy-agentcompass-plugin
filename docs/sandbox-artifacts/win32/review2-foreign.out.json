@@ -1,0 +1,322 @@
+{
+ "results": [
+  {
+   "label": "catalog",
+   "fixture": {
+    "catalog": "real",
+    "sendFault": "lost-answer",
+    "inputOverride": "a message the user typed into the draft"
+   }
+  },
+  {
+   "label": "roll",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": true,
+     "result": {
+      "status": "unknown_send",
+      "operation": "d710390d0fc4237da55e005114a37c2b0e93b092",
+      "taskId": "task-1",
+      "runId": null,
+      "task_id": "task-1",
+      "run_id": null,
+      "error": "CONNECTION_LOST after the input was accepted",
+      "error_code": null,
+      "automatic_callback": false,
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "d710390d0fc4237da55e005114a37c2b0e93b092"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "label": "status",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": true,
+     "result": {
+      "status": "unknown_send",
+      "operation": "d710390d0fc4237da55e005114a37c2b0e93b092",
+      "taskId": "task-1",
+      "error": "CONNECTION_LOST after the input was accepted",
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "d710390d0fc4237da55e005114a37c2b0e93b092"
+       }
+      },
+      "next_action": "Delivery to task task-1 is unconfirmed. Status keeps checking its durable runs; the input is never resent."
+     }
+    }
+   ]
+  },
+  {
+   "label": "cleanup",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": true,
+     "result": {
+      "status": "cleanup_refused",
+      "operation": "d710390d0fc4237da55e005114a37c2b0e93b092",
+      "taskId": "task-1",
+      "state": "unknown_send",
+      "archived": false,
+      "reason": "Delivery to task task-1 is unconfirmed. Status keeps checking its durable runs; the input is never resent.",
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "d710390d0fc4237da55e005114a37c2b0e93b092"
+       }
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "create",
+   "requestKey": "d710390d0fc4237da55e005114a37c2b0e93b092:create",
+   "route": {
+    "agentKind": "codex",
+    "model": "gpt-6.1-sol",
+    "providerId": "openai",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  {
+   "name": "send",
+   "taskId": "task-1",
+   "expectedRevision": 1,
+   "requestKey": "d710390d0fc4237da55e005114a37c2b0e93b092:send",
+   "chars": 436
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "listRuns",
+   "taskId": "task-1"
+  },
+  {
+   "name": "readMessages",
+   "after": null
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "listRuns",
+   "taskId": "task-1"
+  },
+  {
+   "name": "readMessages",
+   "after": null
+  }
+ ],
+ "nodeCalls": [
+  "prepare",
+  "load",
+  "save",
+  "save",
+  "save",
+  "load",
+  "load"
+ ],
+ "sent": [
+  {
+   "runId": "run-1",
+   "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
+   "sha256": "6564ddab286d60a5181f80cc0bd65ed6ed1e5cab46e7838731eca55d0be0b7a4",
+   "chars": 436
+  }
+ ],
+ "prepared": {
+  "operation": "d710390d0fc4237da55e005114a37c2b0e93b092",
+  "parent": "cindy-session-1",
+  "state": "prepared",
+  "engine": "builtin",
+  "router": {
+   "status": "native",
+   "engine": "builtin",
+   "route": {
+    "bundle": {
+     "provider": "codex",
+     "harness": "codex",
+     "account": "openai",
+     "providerId": "openai",
+     "model": "gpt-6.1-sol",
+     "effort": "high",
+     "fast": false,
+     "modeId": "full-access"
+    }
+   },
+   "decision": {
+    "work_kind": "general_implementation",
+    "difficulty": "hard",
+    "required_ability": 3.4016,
+    "profile": {
+     "work_kind": "general_implementation",
+     "reasoning_depth": 2,
+     "code_complexity": 2,
+     "context_scale": 1,
+     "divergence": 1,
+     "hallucination_risk": 2,
+     "error_cost": 2,
+     "needs_visual": false,
+     "needs_gui": false,
+     "local_only": false,
+     "interaction_style": "engineering",
+     "expected_hours": 0.8,
+     "hours_confidence": "medium",
+     "urgency": "unknown",
+     "reason": "deterministic profile: work_kind=general_implementation, depth=2, code=2, scale=1, div=1",
+     "multi_task": false,
+     "task_count": "1"
+    },
+    "canonical_model": "gpt-6.1-sol",
+    "score": 0.3933,
+    "components": {
+     "fit": 0.978,
+     "route_fit": 1,
+     "vector_fit": 1,
+     "subjective_fit": 0.95,
+     "ability": 1,
+     "ability_value": 3.6,
+     "required_ability": 3.402,
+     "quality_bonus": 0,
+     "effort_penalty": 0,
+     "overqualification": 0,
+     "shortfall": 0
+    },
+    "wants_fast": false,
+    "quota": {
+     "source": "codex-cli-sessions",
+     "status": "unknown",
+     "reason": "no Codex session log"
+    },
+    "quota_penalized_routes": 0,
+    "alternatives": [
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6.1-sol",
+      "effort": "high",
+      "fast": false,
+      "score": 0.3833,
+      "notes": []
+     },
+     {
+      "agentKind": "codex",
+      "providerId": "openai",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.3789,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6.1-sol",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.3689,
+      "notes": []
+     },
+     {
+      "agentKind": "codex",
+      "providerId": "openai",
+      "model": "gpt-6-sol",
+      "effort": "high",
+      "fast": false,
+      "score": 0.3642,
+      "notes": []
+     },
+     {
+      "agentKind": "codex",
+      "providerId": "openai",
+      "model": "gpt-6.1-terra",
+      "effort": "high",
+      "fast": false,
+      "score": 0.3595,
+      "notes": []
+     }
+    ]
+   }
+  },
+  "bundle": {
+   "provider": "codex",
+   "harness": "codex",
+   "account": "openai",
+   "providerId": "openai",
+   "model": "gpt-6.1-sol",
+   "effort": "high",
+   "fast": false,
+   "modeId": "full-access"
+  },
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [d0d2aa1b]\nFIXTURE-SCENARIO: ok review2-foreign\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "directory": "<sandbox>\\work dir",
+  "mappings": [],
+  "attempts": 1
+ },
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [
+  {
+   "taskId": "task-1",
+   "revision": 2,
+   "resolvedConfig": {
+    "agentKind": "codex",
+    "model": "gpt-6.1-sol",
+    "providerId": "openai",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions",
+   "planModeEnabled": false,
+   "workingDir": "<sandbox>\\work dir"
+  }
+ ],
+ "runs": [
+  {
+   "runId": "run-1",
+   "taskId": "task-1",
+   "inputMessageId": "plugin-task:run-1",
+   "status": "running",
+   "acceptedConfig": {
+    "agentKind": "codex",
+    "model": "gpt-6.1-sol",
+    "providerId": "openai",
+    "effort": "high",
+    "fastMode": false
+   },
+   "inputText": "a message the user typed into the draft"
+  }
+ ],
+ "workerStderr": ""
+}

@@ -2,7 +2,7 @@
 # Linux sandbox run: unit tests and test/sandbox-e2e.mjs in a throwaway tmpfs directory with musl Node and Python.
 #
 # Written for the WSL `docker-desktop` distro (musl, a ~50 MB root, Windows drives under /mnt/host), from Windows:
-#   wsl -d docker-desktop -- sh /mnt/host/e/PROJECTS/cindy-agentcompass-plugin/test/run-linux-sandbox.sh
+#   wsl -d docker-desktop -- sh /mnt/host/<drive>/<path>/cindy-agentcompass-plugin/test/run-linux-sandbox.sh
 #
 #   CINDY_SANDBOX_CACHE       directory holding the two runtime archives below (downloaded with wget when missing)
 #   AGENTCOMPASS_CHECKOUT_SRC AgentCompass source checkout (default: ../route_manager next to this repository)

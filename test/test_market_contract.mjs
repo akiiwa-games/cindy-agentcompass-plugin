@@ -130,7 +130,33 @@ test('no code infers the language from the browser or the operating system', () 
     assert.doesNotMatch(fs.readFileSync(path.join(DIR, rel), 'utf8'), /\bnavigator\.(?:language|languages)\b/, rel);
 });
 
-// That the worker then finds AgentCompass by itself is test_worker_bridge.mjs and the sandbox's zero-config operation.
+// That the worker then routes with its built-in engine, with nothing else installed, is test_worker_bridge.mjs and the
+// sandbox's zero-config operation.
 test('the market package is the source directory as is: no machine-bound router.json is shipped', {skip: Boolean(process.env.CINDY_MARKET_PLUGIN_DIR)}, () => {
   assert.equal(fs.existsSync(path.join(DIR, 'router.json')), false);
+});
+
+// The routing engine ships inside the package: the worker loads engine/route.mjs, and every module it reaches imports only
+// Node built-ins and package files. No npm dependency, no Python, no network module.
+test('the built-in engine is complete in the package and depends on nothing outside Node', () => {
+  const worker = fs.readFileSync(path.join(DIR, manifest.node.entry), 'utf8');
+  assert.match(worker, /path\.join\(__dirname, 'engine', 'route\.mjs'\)/);
+  const seen = new Set(), queue = ['engine/route.mjs'];
+  while (queue.length) {
+    const rel = queue.shift();
+    if (seen.has(rel)) continue;
+    seen.add(rel);
+    assert.ok(files.some(f => f.rel === rel), `engine module missing from the package: ${rel}`);
+    const source = fs.readFileSync(path.join(DIR, rel), 'utf8');
+    for (const [, spec] of source.matchAll(/(?:^|\n)\s*(?:import|export)\b[^'"]*?from\s*['"]([^'"]+)['"]/g)) {
+      if (spec.startsWith('node:')) {
+        assert.ok(['node:fs', 'node:os', 'node:path'].includes(spec), `${rel} imports ${spec}`);
+        continue;
+      }
+      assert.ok(spec.startsWith('./'), `${rel} imports a package dependency ${spec}`);
+      queue.push(path.posix.join(path.posix.dirname(rel), spec));
+    }
+    assert.doesNotMatch(source, /\brequire\(|\bimport\(|\bfetch\(|node:(?:http|https|net|child_process)/, rel);
+  }
+  assert.deepEqual([...seen].sort(), ['engine/allocator.mjs', 'engine/catalog.mjs', 'engine/profiler.mjs', 'engine/route.mjs']);
 });

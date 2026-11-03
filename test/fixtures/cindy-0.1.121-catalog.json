@@ -1,0 +1,204 @@
+{
+ "source": "cindy.tasks.models() on Cindy 0.1.121 signed in to Codex only (Windows Sandbox real acceptance)",
+ "models": [
+  {
+   "id": "[\"codex\",\"openai\",\"gpt-6.1-sol\"]",
+   "route": {
+    "agentKind": "codex",
+    "model": "gpt-6.1-sol",
+    "providerId": "openai",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "efforts": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra"
+   ],
+   "supportsFastMode": true
+  },
+  {
+   "id": "[\"codex\",\"openai\",\"gpt-6-astra\"]",
+   "route": {
+    "agentKind": "codex",
+    "model": "gpt-6-astra",
+    "providerId": "openai",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "efforts": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra"
+   ],
+   "supportsFastMode": true
+  },
+  {
+   "id": "[\"codex\",\"openai\",\"gpt-6.1-terra\"]",
+   "route": {
+    "agentKind": "codex",
+    "model": "gpt-6.1-terra",
+    "providerId": "openai",
+    "effort": "low",
+    "fastMode": false
+   },
+   "efforts": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra"
+   ],
+   "supportsFastMode": true
+  },
+  {
+   "id": "[\"codex\",\"openai\",\"gpt-6-sol\"]",
+   "route": {
+    "agentKind": "codex",
+    "model": "gpt-6-sol",
+    "providerId": "openai",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "efforts": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra"
+   ],
+   "supportsFastMode": true
+  },
+  {
+   "id": "[\"codex\",\"openai\",\"gpt-6-luna\"]",
+   "route": {
+    "agentKind": "codex",
+    "model": "gpt-6-luna",
+    "providerId": "openai",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "efforts": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+   ],
+   "supportsFastMode": true
+  },
+  {
+   "id": "[\"pi\",\"openai\",\"chatgpt/gpt-6.1-sol\"]",
+   "route": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6.1-sol",
+    "providerId": "openai",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "efforts": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+   ],
+   "supportsFastMode": true
+  },
+  {
+   "id": "[\"pi\",\"openai\",\"chatgpt/gpt-6-astra\"]",
+   "route": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6-astra",
+    "providerId": "openai",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "efforts": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+   ],
+   "supportsFastMode": true
+  },
+  {
+   "id": "[\"pi\",\"openai\",\"chatgpt/gpt-6.1-terra\"]",
+   "route": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6.1-terra",
+    "providerId": "openai",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "efforts": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+   ],
+   "supportsFastMode": true
+  },
+  {
+   "id": "[\"pi\",\"openai\",\"chatgpt/gpt-6-sol\"]",
+   "route": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6-sol",
+    "providerId": "openai",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "efforts": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+   ],
+   "supportsFastMode": true
+  },
+  {
+   "id": "[\"pi\",\"openai\",\"chatgpt/gpt-6-luna\"]",
+   "route": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6-luna",
+    "providerId": "openai",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "efforts": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+   ],
+   "supportsFastMode": true
+  },
+  {
+   "id": "[\"pi\",\"openai\",\"chatgpt/gpt-5.3-codex-spark\"]",
+   "route": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-5.3-codex-spark",
+    "providerId": "openai",
+    "effort": "xhigh",
+    "fastMode": false
+   },
+   "efforts": [
+    "minimal",
+    "xhigh"
+   ],
+   "supportsFastMode": false
+  }
+ ]
+}

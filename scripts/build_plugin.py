@@ -3,8 +3,9 @@
     python -X utf8 scripts/build_plugin.py --output <new-directory> [--account-map <file.json>] [--router-cmd <json-or-path>]
                                            [--state-root <directory>]
 
-The plugin/ directory itself installs as is (market install): without router.json, worker.cjs finds AgentCompass at run
-time. A build instead binds one AgentCompass install in router.json. --router-cmd is either a JSON array that is the
+The plugin/ directory itself installs as is (market install) and routes with its built-in engine (plugin/engine/). A
+build instead binds one external AgentCompass install in router.json, which the worker then uses for every roll.
+--router-cmd is either a JSON array that is the
 complete roll command (for example ["/usr/local/bin/agentcompass", "roll"]), or a path: an `agentcompass` executable or
 an AgentCompass source checkout (its `agentcompass` package directory or the checkout root) to which `roll` is appended.
 Without it the `agentcompass` on PATH is used.
@@ -19,9 +20,11 @@ PLUGIN = Path(__file__).resolve().parents[1] / 'plugin'
 
 
 def sources():
-    """Every file the manifest declares: itself, the logic page, the node worker, the icon and the locale resources."""
+    """Every file the manifest declares (itself, the logic page, the node worker, the icon and the locale resources) and
+    the built-in engine the worker imports."""
     manifest = json.loads((PLUGIN / 'ghost.json').read_text(encoding='utf-8'))
-    return ['ghost.json', manifest['entry'], manifest['node']['entry'], manifest['icon'], *manifest['locales'].values()]
+    engine = sorted(f'engine/{path.name}' for path in (PLUGIN / 'engine').glob('*.mjs'))
+    return ['ghost.json', manifest['entry'], manifest['node']['entry'], manifest['icon'], *manifest['locales'].values(), *engine]
 
 
 MAPPING_KEYS = {'routerProvider', 'routerAccount', 'providerId', 'agentKind'}

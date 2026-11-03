@@ -1,0 +1,386 @@
+{
+ "results": [
+  {
+   "label": "catalog",
+   "fixture": {
+    "catalog": "real"
+   }
+  },
+  {
+   "label": "roll",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": true,
+     "result": {
+      "status": "running",
+      "operation": "d8d9335ce5a9fda3c77feba486abbbc25ba273b8",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "task_id": "task-1",
+      "run_id": "run-1",
+      "error": null,
+      "error_code": null,
+      "automatic_callback": false,
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "d8d9335ce5a9fda3c77feba486abbbc25ba273b8"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "label": "status while running",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": true,
+     "result": {
+      "status": "running",
+      "operation": "d8d9335ce5a9fda3c77feba486abbbc25ba273b8",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "outputMessageId": null,
+      "output_available": false,
+      "messages_complete": false,
+      "message_pages_read": 0,
+      "final_result_summary": "",
+      "summary_shortened": false,
+      "full_result_artifacts": [],
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "d8d9335ce5a9fda3c77feba486abbbc25ba273b8"
+       }
+      },
+      "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
+     }
+    }
+   ]
+  },
+  {
+   "label": "finished",
+   "fixture": {
+    "runStatus": "completed",
+    "outputMessageId": "out-final",
+    "pages": 2,
+    "finalText": "[Worker final report] harness-pi"
+   }
+  },
+  {
+   "label": "status",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": true,
+     "result": {
+      "status": "completed",
+      "operation": "d8d9335ce5a9fda3c77feba486abbbc25ba273b8",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "outputMessageId": "out-final",
+      "output_available": true,
+      "messages_complete": true,
+      "message_pages_read": 2,
+      "final_result_summary": "[Worker final report] harness-pi",
+      "summary_shortened": false,
+      "full_result_artifacts": [
+       "<sandbox>/home/.agent-compass/cindy-plugin/d8d9335ce5a9fda3c77feba486abbbc25ba273b8/messages-e16482f0a28cadcd.json",
+       "<sandbox>/home/.agent-compass/cindy-plugin/d8d9335ce5a9fda3c77feba486abbbc25ba273b8/messages-a4a8d1c3e0cca10e.json"
+      ],
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "cleanup",
+       "args": {
+        "operation": "d8d9335ce5a9fda3c77feba486abbbc25ba273b8"
+       }
+      },
+      "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
+     }
+    }
+   ]
+  },
+  {
+   "label": "cleanup",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-4",
+     "ok": true,
+     "result": {
+      "status": "cleaned",
+      "operation": "d8d9335ce5a9fda3c77feba486abbbc25ba273b8"
+     }
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "create",
+   "requestKey": "d8d9335ce5a9fda3c77feba486abbbc25ba273b8:create",
+   "route": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6.1-terra",
+    "providerId": "openai",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  {
+   "name": "send",
+   "taskId": "task-1",
+   "expectedRevision": 1,
+   "requestKey": "d8d9335ce5a9fda3c77feba486abbbc25ba273b8:send",
+   "chars": 452
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "readMessages",
+   "after": null
+  },
+  {
+   "name": "readMessages",
+   "after": "1"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "listRuns",
+   "taskId": "task-1"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "archive",
+   "taskId": "task-1"
+  }
+ ],
+ "nodeCalls": [
+  "prepare",
+  "load",
+  "save",
+  "save",
+  "save",
+  "load",
+  "save",
+  "load",
+  "output",
+  "save",
+  "output",
+  "save",
+  "save",
+  "load",
+  "save"
+ ],
+ "sent": [
+  {
+   "runId": "run-1",
+   "file": "<sandbox>/report/cindy/cindy-sent-run-1.txt",
+   "sha256": "df2665c3bdc878c9659f5670201317e013fb4211a3cc8dfbd6294179cdebc18a",
+   "chars": 452
+  }
+ ],
+ "prepared": {
+  "operation": "d8d9335ce5a9fda3c77feba486abbbc25ba273b8",
+  "parent": "cindy-session-1",
+  "state": "prepared",
+  "engine": "builtin",
+  "router": {
+   "status": "native",
+   "engine": "builtin",
+   "route": {
+    "bundle": {
+     "provider": "pi",
+     "harness": "pi",
+     "account": "openai",
+     "providerId": "openai",
+     "model": "chatgpt/gpt-6.1-terra",
+     "effort": "high",
+     "fast": false,
+     "modeId": "full-access"
+    }
+   },
+   "decision": {
+    "work_kind": "exploration_analysis",
+    "difficulty": "hard",
+    "required_ability": 3.3854,
+    "profile": {
+     "work_kind": "exploration_analysis",
+     "reasoning_depth": 2,
+     "code_complexity": 0,
+     "context_scale": 2,
+     "divergence": 1,
+     "hallucination_risk": 3,
+     "error_cost": 1,
+     "needs_visual": false,
+     "needs_gui": false,
+     "local_only": true,
+     "interaction_style": "exploration",
+     "expected_hours": 0.8,
+     "hours_confidence": "medium",
+     "urgency": "unknown",
+     "reason": "deterministic profile: work_kind=exploration_analysis, depth=2, code=0, scale=2, div=1",
+     "multi_task": false,
+     "task_count": "1"
+    },
+    "canonical_model": "gpt-6.1-terra",
+    "score": 0.3415,
+    "components": {
+     "fit": 0.774,
+     "route_fit": 0.563,
+     "vector_fit": 0.979,
+     "subjective_fit": 0.708,
+     "ability": 1,
+     "ability_value": 3.7,
+     "required_ability": 3.385,
+     "quality_bonus": 0,
+     "effort_penalty": 0,
+     "overqualification": 0.0006,
+     "shortfall": 0
+    },
+    "wants_fast": false,
+    "quota": {
+     "source": "codex-cli-sessions",
+     "status": "unknown",
+     "reason": "no Codex session log"
+    },
+    "quota_penalized_routes": 0,
+    "alternatives": [
+     {
+      "agentKind": "codex",
+      "providerId": "openai",
+      "model": "gpt-6.1-terra",
+      "effort": "high",
+      "fast": false,
+      "score": 0.3315,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6.1-terra",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.3217,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6.1-terra",
+      "effort": "xhigh",
+      "fast": false,
+      "score": 0.3208,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6-astra",
+      "effort": "low",
+      "fast": false,
+      "score": 0.3189,
+      "notes": []
+     },
+     {
+      "agentKind": "codex",
+      "providerId": "openai",
+      "model": "gpt-6.1-terra",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.3117,
+      "notes": []
+     }
+    ]
+   }
+  },
+  "bundle": {
+   "provider": "pi",
+   "harness": "pi",
+   "account": "openai",
+   "providerId": "openai",
+   "model": "chatgpt/gpt-6.1-terra",
+   "effort": "high",
+   "fast": false,
+   "modeId": "full-access"
+  },
+  "prompt": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi-1793696601978]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "directory": "<sandbox>/work dir",
+  "mappings": [],
+  "attempts": 1
+ },
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [
+  {
+   "taskId": "task-1",
+   "revision": 2,
+   "resolvedConfig": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6.1-terra",
+    "providerId": "openai",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions",
+   "planModeEnabled": false,
+   "workingDir": "<sandbox>/work dir",
+   "archived": true
+  }
+ ],
+ "runs": [
+  {
+   "runId": "run-1",
+   "taskId": "task-1",
+   "inputMessageId": "plugin-task:run-1",
+   "status": "completed",
+   "acceptedConfig": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6.1-terra",
+    "providerId": "openai",
+    "effort": "high",
+    "fastMode": false
+   },
+   "inputText": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi-1793696601978]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "outputMessageId": "out-final"
+  }
+ ],
+ "workerStderr": ""
+}
