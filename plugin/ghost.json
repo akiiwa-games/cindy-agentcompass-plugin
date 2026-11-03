@@ -4,6 +4,7 @@
   "id": "agentcompass",
   "name": "AgentCompass",
   "version": "0.2.0",
+  "author": "akiiwa-games",
   "kind": "chip",
   "description": "Route work with AgentCompass and collect exact Cindy task results. Requires the experimental public tasks API.",
   "whenToUse": "Delegate independent work through AgentCompass from a Cindy Claude, Codex or Pi session.",
