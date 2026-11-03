@@ -4,7 +4,7 @@ A [Cindy](https://github.com/makecindy/cindy) plugin that lets a Cindy session h
 result back. The plugin carries its own copy of the [AgentCompass](https://github.com/akiiwa-games/AgentCompass) routing engine: it
 profiles the task, decides whether it should be split, done in the session itself or delegated, picks the harness, model, effort and
 fast mode from the models this Cindy can actually run, starts that route as an ordinary Cindy task, checks that Cindy really runs what
-was routed, and collects the task's final message.
+was routed, and collects the task's final message. Every delegated child task is created with `bypassPermissions` (Claude) or `full-access` (Codex, Pi) in the parent session's project directory regardless of the parent session's own mode, and the built-in router reads the tail of local Codex session logs (`~/.codex` and Cindy's `codex-home`) for quota.
 
 Installing it from the plugin market is enough. It needs nothing else on the machine: no AgentCompass install, no Python, no network
 service and no npm dependency. A machine that does have the AgentCompass CLI can switch the plugin over to it (see
