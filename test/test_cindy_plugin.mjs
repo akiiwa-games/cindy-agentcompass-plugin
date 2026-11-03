@@ -446,8 +446,21 @@ test('review 3: cleanup refuses unconfirmed receipts and tasks with any active r
   const busy=(await f.send('cleanup',{operation:op})).result;
   assert.equal(busy.status,'cleanup_refused');
   assert.match(busy.reason,/run-other is running/);
+  assert.deepEqual([...(busy.blocking_runs || [])],['run-other']);
+  assert.equal(busy.next_tool,null);
   f.host.runs=[];
   assert.equal((await f.send('cleanup',{operation:op})).result.status,'manual_cleanup_required');
+  // Own run is terminal (completed), but another run (run-other) on the same task is active:
+  // cleanup returns a manual handoff naming run-other rather than pointing to stop.
+  const h=fixture();const hop=(await h.send('roll',{task:'x'})).result.operation;
+  h.run.status='completed';h.run.outputMessageId='out-exact';
+  await h.send('status',{operation:hop});
+  h.host.runs=[h.run,{...h.run,runId:'run-other',status:'running'}];
+  const hBusy=(await h.send('cleanup',{operation:hop})).result;
+  assert.equal(hBusy.status,'cleanup_refused');
+  assert.deepEqual([...(hBusy.blocking_runs || [])],['run-other']);
+  assert.equal(hBusy.next_tool,null,'does not point to stop when own run is already terminal');
+  assert.match(hBusy.next_action,/run-other/);
   // listRuns unavailable: idleness is unproven, so nothing is archived.
   const g=fixture();g.task.workingDir='E:/different';
   const gop=(await g.send('roll',{task:'x'})).result.operation;
