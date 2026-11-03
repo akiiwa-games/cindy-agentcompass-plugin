@@ -1,0 +1,267 @@
+{
+ "results": [
+  {
+   "label": "wrong directory",
+   "fixture": {
+    "workingDir": "/other-project"
+   }
+  },
+  {
+   "label": "roll",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": true,
+     "result": {
+      "status": "blocked",
+      "operation": "20606d3922249654fd2ae33500467f85435d6687",
+      "taskId": "task-1",
+      "error": "Created draft has different route/permissions/workdir. Configure plugin task directory to the current project; no model input sent.",
+      "draft_cleanup": "archived",
+      "cleanup_error": null,
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "cleanup",
+       "args": {
+        "operation": "20606d3922249654fd2ae33500467f85435d6687"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "label": "archive fails now",
+   "fixture": {
+    "archiveFails": true
+   }
+  },
+  {
+   "label": "roll again",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": true,
+     "result": {
+      "status": "blocked",
+      "operation": "56d27e6fdaf3fdc6476dac522589b67e8043a977",
+      "taskId": "task-2",
+      "error": "Created draft has different route/permissions/workdir. Configure plugin task directory to the current project; no model input sent.",
+      "draft_cleanup": "needs_cleanup",
+      "cleanup_error": "ARCHIVE_FAILED",
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "cleanup",
+       "args": {
+        "operation": "56d27e6fdaf3fdc6476dac522589b67e8043a977"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "label": "archive works",
+   "fixture": {
+    "archiveFails": false
+   }
+  },
+  {
+   "label": "cleanup the stuck draft",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": true,
+     "result": {
+      "status": "cleaned",
+      "operation": "56d27e6fdaf3fdc6476dac522589b67e8043a977"
+     }
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "create",
+   "requestKey": "20606d3922249654fd2ae33500467f85435d6687:create",
+   "route": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  {
+   "name": "archive",
+   "taskId": "task-1"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "create",
+   "requestKey": "56d27e6fdaf3fdc6476dac522589b67e8043a977:create",
+   "route": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  {
+   "name": "archive",
+   "taskId": "task-2"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "archive",
+   "taskId": "task-2"
+  }
+ ],
+ "nodeCalls": [
+  "prepare",
+  "save",
+  "save",
+  "prepare",
+  "save",
+  "save",
+  "load",
+  "save"
+ ],
+ "sent": [],
+ "prepared": {
+  "operation": "56d27e6fdaf3fdc6476dac522589b67e8043a977",
+  "parent": "cindy-session-1",
+  "state": "blocked",
+  "router": {
+   "stage": "roll",
+   "route": {
+    "choice": "sol_high",
+    "bundle": {
+     "provider": "codex",
+     "harness": "codex",
+     "account": "codex",
+     "model": "gpt-6.1-sol",
+     "effort": "high"
+    },
+    "reason": "sol_high (start) scored 0.3136; value/cost exchange 0.012 score per displaced USD ($83.33 displaced USD per score point)",
+    "alerts": [
+     "No usage data is available (the collector has not produced a snapshot), so quota-aware ranking is running blind and the pick is a default, not a measured choice. Run `python -X utf8 /run/cindy-sandbox/AgentCompass/agentcompass setup` to detect the CLIs you are signed in to and start usage collection."
+    ]
+   },
+   "parent_id": "cindy-session-1",
+   "parent_host": "native",
+   "parent_address": "cindy-session-1",
+   "assumptions": [
+    "--hours not given: budgeted 0.5h from the classifier estimate, confidence medium; an estimate, not a measurement. Pass --hours for a large or unusually small task."
+   ],
+   "worker_prompt_file": "/run/cindy-sandbox/e2e/state/worker-prompts/07ee83ca-31f1-431c-aea5-efcdf9dc2022.md",
+   "launched": false,
+   "dispatch_mode": "native",
+   "caller_action": "launch_with_native_host_tool",
+   "next": "Launch the native host worker with exactly route.bundle and the contents of worker_prompt_file as --spec (not the filename). First verify that the host can reproduce the routed provider/account/model/effort; otherwise reroute. Preserve the live coordinator inbox, parent session ID and injected worker preamble; do not switch hosts.",
+   "status": "native"
+  },
+  "bundle": {
+   "provider": "codex",
+   "harness": "codex",
+   "account": "codex",
+   "model": "gpt-6.1-sol",
+   "effort": "high",
+   "modeId": "full-access"
+  },
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [bf19103e]\nFIXTURE-SCENARIO: ok workdir-b\n\n\n---\n\n# Worker 通信与汇报契约\n\n1. **直接执行**：你是受派 worker，直接动手完成任务，禁止再派子 agent（除非任务书明确任命你为协调者）。\n2. **向主会话提问**：需澄清、决策或补信息时，用真实消息工具发给下方 `Parent session agent ID`（Paseo 用 `send_agent_prompt`，设 `background: true, notifyOnFinish: false`；其他宿主用其消息工具发往 `Parent message address`），发后结束本轮，不同步阻塞等待。严禁调用 `request_user_input_async`、`request_user_input`、`AskUserQuestion`、`ask_user_question` 等本地交互提问工具。\n3. **完成汇报 `[Worker final report]`**：结束本轮（done / failed / blocked）前，有消息工具的 worker 必须用同一通道向主会话发送 `[Worker final report]`（含结论、验证、提交/产物路径与剩余阻塞项）并检查发送结果，同时在最终回复保留完整报告；无消息工具的 worker（如 agy / CLI）在最终回复写完整报告。若无消息通道或发送失败，在最终回复中写明 `BLOCKED / needs_input`、具体问题与发送失败原因并结束本轮，切勿声称已送达。\n\n\nParent session agent ID: `cindy-session-1`.\nParent host: `native`. Parent message address: `cindy-session-1`.\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "directory": "/run/cindy-sandbox/e2e/work dir",
+  "mappings": [
+   {
+    "routerProvider": "codex",
+    "routerAccount": "codex",
+    "providerId": "codex",
+    "agentKind": "codex"
+   },
+   {
+    "routerProvider": "claude",
+    "routerAccount": "claude",
+    "providerId": "claude",
+    "agentKind": "cc"
+   }
+  ],
+  "route": {
+   "agentKind": "codex",
+   "providerId": "codex",
+   "model": "gpt-6.1-sol",
+   "effort": "high",
+   "fastMode": false
+  },
+  "createRequest": {
+   "requestKey": "56d27e6fdaf3fdc6476dac522589b67e8043a977:create",
+   "title": "AgentCompass 56d27e6fdaf3",
+   "route": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  "taskId": "task-2",
+  "error": "Created draft has different route/permissions/workdir. Configure plugin task directory to the current project; no model input sent.",
+  "draft_cleanup": "needs_cleanup",
+  "cleanup_error": "ARCHIVE_FAILED"
+ },
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [
+  {
+   "taskId": "task-1",
+   "revision": 1,
+   "resolvedConfig": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions",
+   "planModeEnabled": false,
+   "workingDir": "/other-project",
+   "archived": true
+  },
+  {
+   "taskId": "task-2",
+   "revision": 1,
+   "resolvedConfig": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions",
+   "planModeEnabled": false,
+   "workingDir": "/other-project",
+   "archived": true
+  }
+ ],
+ "runs": [],
+ "workerStderr": ""
+}

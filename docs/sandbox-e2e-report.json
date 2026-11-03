@@ -1,0 +1,785 @@
+{
+ "kind": "cindy-agentcompass-plugin sandbox e2e",
+ "runs": {
+  "linux": {
+   "kind": "cindy-agentcompass-plugin sandbox e2e",
+   "label": "linux",
+   "started_at": "2026-11-03T06:32:15.293Z",
+   "operations": [
+    {
+     "name": "isolation",
+     "intent": "the router runs with a sandbox home, state and PATH; nothing points at the real machine",
+     "checks": [
+      {
+       "name": "home, state, ledger and temp are inside the sandbox",
+       "ok": true
+      },
+      {
+       "name": "no credential-shaped variable is passed",
+       "ok": true
+      },
+      {
+       "name": "no Paseo, Herdr, Orca or T3 session variable is passed",
+       "ok": true
+      },
+      {
+       "name": "the public AgentCompass entry runs from the checkout",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "unit tests",
+     "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
+     "checks": [
+      {
+       "name": "node --test: 14 passed, 0 failed",
+       "ok": true
+      },
+      {
+       "name": "python unittest: 8 ran",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "classifier configuration",
+     "intent": "agentcompass scorer --action set points the real classifier at the local fixture model",
+     "checks": [
+      {
+       "name": "scorer set exits 0",
+       "ok": true
+      },
+      {
+       "name": "scorer show names the OpenAI-compatible type and masks the key",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "build the plugin",
+     "intent": "scripts/build_plugin.py writes reviewable source bound to this AgentCompass and installs nothing",
+     "checks": [
+      {
+       "name": "build reports built",
+       "ok": true
+      },
+      {
+       "name": "ghost.json, main.js, worker.cjs and router.json exist",
+       "ok": true
+      },
+      {
+       "name": "router.json binds the public roll entry of this checkout with an absolute interpreter",
+       "ok": true
+      },
+      {
+       "name": "the explicit account map is carried verbatim",
+       "ok": true
+      },
+      {
+       "name": "the manifest asks for session context, node and tasks and exposes roll/status/stop/cleanup",
+       "ok": true
+      },
+      {
+       "name": "building into an existing directory is refused",
+       "ok": true
+      },
+      {
+       "name": "an incomplete account map is refused and nothing is written",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "AgentCompass core: stock Cindy shell",
+     "intent": "raw shell roll in Cindy has no addressable parent: the core refuses instead of routing a provider thread to Paseo",
+     "checks": [
+      {
+       "name": "roll is refused (not launched) and names Cindy",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "one task from roll to cleanup",
+     "intent": "trusted session context -> prepare through the real router -> create -> send -> status -> paged result -> cleanup",
+     "checks": [
+      {
+       "name": "both concurrent rolls succeed with one operation",
+       "ok": true
+      },
+      {
+       "name": "the real classifier was asked once for the task",
+       "ok": true
+      },
+      {
+       "name": "exactly one task was created and one input sent",
+       "ok": true
+      },
+      {
+       "name": "the receipt belongs to the host-injected session, not the forged one",
+       "ok": true
+      },
+      {
+       "name": "the real router routed for the Cindy session as a native parent",
+       "ok": true
+      },
+      {
+       "name": "the plugin made the launcher permission explicit for the routed harness",
+       "ok": true
+      },
+      {
+       "name": "the create request carries the router's exact model/effort and the bypass permission",
+       "ok": true
+      },
+      {
+       "name": "the text sent to Cindy contains the whole task byte for byte",
+       "ok": true
+      },
+      {
+       "name": "the text sent to Cindy carries the return contract for a task without a mailbox",
+       "ok": true
+      },
+      {
+       "name": "the router prompt names the real Cindy session as the parent",
+       "ok": true
+      },
+      {
+       "name": "the sent text is the receipt's prompt (nothing cut)",
+       "ok": true
+      },
+      {
+       "name": "the routing decision was recorded in the ledger for this session",
+       "ok": true
+      },
+      {
+       "name": "status while running says there is no automatic callback and names the next call",
+       "ok": true
+      },
+      {
+       "name": "cleanup of a running task is refused",
+       "ok": true
+      },
+      {
+       "name": "status after completion returns the exact final message with all pages saved",
+       "ok": true
+      },
+      {
+       "name": "every saved page exists on disk",
+       "ok": true
+      },
+      {
+       "name": "cleanup archives once and repeating it is harmless",
+       "ok": true
+      },
+      {
+       "name": "rolling the same assignment again does not create or send anything new",
+       "ok": true
+      },
+      {
+       "name": "no duplicate create or send reached the host",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "the real receipt in the plugin unit fixture",
+     "intent": "test/test_cindy_plugin.mjs replays the receipt the real router produced through main.js",
+     "checks": [
+      {
+       "name": "the plugin unit tests pass with the real receipt",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "create answer lost",
+     "intent": "the host creates the draft but its answer never arrives: unknown_create, nothing is created or sent again, the orphan is not hidden",
+     "checks": [
+      {
+       "name": "roll reports unknown_create with the host's reason and the next call",
+       "ok": true
+      },
+      {
+       "name": "status keeps saying unknown_create and tells the caller to inspect, not resend",
+       "ok": true
+      },
+      {
+       "name": "rolling the same assignment again creates nothing new",
+       "ok": true
+      },
+      {
+       "name": "no input was ever sent and no run exists",
+       "ok": true
+      },
+      {
+       "name": "the orphan draft exists in the host and the plugin refuses to archive what it never saw",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "a very large final reply",
+     "intent": "about 2.6 MB of final output crosses the real JSON-RPC bridge: a bounded summary, the complete text on disk",
+     "checks": [
+      {
+       "name": "the bridge survives the large page and status completes",
+       "ok": true
+      },
+      {
+       "name": "the reply is bounded: summary at most 4000 characters, marked shortened, whole reply small",
+       "ok": true
+      },
+      {
+       "name": "the complete final message is saved byte for byte in the artifact",
+       "ok": true
+      },
+      {
+       "name": "cleanup still archives once",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "host without the needed task API",
+     "intent": "missing or partial capabilities stop before the router is even asked; no task is created",
+     "checks": [
+      {
+       "name": "every roll is refused",
+       "ok": true
+      },
+      {
+       "name": "the unsupported shapes say that no worker started",
+       "ok": true
+      },
+      {
+       "name": "the router was never asked and nothing was created",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "context that is not trusted",
+     "intent": "no host context, a remote workdir or a read-only one are refused before routing",
+     "checks": [
+      {
+       "name": "no context, a remote workdir and a read-only one are refused",
+       "ok": true
+      },
+      {
+       "name": "nothing reached the router, the tasks API or a model",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "wrong catalog, oversize task",
+     "intent": "the exact route must exist in the catalog; a task that does not fit the send limit is never cut",
+     "checks": [
+      {
+       "name": "a nearby model or an empty catalog is refused, never substituted",
+       "ok": true
+      },
+      {
+       "name": "the oversize task is refused with the limit named",
+       "ok": true
+      },
+      {
+       "name": "no task was created and no model input was sent",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "draft in the wrong project directory",
+     "intent": "the created draft is checked before any input is sent; it is archived, or cleanup is handed back",
+     "checks": [
+      {
+       "name": "the first draft is blocked and archived, with no input sent",
+       "ok": true
+      },
+      {
+       "name": "when archiving fails the reply says cleanup is needed and names the cleanup call",
+       "ok": true
+      },
+      {
+       "name": "the stuck draft is archived by the cleanup tool",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "the draft changed under us",
+     "intent": "a stale expectedRevision is rejected by the host: no run exists, nothing is resent",
+     "checks": [
+      {
+       "name": "the send conflict is reported as unknown_send with the host's reason",
+       "ok": true
+      },
+      {
+       "name": "no run exists and the input was offered exactly once",
+       "ok": true
+      },
+      {
+       "name": "collecting status never resends",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "long transcript, stop and ownership",
+     "intent": "twelve pages are collected across two status calls; stop cancels through the scoped API; another session cannot touch the operation",
+     "checks": [
+      {
+       "name": "stop answers stopping, which is not a claim that the run ended",
+       "ok": true
+      },
+      {
+       "name": "cleanup of a stopping run is refused",
+       "ok": true
+      },
+      {
+       "name": "another session cannot read the operation",
+       "ok": true
+      },
+      {
+       "name": "the first status stops at the page bound and says collection is incomplete",
+       "ok": true
+      },
+      {
+       "name": "the second status finishes all twelve pages and finds the exact final message",
+       "ok": true
+      }
+     ]
+    }
+   ],
+   "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "os_release": "6.18.40.1-microsoft-standard-WSL2",
+    "node": "v24.22.2",
+    "python": "3.12.16",
+    "agentcompass_version": "0.3.4",
+    "agentcompass_checkout": "/run/cindy-sandbox/AgentCompass",
+    "sandbox_root": "/run/cindy-sandbox/e2e",
+    "scorer": "http://127.0.0.1:41843/v1"
+   },
+   "unit_tests": {
+    "node": {
+     "pass": 14,
+     "fail": 0
+    },
+    "python": {
+     "ran": 8,
+     "ok": true
+    }
+   },
+   "finished_at": "2026-11-03T06:32:26.615Z",
+   "summary": {
+    "operations": 15,
+    "checks": 64,
+    "passed": 64,
+    "failed": 0,
+    "artifacts": "/run/cindy-sandbox/e2e/report/cindy"
+   }
+  },
+  "win32": {
+   "kind": "cindy-agentcompass-plugin sandbox e2e",
+   "label": "win32",
+   "started_at": "2026-11-03T06:39:46.242Z",
+   "operations": [
+    {
+     "name": "isolation",
+     "intent": "the router runs with a sandbox home, state and PATH; nothing points at the real machine",
+     "checks": [
+      {
+       "name": "home, state, ledger and temp are inside the sandbox",
+       "ok": true
+      },
+      {
+       "name": "no credential-shaped variable is passed",
+       "ok": true
+      },
+      {
+       "name": "no Paseo, Herdr, Orca or T3 session variable is passed",
+       "ok": true
+      },
+      {
+       "name": "the public AgentCompass entry runs from the checkout",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "unit tests",
+     "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
+     "checks": [
+      {
+       "name": "node --test: 14 passed, 0 failed",
+       "ok": true
+      },
+      {
+       "name": "python unittest: 8 ran",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "classifier configuration",
+     "intent": "agentcompass scorer --action set points the real classifier at the local fixture model",
+     "checks": [
+      {
+       "name": "scorer set exits 0",
+       "ok": true
+      },
+      {
+       "name": "scorer show names the OpenAI-compatible type and masks the key",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "build the plugin",
+     "intent": "scripts/build_plugin.py writes reviewable source bound to this AgentCompass and installs nothing",
+     "checks": [
+      {
+       "name": "build reports built",
+       "ok": true
+      },
+      {
+       "name": "ghost.json, main.js, worker.cjs and router.json exist",
+       "ok": true
+      },
+      {
+       "name": "router.json binds the public roll entry of this checkout with an absolute interpreter",
+       "ok": true
+      },
+      {
+       "name": "the explicit account map is carried verbatim",
+       "ok": true
+      },
+      {
+       "name": "the manifest asks for session context, node and tasks and exposes roll/status/stop/cleanup",
+       "ok": true
+      },
+      {
+       "name": "building into an existing directory is refused",
+       "ok": true
+      },
+      {
+       "name": "an incomplete account map is refused and nothing is written",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "AgentCompass core: stock Cindy shell",
+     "intent": "raw shell roll in Cindy has no addressable parent: the core refuses instead of routing a provider thread to Paseo",
+     "checks": [
+      {
+       "name": "roll is refused (not launched) and names Cindy",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "one task from roll to cleanup",
+     "intent": "trusted session context -> prepare through the real router -> create -> send -> status -> paged result -> cleanup",
+     "checks": [
+      {
+       "name": "both concurrent rolls succeed with one operation",
+       "ok": true
+      },
+      {
+       "name": "the real classifier was asked once for the task",
+       "ok": true
+      },
+      {
+       "name": "exactly one task was created and one input sent",
+       "ok": true
+      },
+      {
+       "name": "the receipt belongs to the host-injected session, not the forged one",
+       "ok": true
+      },
+      {
+       "name": "the real router routed for the Cindy session as a native parent",
+       "ok": true
+      },
+      {
+       "name": "the plugin made the launcher permission explicit for the routed harness",
+       "ok": true
+      },
+      {
+       "name": "the create request carries the router's exact model/effort and the bypass permission",
+       "ok": true
+      },
+      {
+       "name": "the text sent to Cindy contains the whole task byte for byte",
+       "ok": true
+      },
+      {
+       "name": "the text sent to Cindy carries the return contract for a task without a mailbox",
+       "ok": true
+      },
+      {
+       "name": "the router prompt names the real Cindy session as the parent",
+       "ok": true
+      },
+      {
+       "name": "the sent text is the receipt's prompt (nothing cut)",
+       "ok": true
+      },
+      {
+       "name": "the routing decision was recorded in the ledger for this session",
+       "ok": true
+      },
+      {
+       "name": "status while running says there is no automatic callback and names the next call",
+       "ok": true
+      },
+      {
+       "name": "cleanup of a running task is refused",
+       "ok": true
+      },
+      {
+       "name": "status after completion returns the exact final message with all pages saved",
+       "ok": true
+      },
+      {
+       "name": "every saved page exists on disk",
+       "ok": true
+      },
+      {
+       "name": "cleanup archives once and repeating it is harmless",
+       "ok": true
+      },
+      {
+       "name": "rolling the same assignment again does not create or send anything new",
+       "ok": true
+      },
+      {
+       "name": "no duplicate create or send reached the host",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "the real receipt in the plugin unit fixture",
+     "intent": "test/test_cindy_plugin.mjs replays the receipt the real router produced through main.js",
+     "checks": [
+      {
+       "name": "the plugin unit tests pass with the real receipt",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "create answer lost",
+     "intent": "the host creates the draft but its answer never arrives: unknown_create, nothing is created or sent again, the orphan is not hidden",
+     "checks": [
+      {
+       "name": "roll reports unknown_create with the host's reason and the next call",
+       "ok": true
+      },
+      {
+       "name": "status keeps saying unknown_create and tells the caller to inspect, not resend",
+       "ok": true
+      },
+      {
+       "name": "rolling the same assignment again creates nothing new",
+       "ok": true
+      },
+      {
+       "name": "no input was ever sent and no run exists",
+       "ok": true
+      },
+      {
+       "name": "the orphan draft exists in the host and the plugin refuses to archive what it never saw",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "a very large final reply",
+     "intent": "about 2.6 MB of final output crosses the real JSON-RPC bridge: a bounded summary, the complete text on disk",
+     "checks": [
+      {
+       "name": "the bridge survives the large page and status completes",
+       "ok": true
+      },
+      {
+       "name": "the reply is bounded: summary at most 4000 characters, marked shortened, whole reply small",
+       "ok": true
+      },
+      {
+       "name": "the complete final message is saved byte for byte in the artifact",
+       "ok": true
+      },
+      {
+       "name": "cleanup still archives once",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "host without the needed task API",
+     "intent": "missing or partial capabilities stop before the router is even asked; no task is created",
+     "checks": [
+      {
+       "name": "every roll is refused",
+       "ok": true
+      },
+      {
+       "name": "the unsupported shapes say that no worker started",
+       "ok": true
+      },
+      {
+       "name": "the router was never asked and nothing was created",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "context that is not trusted",
+     "intent": "no host context, a remote workdir or a read-only one are refused before routing",
+     "checks": [
+      {
+       "name": "no context, a remote workdir and a read-only one are refused",
+       "ok": true
+      },
+      {
+       "name": "nothing reached the router, the tasks API or a model",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "wrong catalog, oversize task",
+     "intent": "the exact route must exist in the catalog; a task that does not fit the send limit is never cut",
+     "checks": [
+      {
+       "name": "a nearby model or an empty catalog is refused, never substituted",
+       "ok": true
+      },
+      {
+       "name": "the oversize task is refused with the limit named",
+       "ok": true
+      },
+      {
+       "name": "no task was created and no model input was sent",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "draft in the wrong project directory",
+     "intent": "the created draft is checked before any input is sent; it is archived, or cleanup is handed back",
+     "checks": [
+      {
+       "name": "the first draft is blocked and archived, with no input sent",
+       "ok": true
+      },
+      {
+       "name": "when archiving fails the reply says cleanup is needed and names the cleanup call",
+       "ok": true
+      },
+      {
+       "name": "the stuck draft is archived by the cleanup tool",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "the draft changed under us",
+     "intent": "a stale expectedRevision is rejected by the host: no run exists, nothing is resent",
+     "checks": [
+      {
+       "name": "the send conflict is reported as unknown_send with the host's reason",
+       "ok": true
+      },
+      {
+       "name": "no run exists and the input was offered exactly once",
+       "ok": true
+      },
+      {
+       "name": "collecting status never resends",
+       "ok": true
+      }
+     ]
+    },
+    {
+     "name": "long transcript, stop and ownership",
+     "intent": "twelve pages are collected across two status calls; stop cancels through the scoped API; another session cannot touch the operation",
+     "checks": [
+      {
+       "name": "stop answers stopping, which is not a claim that the run ended",
+       "ok": true
+      },
+      {
+       "name": "cleanup of a stopping run is refused",
+       "ok": true
+      },
+      {
+       "name": "another session cannot read the operation",
+       "ok": true
+      },
+      {
+       "name": "the first status stops at the page bound and says collection is incomplete",
+       "ok": true
+      },
+      {
+       "name": "the second status finishes all twelve pages and finds the exact final message",
+       "ok": true
+      }
+     ]
+    }
+   ],
+   "environment": {
+    "platform": "win32",
+    "arch": "x64",
+    "os_release": "10.0.26100",
+    "node": "v24.12.0",
+    "python": "3.13.7",
+    "agentcompass_version": "0.3.4",
+    "agentcompass_checkout": "E:\\PROJECTS\\route_manager",
+    "sandbox_root": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-win-sandbox-250877",
+    "scorer": "http://127.0.0.1:9151/v1"
+   },
+   "unit_tests": {
+    "node": {
+     "pass": 14,
+     "fail": 0
+    },
+    "python": {
+     "ran": 8,
+     "ok": true
+    }
+   },
+   "finished_at": "2026-11-03T06:40:07.870Z",
+   "summary": {
+    "operations": 15,
+    "checks": 64,
+    "passed": 64,
+    "failed": 0,
+    "artifacts": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-win-sandbox-250877\\report\\cindy"
+   }
+  }
+ },
+ "summary": {
+  "linux": {
+   "operations": 15,
+   "checks": 64,
+   "passed": 64,
+   "failed": 0,
+   "artifacts": "/run/cindy-sandbox/e2e/report/cindy"
+  },
+  "win32": {
+   "operations": 15,
+   "checks": 64,
+   "passed": 64,
+   "failed": 0,
+   "artifacts": "C:\\Users\\tanwei\\AppData\\Local\\Temp\\cindy-win-sandbox-250877\\report\\cindy"
+  }
+ }
+}

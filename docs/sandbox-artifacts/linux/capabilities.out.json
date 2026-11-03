@@ -1,0 +1,85 @@
+{
+ "results": [
+  {
+   "label": "set missing",
+   "fixture": {
+    "capabilities": "missing"
+   }
+  },
+  {
+   "label": "missing",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": false,
+     "errorCode": "ROUTER_BLOCKED",
+     "message": "UNSUPPORTED: Cindy has no public tasks API. No worker started. Check plugin permissions, task directory and exact account mapping; no automatic retry."
+    }
+   ]
+  },
+  {
+   "label": "set denied",
+   "fixture": {
+    "capabilities": "denied"
+   }
+  },
+  {
+   "label": "denied",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": false,
+     "errorCode": "ROUTER_BLOCKED",
+     "message": "UNSUPPORTED: Cindy has no public tasks API. No worker started. Check plugin permissions, task directory and exact account mapping; no automatic retry."
+    }
+   ]
+  },
+  {
+   "label": "set no-cancel",
+   "fixture": {
+    "capabilities": "no-cancel"
+   }
+  },
+  {
+   "label": "no-cancel",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": false,
+     "errorCode": "ROUTER_BLOCKED",
+     "message": "UNSUPPORTED: Cindy has no public tasks API. No worker started. Check plugin permissions, task directory and exact account mapping; no automatic retry."
+    }
+   ]
+  },
+  {
+   "label": "set no-exact",
+   "fixture": {
+    "capabilities": "no-exact"
+   }
+  },
+  {
+   "label": "no-exact",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-4",
+     "ok": false,
+     "errorCode": "ROUTER_BLOCKED",
+     "message": "UNSUPPORTED: Cindy has no public tasks API. No worker started. Check plugin permissions, task directory and exact account mapping; no automatic retry."
+    }
+   ]
+  }
+ ],
+ "calls": [],
+ "nodeCalls": [],
+ "sent": [],
+ "prepared": null,
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [],
+ "runs": [],
+ "workerStderr": ""
+}

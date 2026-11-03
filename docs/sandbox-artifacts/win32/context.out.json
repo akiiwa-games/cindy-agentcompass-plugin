@@ -1,0 +1,49 @@
+{
+ "results": [
+  {
+   "label": "no context at all",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": false,
+     "errorCode": "ROUTER_BLOCKED",
+     "message": "Host-verified writable local session_context is required; remote/read-only contexts are unsupported. Check plugin permissions, task directory and exact account mapping; no automatic retry."
+    }
+   ]
+  },
+  {
+   "label": "remote workdir",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": false,
+     "errorCode": "ROUTER_BLOCKED",
+     "message": "Host-verified writable local session_context is required; remote/read-only contexts are unsupported. Check plugin permissions, task directory and exact account mapping; no automatic retry."
+    }
+   ]
+  },
+  {
+   "label": "read-only workdir",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": false,
+     "errorCode": "ROUTER_BLOCKED",
+     "message": "Host-verified writable local session_context is required; remote/read-only contexts are unsupported. Check plugin permissions, task directory and exact account mapping; no automatic retry."
+    }
+   ]
+  }
+ ],
+ "calls": [],
+ "nodeCalls": [],
+ "sent": [],
+ "prepared": null,
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [],
+ "runs": [],
+ "workerStderr": ""
+}

@@ -1,0 +1,112 @@
+diff --git a/apps/desktop/src/main/maker-ipc/__tests__/pluginTaskService.test.ts b/apps/desktop/src/main/maker-ipc/__tests__/pluginTaskService.test.ts
+index f517c8a..d76d620 100644
+--- a/apps/desktop/src/main/maker-ipc/__tests__/pluginTaskService.test.ts
++++ b/apps/desktop/src/main/maker-ipc/__tests__/pluginTaskService.test.ts
+@@ -565,6 +565,35 @@ it.each(['completed','failed','cancelled','interrupted'] as const)('prefers a ne
+   }
+ });
+ 
++// Regression: real Windows plugin cancel waited for an active command to finish its writes.
++// Unit tier: invoke the production adapter, retaining unrelated queued input and pending run state.
++it('interrupts an owned active tool without waiting for a graceful safe point', async () => {
++  const f=fixture(),run=await f.send();
++  let commandActive=true;
++  const pending=[{clientId:run.inputMessageId},{clientId:'human-input'}];
++  const snapshot={};
++  const deps={assertPlugin:()=>{},assertCurrent:()=>{},snapshot,
++    getCurrentDbClientSnapshot:()=>snapshot,isPluginTaskAuthorized:()=>true,
++    pluginTaskServiceForCurrentOwner:()=>f.service,PluginTaskError,
++    inputCoordinator:{ensureQueueRestored:async()=>{},isQueueRestored:()=>true,
++      getQueueControlSnapshot:()=>({pendingQueue:[...pending]}),
++      remove:(_id:string,id:string)=>{pending.splice(pending.findIndex(p=>p.clientId===id),1);}},
++    withdrawOwnedSessionInputs,controlOwnedSessionExecution,isSameSessionExecution,
++    awaitAgentInputQueueSnapshotPersistence:async()=>{},
++    withSessionRestartLock:async(_id:string,operation:()=>Promise<void>)=>operation(),
++    readExecution:()=>f.execution,resetAutomaticRecoveryForExplicitStop:()=>{},contextOverflowRolloverHolder:null,
++    maker:{getSession:()=>({abort:async()=>{commandActive=false;}})},
++    sessionControlService:{stopSessionTurn:async()=>({ok:true,status:'waiting-for-safe-point'})}};
++  const source=readFileSync(new URL('../register.ts',import.meta.url),'utf8');
++  const start=source.indexOf('      cancel: async (pluginId, taskId, inputClientIds, execution) => {');
++  const block=source.slice(start+'      cancel: '.length,source.indexOf('\n      },',start)+8);
++  const js=ts.transpileModule('return ('+block+');',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
++  const cancel=new Function(...Object.keys(deps),js)(...Object.values(deps));
++  expect(await cancel('p',run.taskId,[run.inputMessageId],f.execution)).toBe('stopping');
++  expect(commandActive).toBe(false);
++  expect(pending).toEqual([{clientId:'human-input'}]);
++});
++
+ it.each(['restore','restart'] as const)('the production cancel adapter rechecks revoked ownership after %s waits', async point => {
+   const f=fixture(),run=await f.send();
+   let release!:()=>void,entered!:()=>void,restores=0;
+@@ -582,7 +611,7 @@ it.each(['restore','restart'] as const)('the production cancel adapter rechecks
+     awaitAgentInputQueueSnapshotPersistence:async()=>{},
+     withSessionRestartLock:async(_id:string,operation:()=>Promise<void>)=>{if(point==='restart')await pause();await operation();},
+     readExecution:()=>f.execution,resetAutomaticRecoveryForExplicitStop:vi.fn(),contextOverflowRolloverHolder:null,
+-    sessionControlService:{stopSessionTurn:stop}};
++    maker:{getSession:()=>({abort:stop})}};
+   const source=readFileSync(new URL('../register.ts',import.meta.url),'utf8');
+   const start=source.indexOf('      cancel: async (pluginId, taskId, inputClientIds, execution) => {');
+   const block=source.slice(start+'      cancel: '.length,source.indexOf('\n      },',start)+8);
+diff --git a/apps/desktop/src/main/maker-ipc/__tests__/sessionEventPipeline.test.ts b/apps/desktop/src/main/maker-ipc/__tests__/sessionEventPipeline.test.ts
+index c657adc..3fc49c7 100644
+--- a/apps/desktop/src/main/maker-ipc/__tests__/sessionEventPipeline.test.ts
++++ b/apps/desktop/src/main/maker-ipc/__tests__/sessionEventPipeline.test.ts
+@@ -778,17 +778,20 @@ describe('production Session event pipeline', () => {
+       await h.dispose();
+     },
+   );
+-  it.each(['completed', 'failed', 'cancelled', 'interrupted'])(
+-    'preserves the plugin terminal %s before generic failure bookkeeping', async status => {
++  it.each([
++    ...['completed', 'failed', 'cancelled', 'interrupted'].map(status => ({ status, data: { status } })),
++    { status: 'cancelled', data: { type: 'codex/event/task_complete', cancelled: true } },
++  ])(
++    'preserves the plugin terminal $status before generic failure bookkeeping ($data)', async ({ status, data }) => {
+       const h = harness();
+-      h.emit(event('done', { status }, {
++      h.emit(event('done', data, {
+         sessionInstanceId: h.session.instanceId, sessionTurnGeneration: 0,
+       }));
+       await microtasks();
+       expect(h.deps.onPluginTaskTerminal).toHaveBeenCalledWith('task', {
+         instanceId: h.session.instanceId, generation: 0,
+       }, status, undefined);
+-      if (status !== 'completed') {
++      if (status !== 'completed' && 'status' in data) {
+         expect(h.deps.onPluginTaskTerminal.mock.invocationCallOrder[0]).toBeLessThan(
+           h.deps.onUnsuccessfulProductTurn.mock.invocationCallOrder[0],
+         );
+diff --git a/apps/desktop/src/main/maker-ipc/register.ts b/apps/desktop/src/main/maker-ipc/register.ts
+index 95cef63..63626f8 100644
+--- a/apps/desktop/src/main/maker-ipc/register.ts
++++ b/apps/desktop/src/main/maker-ipc/register.ts
+@@ -14430,9 +14430,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions)
+             if (!isSameSessionExecution(readExecution(taskId), execution)) { stopped = true; return; }
+             resetAutomaticRecoveryForExplicitStop(taskId);
+             contextOverflowRolloverHolder?.cancelRecovery(taskId);
+-            const outcome = await sessionControlService.stopSessionTurn({ targetSessionId: taskId });
+-            if (!outcome.ok) throw new PluginTaskError('UNSUPPORTED_CAPABILITY', 'Execution does not support stopping');
+-            stopped = outcome.status === 'no-active-turn';
++            // Scoped cancel must interrupt the owned execution even while a tool is active.
++            // Graceful stop waits for that tool, allowing cancelled commands to finish writes.
++            // Identity was rechecked above with no intervening await; never stop a replacement.
++            const live = maker.getSession(taskId);
++            if (!live) { stopped = true; return; }
++            await live.abort();
+           },
+         });
+         return applied ? (stopped ? 'stale' : 'stopping') : 'stale';
+diff --git a/apps/desktop/src/main/maker-ipc/sessionEventTerminal.ts b/apps/desktop/src/main/maker-ipc/sessionEventTerminal.ts
+index ffcface..602bda8 100644
+--- a/apps/desktop/src/main/maker-ipc/sessionEventTerminal.ts
++++ b/apps/desktop/src/main/maker-ipc/sessionEventTerminal.ts
+@@ -679,7 +679,8 @@ export function finishSessionTerminalEvent(
+       const unsuccessfulBoundary =
+         isTerminalTurnErrorEvent(event) || !isSuccessfulAssistantReplyDoneData(event.data);
+       if (typeof event.sessionTurnGeneration === 'number' && !recoveryOwnsUnsuccessfulBoundary && !autoResumeSuppressesPersist) {
+-        const nativeStatus = (event.data as { status?: unknown } | null)?.status;
++        const nativeData = event.data as { status?: unknown; cancelled?: unknown } | null;
++        const nativeStatus = nativeData?.cancelled === true ? 'cancelled' : nativeData?.status;
+         const outcome = !isTerminalTurnErrorEvent(event)
+           && (nativeStatus === 'cancelled' || nativeStatus === 'interrupted')
+           ? nativeStatus : unsuccessfulBoundary ? 'failed' : 'completed';

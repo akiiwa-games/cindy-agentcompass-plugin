@@ -1,0 +1,284 @@
+{
+ "results": [
+  {
+   "label": "roll",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": true,
+     "result": {
+      "status": "running",
+      "operation": "cde1380e8ac6521e887e57f4437a430bfcc67d96",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "automatic_callback": false,
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "cde1380e8ac6521e887e57f4437a430bfcc67d96"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "label": "finished",
+   "fixture": {
+    "runStatus": "completed",
+    "outputMessageId": "out-final",
+    "pages": 2,
+    "finalRepeat": {
+     "unit": "[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n",
+     "count": 50000
+    }
+   }
+  },
+  {
+   "label": "status",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": true,
+     "result": {
+      "status": "completed",
+      "operation": "cde1380e8ac6521e887e57f4437a430bfcc67d96",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "outputMessageId": "out-final",
+      "output_available": true,
+      "messages_complete": true,
+      "final_result_summary": "[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 line of text 0123456789 abcdefghij\n[Worker final report] 很长的输出 lin",
+      "summary_shortened": true,
+      "full_result_artifacts": [
+       "/run/cindy-sandbox/e2e/home/.agent-compass/cindy-plugin/cde1380e8ac6521e887e57f4437a430bfcc67d96/messages-4371e57aab79ecc7.json",
+       "/run/cindy-sandbox/e2e/home/.agent-compass/cindy-plugin/cde1380e8ac6521e887e57f4437a430bfcc67d96/messages-ecc596d0cea8f061.json"
+      ],
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "cde1380e8ac6521e887e57f4437a430bfcc67d96"
+       }
+      },
+      "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
+     }
+    }
+   ]
+  },
+  {
+   "label": "cleanup",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": true,
+     "result": {
+      "status": "cleaned",
+      "operation": "cde1380e8ac6521e887e57f4437a430bfcc67d96"
+     }
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "create",
+   "requestKey": "cde1380e8ac6521e887e57f4437a430bfcc67d96:create",
+   "route": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  {
+   "name": "send",
+   "taskId": "task-1",
+   "expectedRevision": 1,
+   "requestKey": "cde1380e8ac6521e887e57f4437a430bfcc67d96:send",
+   "chars": 1190
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "readMessages",
+   "after": null
+  },
+  {
+   "name": "readMessages",
+   "after": "1"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "archive",
+   "taskId": "task-1"
+  }
+ ],
+ "nodeCalls": [
+  "prepare",
+  "save",
+  "save",
+  "save",
+  "load",
+  "output",
+  "save",
+  "output",
+  "save",
+  "save",
+  "load",
+  "save"
+ ],
+ "sent": [
+  {
+   "runId": "run-1",
+   "file": "/run/cindy-sandbox/e2e/report/cindy/cindy-sent-run-1.txt",
+   "sha256": "def3027bb19262f2a6400d6b639d292f0e22b0f50a2be6a942acfc5160ee8f43",
+   "chars": 1190
+  }
+ ],
+ "prepared": {
+  "operation": "cde1380e8ac6521e887e57f4437a430bfcc67d96",
+  "parent": "cindy-session-1",
+  "state": "running",
+  "router": {
+   "stage": "roll",
+   "route": {
+    "choice": "sol_high",
+    "bundle": {
+     "provider": "codex",
+     "harness": "codex",
+     "account": "codex",
+     "model": "gpt-6.1-sol",
+     "effort": "high"
+    },
+    "reason": "sol_high (start) scored 0.3136; value/cost exchange 0.012 score per displaced USD ($83.33 displaced USD per score point)",
+    "alerts": [
+     "No usage data is available (the collector has not produced a snapshot), so quota-aware ranking is running blind and the pick is a default, not a measured choice. Run `python -X utf8 /run/cindy-sandbox/AgentCompass/agentcompass setup` to detect the CLIs you are signed in to and start usage collection."
+    ]
+   },
+   "parent_id": "cindy-session-1",
+   "parent_host": "native",
+   "parent_address": "cindy-session-1",
+   "assumptions": [
+    "--hours not given: budgeted 0.5h from the classifier estimate, confidence medium; an estimate, not a measurement. Pass --hours for a large or unusually small task."
+   ],
+   "worker_prompt_file": "/run/cindy-sandbox/e2e/state/worker-prompts/c23fc687-e8b0-41bd-83ab-717750fa9405.md",
+   "launched": false,
+   "dispatch_mode": "native",
+   "caller_action": "launch_with_native_host_tool",
+   "next": "Launch the native host worker with exactly route.bundle and the contents of worker_prompt_file as --spec (not the filename). First verify that the host can reproduce the routed provider/account/model/effort; otherwise reroute. Preserve the live coordinator inbox, parent session ID and injected worker preamble; do not switch hosts.",
+   "status": "native"
+  },
+  "bundle": {
+   "provider": "codex",
+   "harness": "codex",
+   "account": "codex",
+   "model": "gpt-6.1-sol",
+   "effort": "high",
+   "modeId": "full-access"
+  },
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [740c7330]\nFIXTURE-SCENARIO: ok oversize\n\n\n---\n\n# Worker 通信与汇报契约\n\n1. **直接执行**：你是受派 worker，直接动手完成任务，禁止再派子 agent（除非任务书明确任命你为协调者）。\n2. **向主会话提问**：需澄清、决策或补信息时，用真实消息工具发给下方 `Parent session agent ID`（Paseo 用 `send_agent_prompt`，设 `background: true, notifyOnFinish: false`；其他宿主用其消息工具发往 `Parent message address`），发后结束本轮，不同步阻塞等待。严禁调用 `request_user_input_async`、`request_user_input`、`AskUserQuestion`、`ask_user_question` 等本地交互提问工具。\n3. **完成汇报 `[Worker final report]`**：结束本轮（done / failed / blocked）前，有消息工具的 worker 必须用同一通道向主会话发送 `[Worker final report]`（含结论、验证、提交/产物路径与剩余阻塞项）并检查发送结果，同时在最终回复保留完整报告；无消息工具的 worker（如 agy / CLI）在最终回复写完整报告。若无消息通道或发送失败，在最终回复中写明 `BLOCKED / needs_input`、具体问题与发送失败原因并结束本轮，切勿声称已送达。\n\n\nParent session agent ID: `cindy-session-1`.\nParent host: `native`. Parent message address: `cindy-session-1`.\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "directory": "/run/cindy-sandbox/e2e/work dir",
+  "mappings": [
+   {
+    "routerProvider": "codex",
+    "routerAccount": "codex",
+    "providerId": "codex",
+    "agentKind": "codex"
+   },
+   {
+    "routerProvider": "claude",
+    "routerAccount": "claude",
+    "providerId": "claude",
+    "agentKind": "cc"
+   }
+  ],
+  "route": {
+   "agentKind": "codex",
+   "providerId": "codex",
+   "model": "gpt-6.1-sol",
+   "effort": "high",
+   "fastMode": false
+  },
+  "createRequest": {
+   "requestKey": "cde1380e8ac6521e887e57f4437a430bfcc67d96:create",
+   "title": "AgentCompass cde1380e8ac6",
+   "route": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  "taskId": "task-1",
+  "sendRequest": {
+   "taskId": "task-1",
+   "expectedRevision": 1,
+   "requestKey": "cde1380e8ac6521e887e57f4437a430bfcc67d96:send",
+   "text": "Rename the helper foo to bar in util.py and update its two callers. [740c7330]\nFIXTURE-SCENARIO: ok oversize\n\n\n---\n\n# Worker 通信与汇报契约\n\n1. **直接执行**：你是受派 worker，直接动手完成任务，禁止再派子 agent（除非任务书明确任命你为协调者）。\n2. **向主会话提问**：需澄清、决策或补信息时，用真实消息工具发给下方 `Parent session agent ID`（Paseo 用 `send_agent_prompt`，设 `background: true, notifyOnFinish: false`；其他宿主用其消息工具发往 `Parent message address`），发后结束本轮，不同步阻塞等待。严禁调用 `request_user_input_async`、`request_user_input`、`AskUserQuestion`、`ask_user_question` 等本地交互提问工具。\n3. **完成汇报 `[Worker final report]`**：结束本轮（done / failed / blocked）前，有消息工具的 worker 必须用同一通道向主会话发送 `[Worker final report]`（含结论、验证、提交/产物路径与剩余阻塞项）并检查发送结果，同时在最终回复保留完整报告；无消息工具的 worker（如 agy / CLI）在最终回复写完整报告。若无消息通道或发送失败，在最终回复中写明 `BLOCKED / needs_input`、具体问题与发送失败原因并结束本轮，切勿声称已送达。\n\n\nParent session agent ID: `cindy-session-1`.\nParent host: `native`. Parent message address: `cindy-session-1`.\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
+  },
+  "runId": "run-1"
+ },
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [
+  {
+   "taskId": "task-1",
+   "revision": 2,
+   "resolvedConfig": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions",
+   "planModeEnabled": false,
+   "workingDir": "/run/cindy-sandbox/e2e/work dir",
+   "archived": true
+  }
+ ],
+ "runs": [
+  {
+   "runId": "run-1",
+   "taskId": "task-1",
+   "status": "completed",
+   "acceptedConfig": {
+    "agentKind": "codex",
+    "providerId": "codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "fastMode": false
+   },
+   "outputMessageId": "out-final"
+  }
+ ],
+ "workerStderr": ""
+}
