@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/profiler-core.js at 3c732bbf2924c09b5500aa2e90607f8c57ed2e25 (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/profiler-core.js at b8d64fccc8f7fd242ae61c7b4c83cfd8706ae45e (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate rather than edit.
 /**
  * Multi-Protocol Request Extractor & Deterministic 10-Field Task Profiler
@@ -103,6 +103,13 @@ const OBJECTIVE_LOCAL_RUNTIME_RE =
 const LOCAL_MACHINE_RE =
   /(?:[A-Za-z]:[\\/]|~\/|\\\\)|\b(?:working tree|git checkout|local repo|this repo|local daemon|local git)\b/i;
 
+const MULTI_TASK_MARK_RE =
+  /(?:^|\n)\s*(?:#{1,4}\s*)?(?:task|deliverable|part|module|workstream|任务|交付物|模块|工作线)\s*(?:[1-9a-d]|[一二三四五六])\s*[.:：\-—]/gi;
+
+export function multiTaskMarks(objective) {
+  return String(objective || "").match(MULTI_TASK_MARK_RE) || [];
+}
+
 const COUPLED_SIGNALS = [
   "cross-module",
   "multi-module",
@@ -138,136 +145,6 @@ const FRONTIER_SIGNALS = [
   "数学推导",
   "定理推导",
 ];
-
-/**
- * Extract text and visual indicators from an arbitrary message content payload
- * across OpenAI Chat, OpenAI Responses, Anthropic Messages, and Gemini GenerateContent.
- */
-function extractPartContent(content) {
-  let text = "";
-  let hasImage = false;
-  if (typeof content === "string") {
-    return { text: content, hasImage: false };
-  }
-  if (!Array.isArray(content)) {
-    return { text: "", hasImage: false };
-  }
-  for (const part of content) {
-    if (!part || typeof part !== "object") continue;
-    const type = String(part.type || "").toLowerCase();
-    if (
-      type === "image" ||
-      type === "image_url" ||
-      type === "input_image" ||
-      part.inlineData ||
-      part.inline_data ||
-      part.fileData ||
-      part.file_data
-    ) {
-      hasImage = true;
-    }
-    if (typeof part.text === "string") {
-      text += (text ? "\n" : "") + part.text;
-    } else if (typeof part.input_text === "string") {
-      text += (text ? "\n" : "") + part.input_text;
-    } else if (typeof part.content === "string") {
-      text += (text ? "\n" : "") + part.content;
-    }
-  }
-  return { text, hasImage };
-}
-
-/**
- * Parse a Magpie request body (`chat`, `responses`, `anthropic`, or `gemini`)
- * into a normalized routing evidence envelope.
- */
-export function extractRequestFacts(body, ctx = {}) {
-  if (!body || typeof body !== "object") {
-    return {
-      model: "",
-      objective: "",
-      previousUser: "",
-      systemText: "",
-      hasVisualInput: false,
-      isToolFollowup: false,
-      toolCount: 0,
-      estimatedTokens: 0,
-      agent: ctx?.agent || "",
-      protocol: ctx?.protocol || "",
-    };
-  }
-
-  const model = typeof body.model === "string" ? body.model : "";
-  let systemText = "";
-  if (typeof body.system === "string") {
-    systemText = body.system;
-  } else if (Array.isArray(body.system)) {
-    systemText = extractPartContent(body.system).text;
-  } else if (typeof body.instructions === "string") {
-    systemText = body.instructions;
-  } else if (body.systemInstruction?.parts) {
-    systemText = extractPartContent(body.systemInstruction.parts).text;
-  }
-
-  const rawMessages = Array.isArray(body.messages)
-    ? body.messages
-    : Array.isArray(body.input)
-      ? body.input
-      : Array.isArray(body.contents)
-        ? body.contents
-        : typeof body.input === "string"
-          ? [{ role: "user", content: body.input }]
-          : [];
-
-  let latestUserText = "";
-  let previousUserText = "";
-  let hasVisualInput = false;
-  let isToolFollowup = false;
-  let totalChars = systemText.length;
-
-  for (let i = 0; i < rawMessages.length; i++) {
-    const msg = rawMessages[i];
-    if (!msg || typeof msg !== "object") continue;
-    const role = String(msg.role || msg.type || "").toLowerCase();
-    const rawContent = msg.content ?? msg.parts ?? (typeof msg.text === "string" ? msg.text : "");
-    const { text, hasImage } = extractPartContent(rawContent);
-    totalChars += text.length;
-    if (hasImage) hasVisualInput = true;
-
-    if (i === rawMessages.length - 1) {
-      if (
-        role === "tool" ||
-        role === "function_call_output" ||
-        (Array.isArray(rawContent) &&
-          rawContent.some((p) => p && (p.type === "tool_result" || p.type === "function_call_output" || p.functionResponse)))
-      ) {
-        isToolFollowup = true;
-      }
-    }
-
-    if (role === "user" && text.trim()) {
-      previousUserText = latestUserText;
-      latestUserText = text.trim();
-    } else if (role === "developer" && !systemText && text.trim()) {
-      systemText = text.trim();
-    }
-  }
-
-  const tools = Array.isArray(body.tools) ? body.tools : [];
-
-  return {
-    model,
-    objective: latestUserText,
-    previousUser: previousUserText,
-    systemText: systemText.slice(0, 2000),
-    hasVisualInput,
-    isToolFollowup,
-    toolCount: tools.length,
-    estimatedTokens: Math.ceil(totalChars / 4),
-    agent: ctx?.agent || "",
-    protocol: ctx?.protocol || "",
-  };
-}
 
 export function inferKindFromObjective(objective) {
   const text = ` ${String(objective || "").toLowerCase()} `;
@@ -517,7 +394,27 @@ export function inferDivergence(objective, kind = null, style = null) {
   if (DIVERGENT_WORDS.some((w) => text.includes(w))) {
     return 3;
   }
-  if (text.includes("intermittent") || text.includes("unknown cause") || text.includes("hypothes") || text.includes("偶发") || text.includes("未知根因")) {
+  if (
+    [
+      "intermittent",
+      "unknown cause",
+      "hypothes",
+      "race condition",
+      "deadlock",
+      "root cause",
+      "root-cause",
+      "memory leak",
+      "security audit",
+      "invariant audit",
+      "偶发",
+      "未知根因",
+      "死锁",
+      "竞态",
+      "根因",
+      "安全审计",
+      "内存泄漏",
+    ].some((w) => text.includes(w))
+  ) {
     return 2;
   }
   return 1;
@@ -534,7 +431,7 @@ export function inferReasoningDepth(objective, kind, explicitDifficulty = null) 
   if (COUPLED_SIGNALS.some((w) => text.includes(w)) || kind === "complex_build_plan" || kind === "direction_reasoning") {
     return 3;
   }
-  if (HARD_BY_DEFAULT.includes(kind)) {
+  if (HARD_BY_DEFAULT.includes(kind) || kind === "self_contained_code") {
     return 2;
   }
   return 1;
@@ -625,7 +522,23 @@ export function inferTaskProfile(task = {}, routes = CANONICAL_ROUTES) {
   const localOnly =
     needs.local_only !== undefined ? Boolean(needs.local_only) : Boolean(localHit || implies.local_only);
 
-  const expectedHours = depth === 1 ? 0.25 : depth === 2 ? 0.8 : depth === 3 ? 2.0 : 3.5;
+  const expectedHours =
+    Number.isFinite(Number(task.expected_hours ?? task.hours)) && Number(task.expected_hours ?? task.hours) > 0
+      ? Number(task.expected_hours ?? task.hours)
+      : depth === 1
+        ? 0.4
+        : depth === 2
+          ? 1.0
+          : depth === 3
+            ? 2.0
+            : 3.5;
+
+  const marks = multiTaskMarks(objective);
+  const multiTask =
+    task.multi_task !== undefined ? Boolean(task.multi_task) : marks.length >= 2;
+  const taskCount =
+    task.task_count ||
+    (!multiTask ? "1" : marks.length === 2 ? "2" : marks.length === 3 ? "3" : ">3");
 
   return validateProfile({
     work_kind: kind,
@@ -643,8 +556,8 @@ export function inferTaskProfile(task = {}, routes = CANONICAL_ROUTES) {
     hours_confidence: "medium",
     urgency: "unknown",
     reason: `deterministic profile: work_kind=${kind}, depth=${depth}, code=${code}, scale=${context}, div=${divergence}`,
-    multi_task: false,
-    task_count: "1",
+    multi_task: multiTask,
+    task_count: taskCount,
   });
 }
 
