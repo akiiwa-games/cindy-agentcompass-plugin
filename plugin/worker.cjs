@@ -111,8 +111,8 @@ function contract(result, ctx, task) {
   if (modeId!==MODES[harness]) throw Error('Cindy cannot reproduce '+harness+' permission mode '+JSON.stringify(modeId)+'; reroute, an explicitly restricted route is not widened.');
   // The external router writes its worker prompt to a file; the built-in engine sends the assignment unchanged.
   let prompt;
-  if (result.worker_prompt_file) prompt=fs.readFileSync(result.worker_prompt_file,'utf8');
-  else if (result.engine==='builtin') prompt=task;
+  if (result.engine==='builtin') prompt=task;
+  else if (result.worker_prompt_file) prompt=fs.readFileSync(result.worker_prompt_file,'utf8');
   else throw Error('Router returned no worker prompt file');
   return {bundle:{...bundle,harness,modeId},prompt:prompt+RETURN_CHANNEL};
 }

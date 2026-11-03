@@ -8,7 +8,11 @@
   const REJECTED = new Set(['REVISION_CONFLICT','TASK_BUSY','INVALID_REQUEST','INVALID_ATTACHMENTS','PERMISSION_DENIED',
     'ROUTE_UNAVAILABLE','NOT_FOUND','TASK_NOT_FOUND','UNSUPPORTED_CAPABILITY','INVALID_INVOCATION']);
   const sameRoute = (a,b) => ['agentKind','providerId','model','effort','fastMode'].every(k=>a?.[k]===b?.[k]);
-  const text = content => typeof content==='string' ? content : JSON.stringify(content ?? '');
+  const text = content => typeof content==='string' ? content :
+    Array.isArray(content) ? content.map(part=>typeof part==='string' ? part :
+      typeof part?.text==='string' ? part.text : typeof part?.input_text==='string' ? part.input_text :
+      typeof part?.content==='string' ? part.content : JSON.stringify(part ?? '')).join('') :
+    typeof content?.text==='string' ? content.text : JSON.stringify(content ?? '');
   const pause = ms => new Promise(resolve=>typeof setTimeout==='function' ? setTimeout(resolve,ms) : resolve());
   // Calls of one key run one at a time; different keys never wait for each other.
   const locks = new Map();

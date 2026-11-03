@@ -56,7 +56,7 @@ function fixture(options={}) {
         const index=request.after ? Number(request.after.slice('page-'.length)) : 0;
         const last=index>=host.pages-1;
         const items=index===0 ? [{id:'plugin-task:run-1',role:'user',content:host.input},{id:'unrelated',role:'assistant',content:'wrong output'}] :
-          [{id:last ? 'out-exact' : 'noise-'+index,role:'assistant',content:last ? '[Worker final report] '+'实'.repeat(6000) : 'page '+index}];
+          [{id:last ? 'out-exact' : 'noise-'+index,role:'assistant',content:last ? (host.output ?? '[Worker final report] '+'实'.repeat(6000)) : 'page '+index}];
         return {items,nextCursor:last ? null : 'page-'+(index+1)};
       },
       cancel:async request=>{calls.push(['cancel',request]);run.status=options.cancelTo || 'stopping';return structuredClone(run);},
@@ -65,7 +65,7 @@ function fixture(options={}) {
     onHostMessage:callback=>{handler=callback;},
     send:message=>{messages.push(message);waiters.get(message.callId)?.(message);}
   };
-  vm.runInNewContext(source,{cindy,Set,Boolean,Error,JSON});
+  vm.runInNewContext(source,{cindy,Set,Boolean,Error,JSON,Array});
   const send=(tool,args={},context=ctx)=>new Promise(resolve=>{
     const callId='call-'+(++serial);waiters.set(callId,resolve);
     handler({type:'tool-call',tool,callId,args:{...args,session_context:context}});
@@ -348,6 +348,15 @@ test('review 2: a run on the same route is claimed only when its input message i
   const op=(await two.send('roll',{task:'x'})).result.operation;
   assert.equal((await two.send('status',{operation:op})).result.runId,'run-1');
   assert.equal(two.count('send'),1);
+  // Structured content blocks ([{type:'text',text:...}]) with newlines reconcile and summarize as plain text.
+  const structured=fixture({uncertain:true});
+  structured.host.input=[{type:'text',text:'prefix\n'+PROMPT}];
+  structured.run.status='completed';structured.run.outputMessageId='out-exact';
+  structured.host.output=[{type:'text',text:'[Worker final report]\nstructured answer'}];
+  const sop=(await structured.send('roll',{task:'x'})).result.operation;
+  const sres=(await structured.send('status',{operation:sop})).result;
+  assert.equal(sres.runId,'run-1');
+  assert.equal(sres.final_result_summary,'[Worker final report]\nstructured answer');
 });
 test('review 3: cleanup refuses unconfirmed receipts and tasks with any active run, even without a runId',async()=>{
   const lostCreate=fixture();lostCreate.cindy.tasks.create=async()=>{throw Error('transport lost');};

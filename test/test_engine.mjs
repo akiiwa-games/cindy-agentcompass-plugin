@@ -101,6 +101,10 @@ test('quota telemetry is the newest rate-limit snapshot the Codex CLI wrote; res
     assert.deepEqual([seen.status, seen.used_percent, seen.plan], ['exhausted', 96, 'pro']);
     fs.writeFileSync(path.join(day, 'rollout-a.jsonl'), line(96, now / 1000 - 1) + '\n');
     assert.equal(codexQuota({CODEX_HOME: home}, now).status, 'unknown', 'that window has reset');
+    // Large multi-hundred-KB rollout log reads only the bounded tail and still extracts the trailing rate_limits snapshot.
+    const padding = JSON.stringify({type: 'event_msg', payload: {type: 'tool_output', text: 'x'.repeat(4096)}}) + '\n';
+    fs.writeFileSync(path.join(day, 'rollout-a.jsonl'), padding.repeat(80) + line(42, now / 1000 + 600) + '\n');
+    assert.equal(codexQuota({CODEX_HOME: home}, now).used_percent, 42);
   } finally {fs.rmSync(home, {recursive: true, force: true});}
 });
 
@@ -128,7 +132,28 @@ test("with no CODEX_HOME the telemetry Cindy's own Codex writes (<app data>/Cind
       "only Cindy's Codex has run: its snapshot is the quota");
     write(homes[0], 70, 60000);
     assert.equal(codexQuota(env, now, homes).used_percent, 22, 'the newer session wins whichever home it is in');
+    // When ~/.codex is signed into a different account than CindyGlobal/codex-home, ~/.codex is ignored even if newer.
+    fs.writeFileSync(path.join(homes[0], 'auth.json'), JSON.stringify({tokens: {account_id: 'standalone-acct'}}));
+    fs.writeFileSync(path.join(homes[1], 'auth.json'), JSON.stringify({tokens: {account_id: 'cindy-acct'}}));
+    write(homes[0], 99, 100);
+    assert.equal(codexQuota(env, now, homes).used_percent, 22, 'foreign standalone account does not override Cindy codex-home');
   } finally {fs.rmSync(home, {recursive: true, force: true});}
+});
+
+test('screenshot review classifies as visual_analysis (not GUI computer_use), and multi-Codex catalogs isolate unbound quota', () => {
+  const visual = route('Compare screenshots of the login dialog and inspect the screenshot for layout misalignment.');
+  assert.equal(visual.decision.work_kind, 'visual_analysis');
+  assert.equal(visual.decision.profile.needs_visual, true);
+  assert.equal(visual.decision.profile.needs_gui, false);
+
+  const multiCodex = {models: [
+    {route: {agentKind: 'codex', providerId: 'openai-a', model: 'gpt-6.1-sol', effort: 'high', fastMode: false}, efforts: ['high'], supportsFastMode: true},
+    {route: {agentKind: 'codex', providerId: 'openai-b', model: 'gpt-6.1-sol', effort: 'high', fastMode: false}, efforts: ['high'], supportsFastMode: true},
+  ]};
+  const unbound = routeTask('Use fast mode: rename foo to bar in util.py.', multiCodex, {quota: {source: 'test', status: 'exhausted', used_percent: 98}});
+  assert.equal(unbound.decision.quota_penalized_routes, 0, 'unbound single-home snapshot is not applied across multiple Codex connections');
+  const bound = routeTask('Rename foo to bar in util.py.', multiCodex, {quota: {source: 'test', status: 'exhausted', used_percent: 98, providerId: 'openai-a'}});
+  assert.equal(bound.route.bundle.providerId, 'openai-b', 'bound snapshot penalizes only its matching providerId');
 });
 
 test('nothing runnable: an empty or foreign catalog is blocked, never guessed', () => {

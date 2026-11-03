@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/profiler-core.js at e98a82287ee1793ae559c8a0fed188e5d1c69ef1 (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/profiler-core.js at dcca04c7946a4e86c4c9dfa986f158fef83458af (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate rather than edit.
 /**
  * Multi-Protocol Request Extractor & Deterministic 10-Field Task Profiler
@@ -81,7 +81,8 @@ export const READONLY_REVIEW_PHRASES = [
 export const GUI_WORDS = [
   "click the",
   "click save",
-  "screenshot",
+  "take a screenshot",
+  "capture a screenshot",
   " gui",
   "desktop app",
   "mouse",
@@ -89,7 +90,8 @@ export const GUI_WORDS = [
   "operate the browser",
   "operate the desktop",
   "点击",
-  "截图",
+  "截取屏幕",
+  "截屏操作",
   "桌面",
   "鼠标",
   "键盘",
@@ -249,9 +251,14 @@ export function inferKindFromObjective(objective) {
         "design diff",
         "inspect screenshot",
         "compare screenshot",
+        "compare screenshots",
         "inspect the image",
         "inspect the screenshot",
+        "inspect the supplied screenshot",
         "compare the screenshots",
+        "layout misalignment",
+        "screenshot review",
+        "ui screenshot",
         "design inspection",
         "视觉对比",
         "截图对比",

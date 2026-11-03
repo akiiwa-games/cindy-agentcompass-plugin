@@ -59,6 +59,18 @@ export function codexHomes(env = process.env, home = os.homedir()) {
   return [path.join(home, '.codex'), ...['CindyGlobal', 'Cindy'].map(product => path.join(appData, product, 'codex-home'))];
 }
 
+const QUOTA_TAIL_BYTES = 256 * 1024;
+let quotaCache = {key: '', limits: null};
+
+function codexAccount(home) {
+  try {
+    const auth = JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8'));
+    return auth?.tokens?.account_id || auth?.account_id || auth?.email || auth?.user?.email || null;
+  } catch {
+    return null;
+  }
+}
+
 function newestSession(home) {
   let newest = null;
   try {
@@ -66,8 +78,8 @@ function newestSession(home) {
     const desc = dir => fs.readdirSync(dir).filter(n => /^\d+$/.test(n)).sort().reverse().map(n => path.join(dir, n));
     outer: for (const year of desc(path.join(home, 'sessions'))) for (const month of desc(year)) for (const day of desc(month)) {
       for (const name of fs.readdirSync(day).filter(n => n.endsWith('.jsonl'))) {
-        const file = path.join(day, name), mtime = fs.statSync(file).mtimeMs;
-        if (!newest || mtime > newest.mtime) newest = {file, mtime};
+        const file = path.join(day, name), stat = fs.statSync(file);
+        if (!newest || stat.mtimeMs > newest.mtime) newest = {file, mtime: stat.mtimeMs, size: stat.size, home};
       }
       if (newest) break outer;
     }
@@ -75,25 +87,52 @@ function newestSession(home) {
   return newest;
 }
 
-export function codexQuota(env = process.env, now = Date.now(), homes = codexHomes(env)) {
-  const newest = homes.map(newestSession).filter(Boolean).sort((a, b) => b.mtime - a.mtime)[0];
-  if (!newest) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'no Codex session log'};
-  const text = fs.readFileSync(newest.file, 'utf8');
-  const at = text.lastIndexOf('"rate_limits"');
-  if (at < 0) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'no rate-limit snapshot in the newest session'};
-  const line = text.slice(text.lastIndexOf('\n', at) + 1, (text.indexOf('\n', at) + 1 || text.length + 1) - 1);
-  let limits;
+function readTail(file, size, maxBytes = QUOTA_TAIL_BYTES) {
+  const fd = fs.openSync(file, 'r');
   try {
-    const row = JSON.parse(line);
-    limits = row.payload?.rate_limits || row.rate_limits || row.msg?.rate_limits;
-  } catch {}
+    const length = Math.min(size, maxBytes);
+    const offset = Math.max(0, size - length);
+    const buf = Buffer.allocUnsafe(length);
+    const bytesRead = fs.readSync(fd, buf, 0, length, offset);
+    const text = buf.subarray(0, bytesRead).toString('utf8');
+    return offset > 0 ? text.slice(text.indexOf('\n') + 1) : text;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+export function codexQuota(env = process.env, now = Date.now(), homes = codexHomes(env)) {
+  const accounts = new Map(homes.map(h => [h, codexAccount(h)]));
+  const cindyAccount = homes.slice(1).map(h => accounts.get(h)).find(Boolean) || null;
+  // A standalone ~/.codex logged into a different account than Cindy's managed codex-home must not drive Cindy routing.
+  const eligible = cindyAccount ? homes.filter((h, i) => i > 0 || !accounts.get(h) || accounts.get(h) === cindyAccount) : homes;
+  const newest = eligible.map(newestSession).filter(Boolean).sort((a, b) => b.mtime - a.mtime)[0];
+  if (!newest) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'no Codex session log'};
+  const cacheKey = `${newest.file}:${newest.mtime}:${newest.size}`;
+  let limits = quotaCache.key === cacheKey ? quotaCache.limits : undefined;
+  if (limits === undefined) {
+    const text = readTail(newest.file, newest.size);
+    const at = text.lastIndexOf('"rate_limits"');
+    limits = null;
+    if (at >= 0) {
+      const line = text.slice(text.lastIndexOf('\n', at) + 1, (text.indexOf('\n', at) + 1 || text.length + 1) - 1);
+      try {
+        const row = JSON.parse(line);
+        limits = row.payload?.rate_limits || row.rate_limits || row.msg?.rate_limits || null;
+      } catch {}
+    }
+    quotaCache = {key: cacheKey, limits};
+  }
+  if (!limits) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'no rate-limit snapshot in the newest session'};
   const windows = ['primary', 'secondary'].map(k => limits?.[k]).filter(w => w && Number.isFinite(w.used_percent))
     // A window that has already reset says nothing about now.
     .filter(w => !w.resets_at || w.resets_at * 1000 > now);
   if (!windows.length) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'snapshot windows have reset', file: newest.file};
   const used = Math.max(...windows.map(w => w.used_percent));
+  const account = accounts.get(newest.home) || null;
   return {source: 'codex-cli-sessions', status: used >= 95 ? 'exhausted' : used >= 80 ? 'high' : 'ok', used_percent: used,
-    observed_at: new Date(newest.mtime).toISOString(), plan: limits.plan_type || null, file: newest.file};
+    observed_at: new Date(newest.mtime).toISOString(), plan: limits.plan_type || null, file: newest.file,
+    ...(account ? {account} : {})};
 }
 
 // ---- routing -------------------------------------------------------------------------------------------------------
@@ -122,9 +161,11 @@ export function routeTask(task, catalog, {env = process.env, now = Date.now(), q
   if (!rows.length) return {status: 'blocked', engine: 'builtin',
     error: 'Cindy reports no Claude, Codex or Pi model. Sign in to one in Cindy, then roll again; nothing was started.'};
   const codex = quota || codexQuota(env, now);
-  // Connections the Codex CLI's telemetry describes: those Cindy runs Codex on (Pi shares them through the same login).
+  // Connections the Codex CLI's telemetry describes: only an explicitly matched providerId, or the sole Codex connection.
   const codexProviders = new Set(rows.filter(r => r.route.agentKind === 'codex').map(r => r.route.providerId));
-  const usage = row => codexProviders.has(row.route.providerId) && codex.status !== 'unknown' ? codex : null;
+  const matchesCodex = providerId => codexProviders.has(providerId) &&
+    (codex.providerId ? providerId === codex.providerId : codexProviders.size === 1);
+  const usage = row => matchesCodex(row.route.providerId) && codex.status !== 'unknown' ? codex : null;
 
   const pool = new Map();
   for (const row of rows) {
