@@ -298,6 +298,21 @@ test('stop waits a bounded time for the host: stopping is reported as such, a co
   assert.deepEqual([pollStopped.result.status,pollStopped.result.confirmed_terminal,pollStopped.result.task_id,pollStopped.result.run_id,pollStopped.result.next_tool.tool],
     ['stopping',false,'child-task','run-1','status']);
   assert.equal(pollFail.records.get(pop).state,'stopping');
+  // If tasks.cancel() or tasks.archive() loses its reply, return known handles, executed: 'unknown', and status verification.
+  const cancelLost=fixture();const clop=(await cancelLost.send('roll',{task:'x'})).result.operation;
+  cancelLost.cindy.tasks.cancel=async()=>{cancelLost.run.status='stopping';throw Error('cancel reply lost');};
+  const cancelUnknown=await cancelLost.send('stop',{operation:clop});
+  assert.equal(cancelUnknown.ok,true);
+  assert.deepEqual([cancelUnknown.result.status,cancelUnknown.result.executed,cancelUnknown.result.confirmed_terminal,cancelUnknown.result.task_id,cancelUnknown.result.run_id,cancelUnknown.result.next_tool.tool],
+    ['unknown_cancel','unknown',false,'child-task','run-1','status']);
+  const archiveLost=fixture();const alop=(await archiveLost.send('roll',{task:'x'})).result.operation;
+  archiveLost.run.status='completed';archiveLost.run.outputMessageId='out-exact';
+  await archiveLost.send('status',{operation:alop});
+  archiveLost.cindy.tasks.archive=async()=>{throw Error('archive reply lost');};
+  const archiveUnknown=await archiveLost.send('cleanup',{operation:alop});
+  assert.equal(archiveUnknown.ok,true);
+  assert.deepEqual([archiveUnknown.result.status,archiveUnknown.result.executed,archiveUnknown.result.archived,archiveUnknown.result.task_id,archiveUnknown.result.run_id,archiveUnknown.result.next_tool.tool],
+    ['unknown_archive','unknown','unknown','child-task','run-1','status']);
 });
 
 // ---- regressions from the PR #274 review (Greptile and Codex)

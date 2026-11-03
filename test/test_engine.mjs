@@ -43,6 +43,10 @@ test('self: an explicit "answer here" or a short pure question is the current se
     assert.match(result.next_action, /current session/);
   }
   assert.equal(selfGate('Why does util.py fail? Fix it and add a test.'), null, 'a question with work in it is delegated');
+  for (const workQuestion of ['Can you review the diff for regressions?', 'Can you translate the supplied paragraph into Japanese?']) {
+    assert.equal(selfGate(workQuestion), null, workQuestion);
+    assert.equal(route(workQuestion).status, 'native', workQuestion);
+  }
 });
 
 test('native routes are exact rows of the real catalog: codex for edits, Pi for read-and-report work', () => {
@@ -159,6 +163,11 @@ test('screenshot review classifies as visual_analysis (not GUI computer_use), mu
   const emptyEffort = route('Rename foo to bar in util.py.', emptyEffortCatalog);
   assert.equal(emptyEffort.status, 'native');
   assert.equal(emptyEffort.route.bundle.effort, '', 'preserves empty effort on launch route');
+
+  const sparkOnlyCatalog = {models: [REAL.models.at(-1)]};
+  const sparkAlgo = route('Implement a standalone algorithm.', sparkOnlyCatalog);
+  assert.equal(sparkAlgo.status, 'native', 'all host-offered efforts are ranked when static alias efforts do not overlap');
+  assert.equal(sparkAlgo.route.bundle.effort, 'xhigh');
 });
 
 test('nothing runnable: an empty or foreign catalog is blocked, never guessed', () => {
