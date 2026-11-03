@@ -308,11 +308,30 @@ test('stop waits a bounded time for the host: stopping is reported as such, a co
   const archiveLost=fixture();const alop=(await archiveLost.send('roll',{task:'x'})).result.operation;
   archiveLost.run.status='completed';archiveLost.run.outputMessageId='out-exact';
   await archiveLost.send('status',{operation:alop});
-  archiveLost.cindy.tasks.archive=async()=>{throw Error('archive reply lost');};
+  archiveLost.cindy.tasks.archive=async()=>{archiveLost.calls.push(['archive',{taskId:'child-task'}]);throw Error('archive reply lost');};
   const archiveUnknown=await archiveLost.send('cleanup',{operation:alop});
   assert.equal(archiveUnknown.ok,true);
   assert.deepEqual([archiveUnknown.result.status,archiveUnknown.result.executed,archiveUnknown.result.archived,archiveUnknown.result.task_id,archiveUnknown.result.run_id,archiveUnknown.result.next_tool.tool],
     ['unknown_archive','unknown','unknown','child-task','run-1','status']);
+  assert.equal((await archiveLost.send('cleanup',{operation:alop})).result.status,'unknown_archive');
+  assert.equal(archiveLost.count('archive'),1,'cleanup does not archive a second time after unknown_archive');
+  // If discardDraft() loses the archive reply on route mismatch, pre-send save failure, or send_rejected,
+  // it reports draft_cleanup: 'unknown_archive', archived: 'unknown', next_tool: 'status', and never archives twice.
+  for (const mode of ['mismatch','presend','send_rejected']) {
+    const d=mode==='presend' ? fixture({saveFails:record=>record.state==='sending'})
+      : mode==='send_rejected' ? fixture({sendError:coded('REVISION_CONFLICT','conflict')})
+      : fixture();
+    if (mode==='mismatch') d.task.workingDir='E:/different';
+    d.host.runs=[];
+    d.cindy.tasks.archive=async()=>{d.calls.push(['archive',{taskId:'child-task'}]);throw Error('draft archive reply lost');};
+    const r=(await d.send('roll',{task:'x'})).result;
+    assert.deepEqual([r.draft_cleanup,r.archived,r.next_tool.tool],['unknown_archive','unknown','status'],mode);
+    const s=(await d.send('status',{operation:r.operation})).result;
+    assert.deepEqual([s.draft_cleanup,s.archived,s.next_tool.tool],['unknown_archive','unknown','status'],mode);
+    const c=(await d.send('cleanup',{operation:r.operation})).result;
+    assert.deepEqual([c.status,c.archived,c.executed,c.next_tool.tool],['unknown_archive','unknown','unknown','status'],mode);
+    assert.equal(d.count('archive'),1,mode+' never archives a second time');
+  }
 });
 
 // ---- regressions from the PR #274 review (Greptile and Codex)
