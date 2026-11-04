@@ -25,7 +25,16 @@ function fixture(options={}) {
       calls.push(['node',request.method]);
       const {method,params}=request;
       if (method==='prepare') {
-        calls.push(['prepare',{task:params.task,catalog:params.catalog}]);
+        let catalog=params.catalog;
+        if (typeof params.chunk==='string') {
+          const key='prepare\0'+params.context.session_id+'\0'+String(params.stream || '');
+          const list=params.index===0 ? [] : (streams.get(key) || []);
+          list.push(params.chunk);
+          if (!params.done) {streams.set(key,list);return {ok:true,result:{partial:true}};}
+          streams.delete(key);
+          catalog=JSON.parse(list.join(''));
+        }
+        calls.push(['prepare',{task:params.task,catalog}]);
         if (options.prepareGate) await options.prepareGate(params.task,params.context);
         const operation=opOf(params.context.session_id,params.task);
         prepares++;
@@ -101,6 +110,13 @@ test('exact route/permission, unchanged task, concurrent repeats create and send
   assert.equal(request.text,PROMPT);
   assert.equal(replies[0].result.automatic_callback,false);
   assert.deepEqual(f.calls.find(c=>c[0]==='prepare')[1].catalog.models[0].route,route,'the live catalog reaches the engine');
+  const hugeCat=fixture();
+  hugeCat.cindy.tasks.models=async()=>({models:[{route,efforts:['high'],supportsFastMode:true},
+    ...Array.from({length:1500},(_,i)=>({route:{agentKind:'pi',providerId:'openrouter',model:'openrouter/vendor/model-'+i,effort:'high',fastMode:false},
+      efforts:['medium','high'],supportsFastMode:false,details:{description:'x'.repeat(160)}}))]});
+  const hugeRes=await hugeCat.send('roll',{task:'x'});
+  assert.equal(hugeRes.ok,true);
+  assert.equal(hugeCat.calls.find(c=>c[0]==='prepare')[1].catalog.models.length,1501);
 });
 // CINDY_PUBLIC_ROUTE_FIXTURE: a receipt.json that the real worker.cjs prepared through the real public router.
 if (process.env.CINDY_PUBLIC_ROUTE_FIXTURE) test('actual public router route reaches explicit Cindy permission',async()=>{
@@ -386,9 +402,11 @@ test('review 1: a receipt save that fails after a successful send still returns 
   assert.deepEqual([reply.result.task_id,reply.result.run_id,reply.result.receipt_saved],['child-task','run-1',false]);
   assert.match(reply.result.receipt_error,/disk full/);
   assert.equal(f.records.get(reply.result.operation).state,'sending','the disk still says sending');
+  f.cindy.tasks.listRuns=async()=>{throw Error('listRuns unavailable');};
   const status=(await f.send('status',{operation:reply.result.operation})).result;
   assert.equal(status.runId,'run-1');
   assert.equal(f.count('send'),1);
+  assert.equal((await f.send('stop',{operation:reply.result.operation})).result.status,'stopping');
   // Pre-send save failure after tasks.create preserves taskId/operation, skips send, and archives the draft.
   const pre=fixture({saveFails:record=>record.state==='sending' || record.state==='blocked'});
   const preReply=await pre.send('roll',{task:'x'});
