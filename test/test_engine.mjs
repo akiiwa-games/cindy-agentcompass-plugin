@@ -109,6 +109,17 @@ test('quota telemetry is the newest rate-limit snapshot the Codex CLI wrote; res
     const padding = JSON.stringify({type: 'event_msg', payload: {type: 'tool_output', text: 'x'.repeat(4096)}}) + '\n';
     fs.writeFileSync(path.join(day, 'rollout-a.jsonl'), padding.repeat(80) + line(42, now / 1000 + 600) + '\n');
     assert.equal(codexQuota({CODEX_HOME: home}, now).used_percent, 42);
+    // A session started in an earlier date folder that was updated more recently than today's folder wins by mtime.
+    const prevDay = path.join(home, 'sessions', '2026', '11', '02');
+    fs.mkdirSync(prevDay, {recursive: true});
+    const todayFile = path.join(day, 'rollout-a.jsonl');
+    const prevFile = path.join(prevDay, 'rollout-prev.jsonl');
+    fs.writeFileSync(todayFile, line(10, now / 1000 + 600) + '\n');
+    fs.writeFileSync(prevFile, line(98, now / 1000 + 600) + '\n');
+    fs.utimesSync(todayFile, new Date(now - 60000), new Date(now - 60000));
+    fs.utimesSync(prevFile, new Date(now - 1000), new Date(now - 1000));
+    const crossDay = codexQuota({CODEX_HOME: home}, now);
+    assert.deepEqual([crossDay.status, crossDay.used_percent, crossDay.file], ['exhausted', 98, prevFile]);
   } finally {fs.rmSync(home, {recursive: true, force: true});}
 });
 
@@ -173,6 +184,13 @@ test('screenshot review classifies as visual_analysis (not GUI computer_use), mu
   const lunaAlgo = route('Implement a standalone algorithm.', lunaOnlyCatalog);
   assert.equal(lunaAlgo.status, 'native', 'all host-offered efforts are ranked even when static spec efforts partially overlap');
   assert.equal(lunaAlgo.route.bundle.effort, 'xhigh');
+
+  const multiSegmentPiCatalog = {models: [
+    {route: {agentKind: 'pi', providerId: 'openrouter', model: 'openrouter/qwen/qwen3-coder', effort: 'high', fastMode: false}, efforts: ['medium', 'high'], supportsFastMode: false},
+  ]};
+  const multiSeg = route('Rename foo to bar in util.py.', multiSegmentPiCatalog);
+  assert.equal(multiSeg.status, 'native', 'multi-segment Pi model IDs remain stable across canonicalization and allocator lookup');
+  assert.equal(multiSeg.route.bundle.model, 'openrouter/qwen/qwen3-coder');
 });
 
 test('nothing runnable: an empty or foreign catalog is blocked, never guessed', () => {
