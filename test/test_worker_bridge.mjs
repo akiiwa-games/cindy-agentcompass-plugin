@@ -103,13 +103,15 @@ test('zero configuration: the built-in engine routes over the catalog Cindy pass
   assert.deepEqual(receipts(p), [path.join(reply.result.operation, 'receipt.json')], 'receipts default to ~/.agent-compass/cindy-plugin');
   assert.ok(fs.existsSync(path.join(p.stateHome, reply.result.operation, 'router.stdout.json')), 'the decision is kept with the receipt');
   // Chunked output transfers reassemble in worker.cjs and write the full transcript page.
-  const page = {taskId: 't1', messages: [{id: 'm1', role: 'assistant', content: '原文'.repeat(30000)}]};
-  const raw = JSON.stringify(page), mid = Math.floor(raw.length / 2);
-  const out = rpc(p, [
-    {id: 1, method: 'output', params: {operation: reply.result.operation, context: ctx(p.root), stream: 's1', index: 0, chunk: raw.slice(0, mid), done: false}},
-    {id: 2, method: 'output', params: {operation: reply.result.operation, context: ctx(p.root), stream: 's1', index: 1, chunk: raw.slice(mid), done: true}},
+  const op = reply.result.operation;
+  const fullPage = {items: [{id: 'out-1', role: 'assistant', content: 'chunked-body'}], nextCursor: null};
+  const rawPage = JSON.stringify(fullPage);
+  const outReplies = rpc(p, [
+    {id: 2, method: 'output', params: {operation: op, stream: op + ':end:2', index: 0, chunk: rawPage.slice(0, 15), done: false, context: ctx(p.root)}},
+    {id: 3, method: 'output', params: {operation: op, stream: op + ':end:2', index: 1, chunk: rawPage.slice(15), done: true, context: ctx(p.root)}},
   ]);
-  assert.deepEqual(JSON.parse(fs.readFileSync(out[1].result.file, 'utf8')), page);
+  assert.equal(outReplies[0].result.partial, true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(outReplies[1].result.artifact, 'utf8')), fullPage);
 });
 
 test('built-in split, self, Pi for exploration and fast mode with fresh Codex quota telemetry', () => {

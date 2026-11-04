@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/catalog.js at e98a82287ee1793ae559c8a0fed188e5d1c69ef1 (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/catalog.js at 8e5d2b562fbee736205e7774fd1c2d2704ab496c (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate rather than edit.
 /**
  * AgentCompass Core Model Capabilities, Subjective DNA Vectors, Canonical Routes,
@@ -243,6 +243,8 @@ export const CANONICAL_ROUTES = {
     role: "bounded leaf worker",
     preferred: [
       "gemini-3.8-flash-high",
+      "claude-haiku-5-5",
+      "gpt-6-luna",
       "grok-4.7",
       "gpt-6.1-sol",
       "claude-sonnet-5-5",
@@ -267,6 +269,7 @@ export const CANONICAL_ROUTES = {
       "gpt-6-astra",
       "grok-4.7",
     ],
+    ability_floor: { hard: 2.7 },
     restrict_models: false,
   },
   text_in_text_out: {
@@ -323,7 +326,7 @@ export const CANONICAL_ROUTES = {
 
 export const DEFAULT_MODELS = {
   "claude-fable-5-1": {
-    tier: 4.6,
+    tier: 4,
     cost: 5,
     visual: false,
     usd_per_hour: 18.7,
@@ -332,11 +335,11 @@ export const DEFAULT_MODELS = {
     efforts: ["low", "medium", "high", "xhigh", "max"],
     capabilities: {
       reasoning: 0.98,
-      coding: 0.95,
+      coding: 0.78,
       exploration: 0.9,
       anti_hallucination: 0.9,
-      visual: 0.0,
-      gui: 0.0,
+      visual: 0,
+      gui: 0,
     },
     subjective: {
       divergence: 0.92,
@@ -347,7 +350,7 @@ export const DEFAULT_MODELS = {
   "claude-opus-5-5": {
     tier: 4.6,
     cost: 4,
-    visual: 1.0,
+    visual: 1,
     usd_per_hour: 7.5,
     context_window: 200000,
     fast_capable: true,
@@ -389,10 +392,10 @@ export const DEFAULT_MODELS = {
     },
   },
   "gemini-4-argon-high": {
-    tier: 4.0,
+    tier: 4,
     cost: 3,
     visual: 0.75,
-    usd_per_hour: 4.0,
+    usd_per_hour: 4,
     context_window: 1000000,
     duration_multiplier: 1.35,
     burn_pct_per_worker_hour: {
@@ -436,16 +439,16 @@ export const DEFAULT_MODELS = {
     },
   },
   "gpt-6.1-terra": {
-    tier: 3.7,
+    tier: 3.2,
     cost: 3,
     visual: 0.72,
-    usd_per_hour: 3.0,
+    usd_per_hour: 3,
     context_window: 500000,
     fast_capable: true,
     efforts: ["high"],
     capabilities: {
       reasoning: 0.73,
-      coding: 0.83,
+      coding: 0.65,
       exploration: 0.71,
       anti_hallucination: 0.75,
       visual: 0.72,
@@ -481,7 +484,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "gpt-6-sol": {
-    tier: 3.5,
+    tier: 3.48,
     cost: 3,
     visual: 0.68,
     usd_per_hour: 2.6,
@@ -490,7 +493,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.69,
-      coding: 0.82,
+      coding: 0.66,
       exploration: 0.6,
       anti_hallucination: 0.72,
       visual: 0.68,
@@ -514,8 +517,8 @@ export const DEFAULT_MODELS = {
       coding: 0.58,
       exploration: 0.6,
       anti_hallucination: 0.62,
-      visual: 0.0,
-      gui: 0.0,
+      visual: 0,
+      gui: 0,
     },
     subjective: {
       divergence: 0.45,
@@ -524,15 +527,15 @@ export const DEFAULT_MODELS = {
     },
   },
   "claude-haiku-5-5": {
-    tier: 3.2,
+    tier: 2.94,
     cost: 1,
     visual: 0.48,
     usd_per_hour: 0.8,
     context_window: 200000,
-    efforts: ["high"],
+    efforts: ["low", "medium", "high"],
     capabilities: {
       reasoning: 0.58,
-      coding: 0.65,
+      coding: 0.49,
       exploration: 0.62,
       anti_hallucination: 0.62,
       visual: 0.48,
@@ -545,16 +548,16 @@ export const DEFAULT_MODELS = {
     },
   },
   "gpt-6-luna": {
-    tier: 3.2,
+    tier: 2.61,
     cost: 1,
     visual: 0.55,
     usd_per_hour: 0.8,
     context_window: 272000,
     fast_capable: true,
-    efforts: ["high"],
+    efforts: ["low", "medium", "high"],
     capabilities: {
       reasoning: 0.58,
-      coding: 0.65,
+      coding: 0.47,
       exploration: 0.57,
       anti_hallucination: 0.62,
       visual: 0.55,
@@ -567,7 +570,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "gemini-3.8-flash-high": {
-    tier: 3.0,
+    tier: 3,
     cost: 1,
     visual: 0.3,
     usd_per_hour: 0.5,
@@ -591,7 +594,7 @@ export const DEFAULT_MODELS = {
     tier: 2.8,
     cost: 0,
     visual: false,
-    usd_per_hour: 0.0,
+    usd_per_hour: 0,
     context_window: 64000,
     disabled_by_default: true,
     efforts: ["low", "high", "max"],
@@ -600,8 +603,8 @@ export const DEFAULT_MODELS = {
       coding: 0.5,
       exploration: 0.5,
       anti_hallucination: 0.45,
-      visual: 0.0,
-      gui: 0.0,
+      visual: 0,
+      gui: 0,
     },
     subjective: {
       divergence: 0.45,
@@ -622,7 +625,7 @@ export const DEFAULT_MODELS = {
       coding: 0.91,
       exploration: 0.88,
       anti_hallucination: 0.92,
-      visual: 1.0,
+      visual: 1,
       gui: 0.55,
     },
     subjective: {
@@ -653,7 +656,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "gpt-6-pro": {
-    tier: 5.0,
+    tier: 5,
     cost: 0,
     visual: false,
     advisor_only: true,
@@ -661,12 +664,12 @@ export const DEFAULT_MODELS = {
     disabled_by_default: true,
     efforts: ["max"],
     capabilities: {
-      reasoning: 1.0,
+      reasoning: 1,
       coding: 0.9,
       exploration: 0.78,
       anti_hallucination: 0.95,
-      visual: 0.0,
-      gui: 0.0,
+      visual: 0,
+      gui: 0,
     },
     subjective: {
       divergence: 0.95,
@@ -675,7 +678,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "gpt-5.6-sol": {
-    tier: 3.4,
+    tier: 3.34,
     cost: 2,
     visual: 0.65,
     usd_per_hour: 2.4,
@@ -684,7 +687,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.67,
-      coding: 0.79,
+      coding: 0.54,
       exploration: 0.58,
       anti_hallucination: 0.7,
       visual: 0.65,
@@ -697,7 +700,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "gpt-5.6-terra": {
-    tier: 3.5,
+    tier: 2.59,
     cost: 2,
     visual: 0.67,
     usd_per_hour: 2.7,
@@ -706,7 +709,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.69,
-      coding: 0.78,
+      coding: 0.36,
       exploration: 0.66,
       anti_hallucination: 0.71,
       visual: 0.67,
@@ -719,7 +722,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "gpt-5.6-luna": {
-    tier: 3.1,
+    tier: 2.55,
     cost: 1,
     visual: 0.5,
     usd_per_hour: 0.7,
@@ -728,7 +731,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.55,
-      coding: 0.62,
+      coding: 0.35,
       exploration: 0.54,
       anti_hallucination: 0.59,
       visual: 0.5,
@@ -741,7 +744,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "grok-4.7-build-fast": {
-    tier: 3.1,
+    tier: 3.4,
     cost: 1,
     visual: false,
     usd_per_hour: 0.5,
@@ -762,7 +765,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "deepseek-v4-pro": {
-    tier: 3.9,
+    tier: 2.86,
     cost: 2,
     visual: false,
     usd_per_hour: 1.2,
@@ -770,7 +773,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.78,
-      coding: 0.82,
+      coding: 0.47,
       exploration: 0.72,
       anti_hallucination: 0.75,
       visual: 0,
@@ -783,15 +786,15 @@ export const DEFAULT_MODELS = {
     },
   },
   "glm-5.3": {
-    tier: 3.7,
+    tier: 3.08,
     cost: 2,
     visual: 0.6,
-    usd_per_hour: 1.0,
+    usd_per_hour: 1,
     disabled_by_default: true,
     efforts: ["high"],
     capabilities: {
       reasoning: 0.72,
-      coding: 0.78,
+      coding: 0.55,
       exploration: 0.74,
       anti_hallucination: 0.72,
       visual: 0.6,
@@ -804,7 +807,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "glm-5.3-flash-free": {
-    tier: 2.9,
+    tier: 2.85,
     cost: 0,
     visual: 0.4,
     usd_per_hour: 0,
@@ -812,7 +815,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.5,
-      coding: 0.54,
+      coding: 0.52,
       exploration: 0.52,
       anti_hallucination: 0.52,
       visual: 0.4,
@@ -825,10 +828,10 @@ export const DEFAULT_MODELS = {
     },
   },
   "qwen3-coder-next": {
-    tier: 3.7,
+    tier: 1.71,
     cost: 2,
     visual: false,
-    usd_per_hour: 1.0,
+    usd_per_hour: 1,
     disabled_by_default: true,
     efforts: ["high"],
     capabilities: {
@@ -846,7 +849,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "qwen3.8-max": {
-    tier: 3.9,
+    tier: 3.14,
     cost: 2,
     visual: 0.65,
     usd_per_hour: 1.5,
@@ -854,7 +857,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.78,
-      coding: 0.8,
+      coding: 0.65,
       exploration: 0.75,
       anti_hallucination: 0.74,
       visual: 0.65,
@@ -867,7 +870,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "kimi-k3.1-pro": {
-    tier: 4.0,
+    tier: 3.47,
     cost: 2,
     visual: 0.68,
     usd_per_hour: 1.8,
@@ -875,7 +878,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.79,
-      coding: 0.82,
+      coding: 0.69,
       exploration: 0.83,
       anti_hallucination: 0.74,
       visual: 0.68,
@@ -888,7 +891,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "kimi-k3": {
-    tier: 3.8,
+    tier: 3.14,
     cost: 2,
     visual: 0.62,
     usd_per_hour: 1.2,
@@ -896,7 +899,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.74,
-      coding: 0.79,
+      coding: 0.61,
       exploration: 0.8,
       anti_hallucination: 0.7,
       visual: 0.62,
@@ -909,15 +912,15 @@ export const DEFAULT_MODELS = {
     },
   },
   "minimax-m3": {
-    tier: 3.8,
+    tier: 2.05,
     cost: 2,
     visual: 0.6,
-    usd_per_hour: 1.0,
+    usd_per_hour: 1,
     disabled_by_default: true,
     efforts: ["high"],
     capabilities: {
       reasoning: 0.73,
-      coding: 0.81,
+      coding: 0.29,
       exploration: 0.75,
       anti_hallucination: 0.7,
       visual: 0.6,
@@ -930,7 +933,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "minimax-m3.1-flash": {
-    tier: 3.5,
+    tier: 2.73,
     cost: 1,
     visual: 0.55,
     usd_per_hour: 0.6,
@@ -938,7 +941,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.66,
-      coding: 0.74,
+      coding: 0.47,
       exploration: 0.68,
       anti_hallucination: 0.65,
       visual: 0.55,
@@ -951,7 +954,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "doubao-seed-2-1-pro-260628": {
-    tier: 3.7,
+    tier: 2.55,
     cost: 2,
     visual: 0.65,
     usd_per_hour: 0.8,
@@ -959,7 +962,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.72,
-      coding: 0.74,
+      coding: 0.35,
       exploration: 0.74,
       anti_hallucination: 0.7,
       visual: 0.65,
@@ -972,7 +975,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "mimo-v2.6-pro": {
-    tier: 3.7,
+    tier: 3.15,
     cost: 2,
     visual: 0.6,
     usd_per_hour: 0.8,
@@ -980,7 +983,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.72,
-      coding: 0.79,
+      coding: 0.56,
       exploration: 0.7,
       anti_hallucination: 0.69,
       visual: 0.6,
@@ -993,7 +996,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "mimo-v2.6-flash-free": {
-    tier: 2.9,
+    tier: 3.1,
     cost: 0,
     visual: 0.4,
     usd_per_hour: 0,
@@ -1001,7 +1004,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.51,
-      coding: 0.55,
+      coding: 0.58,
       exploration: 0.51,
       anti_hallucination: 0.5,
       visual: 0.4,
@@ -1014,7 +1017,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "nemotron-3-ultra-free": {
-    tier: 3.4,
+    tier: 1.34,
     cost: 0,
     visual: false,
     usd_per_hour: 0,
@@ -1035,7 +1038,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "nemotron-3.5-super-vl-free": {
-    tier: 3.3,
+    tier: 1.5,
     cost: 0,
     visual: 0.65,
     usd_per_hour: 0,
@@ -1043,7 +1046,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.62,
-      coding: 0.65,
+      coding: 0.13,
       exploration: 0.63,
       anti_hallucination: 0.62,
       visual: 0.65,
@@ -1056,7 +1059,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "nemotron-3.5-lightning-free": {
-    tier: 2.9,
+    tier: 1.29,
     cost: 0,
     visual: false,
     usd_per_hour: 0,
@@ -1077,7 +1080,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "mistral-large-4": {
-    tier: 3.8,
+    tier: 2.45,
     cost: 2,
     visual: 0.65,
     usd_per_hour: 1.2,
@@ -1085,7 +1088,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.74,
-      coding: 0.78,
+      coding: 0.4,
       exploration: 0.73,
       anti_hallucination: 0.71,
       visual: 0.65,
@@ -1098,7 +1101,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "muse-wonder-1.0": {
-    tier: 3.9,
+    tier: 3.21,
     cost: 2,
     visual: 0.72,
     usd_per_hour: 1.5,
@@ -1106,7 +1109,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.77,
-      coding: 0.77,
+      coding: 0.61,
       exploration: 0.79,
       anti_hallucination: 0.73,
       visual: 0.72,
@@ -1119,7 +1122,7 @@ export const DEFAULT_MODELS = {
     },
   },
   "beam-free": {
-    tier: 3.0,
+    tier: 2.15,
     cost: 0,
     visual: false,
     usd_per_hour: 0,
@@ -1127,7 +1130,7 @@ export const DEFAULT_MODELS = {
     efforts: ["high"],
     capabilities: {
       reasoning: 0.53,
-      coding: 0.56,
+      coding: 0.2,
       exploration: 0.53,
       anti_hallucination: 0.5,
       visual: 0,
@@ -1165,33 +1168,78 @@ export const DEFAULT_MODELS = {
 export const MODEL_ALIASES = {
   "claude-haiku-4-5@20251001": "claude-haiku-5-5",
   "claude-haiku-4-5": "claude-haiku-5-5",
+  "claude-3-5-haiku": "claude-haiku-5-5",
+  "claude-3-5-haiku-latest": "claude-haiku-5-5",
+  "claude-3-haiku": "claude-haiku-5-5",
   "claude-opus-5": "claude-opus-5-5",
   "claude-opus-5-5-low": "claude-opus-5-5",
   "claude-opus-5-5-medium": "claude-opus-5-5",
   "claude-opus-5-5-high": "claude-opus-5-5",
   "claude-opus-4-6": "claude-opus-5-5",
   "claude-opus-4-5": "claude-opus-5-5",
+  "claude-opus-4-1": "claude-opus-5-5",
+  "claude-opus-4": "claude-opus-5-5",
+  "claude-3-opus": "claude-opus-5-5",
   "claude-sonnet-5": "claude-sonnet-5-5",
   "claude-sonnet-5-5-low": "claude-sonnet-5-5",
   "claude-sonnet-5-5-medium": "claude-sonnet-5-5",
   "claude-sonnet-5-5-high": "claude-sonnet-5-5",
   "claude-sonnet-4-6": "claude-sonnet-5-5",
   "claude-sonnet-4-5": "claude-sonnet-5-5",
+  "claude-sonnet-4": "claude-sonnet-5-5",
+  "claude-3-7-sonnet": "claude-sonnet-5-5",
+  "claude-3-7-sonnet-latest": "claude-sonnet-5-5",
+  "claude-3-5-sonnet": "claude-sonnet-5-5",
+  "claude-3-5-sonnet-latest": "claude-sonnet-5-5",
   "claude-fable-5": "claude-fable-5-1",
   "gemini-3.8-flash": "gemini-3.8-flash-high",
+  "gemini-3-flash": "gemini-3.8-flash-high",
   "gemini-2.5-flash": "gemini-3.8-flash-high",
+  "gemini-2.5-flash-lite": "gemini-3.8-flash-high",
+  "gemini-2.0-flash": "gemini-3.8-flash-high",
+  "gemini-2.0-flash-lite": "gemini-3.8-flash-high",
   "gemini-4-argon": "gemini-4-argon-high",
   "gemini-4-pro": "gemini-4-argon-high",
+  "gemini-3-pro": "gemini-4-argon-high",
   "gemini-2.5-pro": "gemini-4-argon-high",
   "gemini-4-ultra": "gemini-4-argon-high",
   argon: "gemini-4-argon-high",
   "ChatGPT Pro via chatgpt-pro-consult": "gpt-6-pro",
+  "gpt-5.5": "gpt-6-astra",
+  "gpt-5.5-pro": "gpt-6-pro",
   "gpt-5.4": "gpt-6-astra",
+  "gpt-5.4-pro": "gpt-6-pro",
+  "gpt-5": "gpt-6-astra",
   "gpt-5.3-codex": "gpt-6.1-sol",
+  "gpt-5.2-codex": "gpt-6.1-sol",
+  "gpt-5.1-codex": "gpt-6.1-sol",
+  "gpt-5-codex": "gpt-6.1-sol",
+  "gpt-4.1": "gpt-6.1-sol",
+  "gpt-4o": "gpt-6.1-sol",
   "gpt-5.4-mini": "gpt-6-luna",
+  "gpt-5.4-nano": "gpt-6-luna",
+  "gpt-5.5-mini": "gpt-6-luna",
+  "gpt-5.5-nano": "gpt-6-luna",
+  "gpt-5-mini": "gpt-6-luna",
+  "gpt-5-nano": "gpt-6-luna",
+  "gpt-4.1-mini": "gpt-6-luna",
+  "gpt-4.1-nano": "gpt-6-luna",
+  "gpt-4o-mini": "gpt-6-luna",
   "gpt-5.6-sol-mini": "gpt-6-luna",
+  o3: "gpt-6-astra",
+  "o3-pro": "gpt-6-pro",
+  "o3-mini": "gpt-6.1-sol",
+  "o4-mini": "gpt-6.1-sol",
+  o1: "gpt-6-astra",
+  "o1-pro": "gpt-6-pro",
   "grok-4.7-latest": "grok-4.7",
   "grok-4": "grok-4.7",
+  "grok-3": "grok-4.7",
+  "grok-3-mini": "grok-4.7-build-fast",
+  "deepseek-r1": "deepseek-v4-pro",
+  "deepseek-reasoner": "deepseek-v4-pro",
+  "deepseek-v3": "deepseek-v4-pro",
+  "deepseek-chat": "deepseek-v4.1-flash-free",
   "opencode/deepseek-v4.1-flash-free": "deepseek-v4.1-flash-free",
   "deepseek-v4.1-flash": "deepseek-v4.1-flash-free",
   "deepseek-v4.1-io": "deepseek-v4.1-flash-free",
@@ -1216,40 +1264,56 @@ export const MODEL_ALIASES = {
 
 export const EFFORT_CURVES = {
   "deepseek-v4.1-flash-free": {
-    ability: { default: 0.0, low: -0.2, high: 0.0, max: 0.1 },
-    burn: { default: 0.7, low: 0.35, high: 0.7, max: 1.4 },
+    ability: { high: 0, max: 0.2 },
+    burn: { high: 0.7, max: 0.91 },
   },
   "claude-opus-5-5": {
-    ability: { low: -1.2, medium: -0.3, high: 0.0, xhigh: 0.2, max: 0.4 },
-    burn: { low: 0.21, medium: 0.52, high: 0.7, xhigh: 1.33, max: 2.3 },
+    ability: { low: -0.84, medium: -0.2, high: 0, xhigh: 0.25, max: 0.35 },
+    burn: { low: 0.2, medium: 0.5, high: 0.7, xhigh: 1.22, max: 2.03 },
   },
   "claude-sonnet-5-5": {
-    ability: { low: -1.1, medium: -0.6, high: 0.0, xhigh: 0.5, max: 0.9 },
-    burn: { low: 0.28, medium: 0.38, high: 0.7, xhigh: 1.6, max: 4.34 },
+    ability: { low: -0.79, medium: -0.54, high: 0, xhigh: 0.4, max: 0.64 },
+    burn: { low: 0.22, medium: 0.33, high: 0.7, xhigh: 1.75, max: 4.28 },
   },
   "gpt-6-astra": {
-    ability: { low: -0.5, medium: -0.1, high: 0.0, xhigh: 0.1, max: 0.2 },
-    burn: { low: 0.33, medium: 0.62, high: 0.7, xhigh: 0.93, max: 1.32 },
+    ability: { low: -0.59, medium: -0.15, high: 0, xhigh: 0, max: 0.1 },
+    burn: { low: 0.31, medium: 0.59, high: 0.7, xhigh: 0.79, max: 1.35 },
   },
   "gpt-6.1-sol": {
-    ability: { low: -0.8, medium: -0.2, high: 0.0, xhigh: 0.1, max: 0.2 },
-    burn: { low: 0.28, medium: 0.46, high: 0.7, xhigh: 0.85, max: 1.58 },
+    ability: { low: -0.74, medium: -0.2, high: 0, xhigh: 0.1, max: 0.25 },
+    burn: { low: 0.19, medium: 0.43, high: 0.7, xhigh: 0.9, max: 1.51 },
   },
   "grok-4.7": {
-    ability: { low: -0.4, high: 0.0, xhigh: 0.0 },
-    burn: { low: 0.32, high: 0.7, xhigh: 0.96 },
+    ability: { low: -0.2, high: 0, xhigh: 0 },
+    burn: { low: 0.33, high: 0.7, xhigh: 0.88 },
   },
   "gemini-3.8-flash-high": {
-    ability: { medium: -0.1, high: 0.0 },
-    burn: { medium: 0.53, high: 0.7 },
+    ability: { low: -0.4, medium: -0.05, high: 0 },
+    burn: { medium: 0.56, high: 0.7 },
   },
   "gemini-4-argon-high": {
-    ability: { low: -0.3, medium: -0.1, high: 0.0 },
+    ability: { low: -0.3, medium: -0.1, high: 0 },
     burn: { low: 0.63, medium: 0.7, high: 0.7 },
   },
+  "claude-haiku-5-5": {
+    ability: { low: -0.54, medium: -0.25, high: 0, xhigh: 0.25, max: 0.3 },
+    burn: { low: 0.17, medium: 0.39, high: 0.7, xhigh: 1.09, max: 1.79 },
+  },
+  "gpt-6.1-terra": {
+    ability: { low: -0.64, medium: -0.2, high: 0, xhigh: 0.15, max: 0.45 },
+    burn: { low: 0.19, medium: 0.46, high: 0.7, xhigh: 1.08, max: 2.58 },
+  },
+  "gpt-6-luna": {
+    ability: { low: -0.54, medium: -0.15, high: 0, xhigh: 0.1, max: 0.35 },
+    burn: { low: 0.1, medium: 0.4, high: 0.7, xhigh: 1, max: 1.5 },
+  },
   "claude-fable-5-1": {
-    ability: { low: -0.7, medium: -0.3, high: 0.0, xhigh: 0.2, max: 0.4 },
-    burn: { low: 0.2, medium: 0.4, high: 0.7, xhigh: 1.0, max: 1.3 },
+    ability: { low: -0.4, medium: -0.2, high: 0, xhigh: 0.15, max: 0.15 },
+    burn: { low: 0.41, medium: 0.52, high: 0.7, xhigh: 1.01, max: 1.21 },
+  },
+  "gemini-4-carbon": {
+    ability: { low: -0.3, medium: -0.1, high: 0 },
+    burn: { low: 0.65, medium: 0.59, high: 0.7 },
   },
 };
 
@@ -1330,6 +1394,12 @@ export const DEFAULT_SCORING_POLICY = {
     frontier: 3.5,
   },
   ability_floor: {
+    routine: 2.3,
+    hard: 3.1,
+    coupled: 3.6,
+    frontier: 4.2,
+  },
+  ability_score_origin: {
     routine: 3.0,
     hard: 3.3,
     coupled: 3.6,
@@ -1338,27 +1408,26 @@ export const DEFAULT_SCORING_POLICY = {
   ability_span: 0.6,
   effort_unlock_difficulties: ["coupled", "frontier"],
   critical_headroom: 0.3,
+  critical_headroom_by_difficulty: {
+    frontier: 0.1,
+  },
   effort_ability: {
     none: -1.1,
     off: -1.1,
     minimal: -1.0,
-    low: -0.7,
-    medium: -0.3,
+    low: -0.54,
+    medium: -0.2,
     high: 0.0,
-    xhigh: 0.2,
-    max: 0.4,
-    ultra: 0.5,
+    xhigh: 0.15,
+    max: 0.3,
+    ultra: 0.4,
   },
   effort_burn: {
-    none: 0.1,
-    off: 0.1,
-    minimal: 0.12,
     low: 0.2,
     medium: 0.4,
     high: 0.7,
     xhigh: 1.0,
     max: 1.3,
-    ultra: 1.6,
   },
   demand: {
     property_span: 0.5,
@@ -1453,7 +1522,7 @@ export function canonicalModel(rawModel, aliases = MODEL_ALIASES) {
 export function resolveModelSpec(rawModel, models = DEFAULT_MODELS, aliases = MODEL_ALIASES) {
   const name = canonicalModel(rawModel, aliases);
   if (models[name]) return { canonical: name, spec: models[name] };
-  // Fuzzy family fallback for provider-specific model IDs
+  // Fuzzy family fallback for provider-specific or date-suffixed model IDs
   const lower = name.toLowerCase();
   if (lower.includes("opus")) return { canonical: "claude-opus-5-5", spec: models["claude-opus-5-5"] };
   if (lower.includes("fable")) return { canonical: "claude-fable-5-1", spec: models["claude-fable-5-1"] };
@@ -1462,29 +1531,50 @@ export function resolveModelSpec(rawModel, models = DEFAULT_MODELS, aliases = MO
   if (lower.includes("argon") || (lower.includes("gemini") && (lower.includes("pro") || lower.includes("ultra")))) {
     return { canonical: "gemini-4-argon-high", spec: models["gemini-4-argon-high"] };
   }
-  if (lower.includes("flash")) return { canonical: "gemini-3.8-flash-high", spec: models["gemini-3.8-flash-high"] };
-  if (lower.includes("astra") || lower.includes("gpt-5.4") || lower.includes("gpt-6-pro")) {
+  if (lower.includes("flash") || lower.includes("lite")) {
+    return { canonical: "gemini-3.8-flash-high", spec: models["gemini-3.8-flash-high"] };
+  }
+  if (lower.includes("luna") || lower.includes("mini") || lower.includes("nano")) {
+    return { canonical: "gpt-6-luna", spec: models["gpt-6-luna"] };
+  }
+  if (
+    lower.includes("astra") ||
+    lower.includes("gpt-5.5") ||
+    lower.includes("gpt-5.4") ||
+    lower.includes("gpt-6-pro") ||
+    /^o[13]\b/.test(lower)
+  ) {
     return { canonical: "gpt-6-astra", spec: models["gpt-6-astra"] };
   }
   if (lower.includes("terra")) return { canonical: "gpt-6.1-terra", spec: models["gpt-6.1-terra"] };
-  if (lower.includes("luna") || lower.includes("mini")) return { canonical: "gpt-6-luna", spec: models["gpt-6-luna"] };
-  if (lower.includes("sol") || lower.includes("codex")) return { canonical: "gpt-6.1-sol", spec: models["gpt-6.1-sol"] };
+  if (
+    lower.includes("sol") ||
+    lower.includes("codex") ||
+    lower.includes("gpt-4.1") ||
+    lower.includes("gpt-4o") ||
+    /^o4\b/.test(lower)
+  ) {
+    return { canonical: "gpt-6.1-sol", spec: models["gpt-6.1-sol"] };
+  }
   if (lower.includes("grok")) return { canonical: "grok-4.7", spec: models["grok-4.7"] };
+  if (lower.includes("deepseek") && (lower.includes("r1") || lower.includes("reasoner") || lower.includes("v3") || lower.includes("pro"))) {
+    return { canonical: "deepseek-v4-pro", spec: models["deepseek-v4-pro"] };
+  }
   if (lower.includes("deepseek")) return { canonical: "deepseek-v4.1-flash-free", spec: models["deepseek-v4.1-flash-free"] };
   return {
     canonical: name || "unknown",
     spec: {
-      tier: 3.4,
+      tier: 3.6,
       cost: 2,
       visual: 0.5,
       usd_per_hour: 3.0,
       context_window: 128000,
       efforts: ["low", "medium", "high"],
       capabilities: {
-        reasoning: 0.65,
-        coding: 0.65,
-        exploration: 0.65,
-        anti_hallucination: 0.65,
+        reasoning: 0.68,
+        coding: 0.68,
+        exploration: 0.68,
+        anti_hallucination: 0.68,
         visual: 0.5,
         gui: 0.4,
       },
