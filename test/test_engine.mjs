@@ -220,11 +220,12 @@ test('screenshot review classifies as visual_analysis (not GUI computer_use), mu
   const lunaAlgo = route('Implement a standalone algorithm.', lunaOnlyCatalog);
   assert.equal(lunaAlgo.status, 'native', 'all host-offered efforts are ranked even when static spec efforts partially overlap');
   assert.equal(lunaAlgo.route.bundle.effort, 'xhigh');
-  for (const debugTask of ['Fix translation.py.', 'Fix the translation parser bug in parser.py.', 'Debug translation pipeline', '修复翻译模块的 bug', 'Fix the keyboard shortcuts in editor.py.', 'Fix mouse event handler in app.ts']) {
+  for (const debugTask of ['Fix translation.py.', 'Fix the translation parser bug in parser.py.', 'Debug translation pipeline', '修复翻译模块的 bug', 'Fix the keyboard shortcuts in editor.py.', 'Fix mouse event handler in app.ts', 'Fix the React component bug in editor.tsx.']) {
     const res = route(debugTask, lunaOnlyCatalog);
     assert.equal(res.decision.work_kind, 'debug_review', debugTask);
     assert.equal(res.route.bundle.effort, 'max', debugTask);
   }
+  assert.equal(route('Take a screenshot of the app.', lunaOnlyCatalog).decision.work_kind, 'computer_use');
   assert.equal(route('用鼠标点击设置里的保存', lunaOnlyCatalog).decision.work_kind, 'computer_use');
   assert.equal(route('Translate README.md into Japanese.', lunaOnlyCatalog).decision.work_kind, 'text_in_text_out');
   assert.equal(route('Translate the React component documentation into Japanese.', lunaOnlyCatalog).decision.work_kind, 'text_in_text_out');

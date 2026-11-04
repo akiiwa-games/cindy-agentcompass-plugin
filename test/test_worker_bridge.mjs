@@ -42,7 +42,7 @@ process.stdin.on('data',d=>chunks.push(d)).on('end',()=>{
   fs.appendFileSync(${JSON.stringify(calls)},'call\\n');
   fs.writeFileSync(${JSON.stringify(capture)},JSON.stringify({argv:process.argv.slice(2),stdin,
     cwd:process.cwd(),paseo:process.env.PASEO_AGENT_ID??null,hc:process.env.HC_TERMINAL_ID??null,legacy:process.env.ROUTER_CINDY_CONTEXT??null}));
-  setTimeout(()=>{process.stdout.write(fs.readFileSync(${JSON.stringify(answerFile)},'utf8'));process.exit(${code});},stdin.includes('SLOW')?2000:0);
+  setTimeout(()=>{process.stdout.write(fs.readFileSync(${JSON.stringify(answerFile)},'utf8'));if(stdin.includes('HANG')){setInterval(()=>{},1000);return;}process.exit(${code});},stdin.includes('SLOW')?2000:0);
 });`);
   const settings = {command: [process.execPath, fake], stateRoot: path.join(root, 'state')};
   if (config === 'plugin') fs.writeFileSync(path.join(out, 'router.json'), JSON.stringify(settings));
@@ -196,7 +196,7 @@ test('self and split from the CLI are recorded as the router answer; a blocked r
   }
   const p = plugin({status: 'blocked', error: 'no account'}, 2);
   const [reply] = rpc(p, [prepare(p, 'x')]);
-  assert.match(reply.error.message, /no account/);
+  assert.match(reply.error.message, /no account/); const hang = plugin(codex); fs.writeFileSync(path.join(hang.out, 'router.json'), JSON.stringify({command: [process.execPath, hang.fake], stateRoot: hang.state, timeoutMs: 150})); const [timedOut] = rpc(hang, [prepare(hang, 'HANG after writing native JSON')]); assert.match(timedOut.error.message, /Router timed out/); assert.deepEqual(receipts(hang), []);
 });
 
 test('an untrusted context and a foreign session are refused before the router runs', () => {
