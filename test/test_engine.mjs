@@ -43,7 +43,12 @@ test('self: an explicit "answer here" or a short pure question is the current se
     assert.match(result.next_action, /current session/);
   }
   assert.equal(selfGate('Why does util.py fail? Fix it and add a test.'), null, 'a question with work in it is delegated');
-  for (const workQuestion of ['Can you review the diff for regressions?', 'Can you translate the supplied paragraph into Japanese?']) {
+  for (const workQuestion of [
+    'Can you review the diff for regressions?',
+    'Can you translate the supplied paragraph into Japanese?',
+    'Fix the "no worker available" error in scheduler.py.',
+    'Implement a worker pool with no worker thread leaks.',
+  ]) {
     assert.equal(selfGate(workQuestion), null, workQuestion);
     assert.equal(route(workQuestion).status, 'native', workQuestion);
   }
@@ -89,9 +94,15 @@ test('fast mode needs the signal word, a fast-capable codex row and known quota 
     assert.equal(res.decision.wants_fast, false, optedOut);
     assert.equal(res.route.bundle.fast, false, optedOut);
   }
-  const nonUrgentButFast = route('Rename the non-urgent helper foo to bar in util.py in fast mode.');
-  assert.equal(nonUrgentButFast.decision.wants_fast, true);
-  assert.equal(nonUrgentButFast.route.bundle.fast, true);
+  for (const enabledDespiteNegatedUrgency of [
+    'Rename the non-urgent helper foo to bar in util.py in fast mode.',
+    'Rename foo in util.py. This is not urgent but use fast mode.',
+    '把 util.py 里的 foo 改名为 bar，这件事不紧急，但请使用快速模式。',
+  ]) {
+    const res = route(enabledDespiteNegatedUrgency);
+    assert.equal(res.decision.wants_fast, true, enabledDespiteNegatedUrgency);
+    assert.equal(res.route.bundle.fast, true, enabledDespiteNegatedUrgency);
+  }
 });
 
 test('quota: an exhausted Codex window moves the route to another signed-in connection', () => {
@@ -194,6 +205,8 @@ test('screenshot review classifies as visual_analysis (not GUI computer_use), mu
   const sparkAlgo = route('Implement a standalone algorithm.', sparkOnlyCatalog);
   assert.equal(sparkAlgo.status, 'native', 'all host-offered efforts are ranked when static alias efforts do not overlap');
   assert.equal(sparkAlgo.route.bundle.effort, 'xhigh');
+  const sparkRoutine = route('Batch rename foo to bar in all filenames.', sparkOnlyCatalog);
+  assert.equal(sparkRoutine.route.bundle.effort, 'xhigh', 'minimal effort is scored conservatively below low and does not clear the 3.0 routine floor on a 3.2-tier model');
 
   const lunaOnlyCatalog = {models: [REAL.models.find(r => r.route.model === 'gpt-6-luna')]};
   const lunaAlgo = route('Implement a standalone algorithm.', lunaOnlyCatalog);

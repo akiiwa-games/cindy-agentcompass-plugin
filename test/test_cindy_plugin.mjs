@@ -305,6 +305,12 @@ test('stop waits a bounded time for the host: stopping is reported as such, a co
   assert.equal(cancelUnknown.ok,true);
   assert.deepEqual([cancelUnknown.result.status,cancelUnknown.result.executed,cancelUnknown.result.confirmed_terminal,cancelUnknown.result.task_id,cancelUnknown.result.run_id,cancelUnknown.result.next_tool.tool],
     ['unknown_cancel','unknown',false,'child-task','run-1','status']);
+  const cancelRefused=fixture();const crop=(await cancelRefused.send('roll',{task:'x'})).result.operation;
+  cancelRefused.cindy.tasks.cancel=async()=>{throw coded('PERMISSION_DENIED','cannot cancel');};
+  const cancelRej=await cancelRefused.send('stop',{operation:crop});
+  assert.equal(cancelRej.ok,true);
+  assert.deepEqual([cancelRej.result.status,cancelRej.result.executed,cancelRej.result.confirmed_terminal,cancelRej.result.error_code,cancelRej.result.task_id,cancelRej.result.run_id,cancelRej.result.next_tool.tool],
+    ['cancel_rejected',false,false,'PERMISSION_DENIED','child-task','run-1','stop']);
   const archiveLost=fixture();const alop=(await archiveLost.send('roll',{task:'x'})).result.operation;
   archiveLost.run.status='completed';archiveLost.run.outputMessageId='out-exact';
   await archiveLost.send('status',{operation:alop});
