@@ -218,6 +218,12 @@ test('screenshot review classifies as visual_analysis (not GUI computer_use), mu
   const lunaAlgo = route('Implement a standalone algorithm.', lunaOnlyCatalog);
   assert.equal(lunaAlgo.status, 'native', 'all host-offered efforts are ranked even when static spec efforts partially overlap');
   assert.equal(lunaAlgo.route.bundle.effort, 'xhigh');
+  for (const debugTask of ['Fix translation.py.', 'Fix the translation parser bug in parser.py.']) {
+    const res = route(debugTask, lunaOnlyCatalog);
+    assert.equal(res.decision.work_kind, 'debug_review', debugTask);
+    assert.equal(res.route.bundle.effort, 'max', debugTask);
+  }
+  assert.equal(route('Translate README.md into Japanese.', lunaOnlyCatalog).decision.work_kind, 'text_in_text_out');
 
   const multiSegmentPiCatalog = {models: [
     {route: {agentKind: 'pi', providerId: 'openrouter', model: 'openrouter/qwen/qwen3-coder', effort: 'high', fastMode: false}, efforts: ['medium', 'high'], supportsFastMode: false},

@@ -197,6 +197,19 @@ test('lost create is not retried, definite create refusals are retriable, and a 
   denied.cindy.tasks.create=realCreate;
   const recovered=(await denied.send('roll',{task:'x'})).result;
   assert.deepEqual([recovered.status,recovered.taskId,recovered.runId],['running','child-task','run-1']);
+  let preCreateBridgeDown=true;
+  const lostAck=fixture({saveFails:rec=>{
+    if (!preCreateBridgeDown) return false;
+    if (rec.state==='creating') {lostAck.records.set(opOf(ctx.session_id,'x'),structuredClone(rec));return true;}
+    return true;
+  }});
+  const preCreateFailed=(await lostAck.send('roll',{task:'x'})).result;
+  assert.equal(lostAck.count('create'),0);
+  assert.deepEqual([preCreateFailed.status,preCreateFailed.executed,preCreateFailed.next_tool.tool],['create_rejected',false,'roll']);
+  preCreateBridgeDown=false;
+  assert.equal((await lostAck.send('status',{operation:preCreateFailed.operation})).result.status,'create_rejected');
+  const afterBridgeRecovery=(await lostAck.send('roll',{task:'x'})).result;
+  assert.deepEqual([afterBridgeRecovery.status,afterBridgeRecovery.taskId,afterBridgeRecovery.runId],['running','child-task','run-1']);
   const other=fixture();const launched=await other.send('roll',{task:'x'});
   other.run.status='failed';other.run.error='upstream timeout';
   const failed=await other.send('status',{operation:launched.result.operation});
