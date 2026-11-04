@@ -13,13 +13,15 @@ const coded=(code,message=code)=>Object.assign(Error(message),{code});
 // options.prepared: the receipt prepare writes (an object, or a function of the call number for a retry that re-reads).
 // options.prepareGate(task): a promise prepare waits for. options.saveFails(record): a save that throws.
 function fixture(options={}) {
-  const records=new Map(), calls=[], messages=[], waiters=new Map();
+  const records=new Map(), streams=new Map(), calls=[], messages=[], waiters=new Map();
   let handler, serial=0, prepares=0;
   const task={taskId:'child-task',revision:4,resolvedConfig:{...route},permissionMode:'bypassPermissions',workingDir:ctx.workdir};
   const run={runId:'run-1',taskId:task.taskId,status:'running',acceptedConfig:route,inputMessageId:'plugin-task:run-1'};
   const host={runs:[run],pages:2,input:PROMPT};
   const cindy={
     node:{request:async request=>{
+      if (Buffer.byteLength(JSON.stringify(request),'utf8')>256*1024)
+        return {ok:false,message:'Host node request exceeds 256 KiB limit'};
       calls.push(['node',request.method]);
       const {method,params}=request;
       if (method==='prepare') {
@@ -40,7 +42,17 @@ function fixture(options={}) {
         records.set(params.operation,structuredClone(params.record));return {ok:true,result:{saved:true}};
       }
       if (method==='load') return {ok:true,result:structuredClone(record)};
-      if (method==='output') return {ok:true,result:{artifact:'/test/full-message-page-'+(serial++)+'.json'}};
+      if (method==='output') {
+        if (typeof params.chunk==='string') {
+          const key=params.operation+'\0'+String(params.stream || '');
+          const list=params.index===0 ? [] : (streams.get(key) || []);
+          list.push(params.chunk);
+          if (!params.done) {streams.set(key,list);return {ok:true,result:{artifact:null,partial:true}};}
+          streams.delete(key);
+          JSON.parse(list.join(''));
+        }
+        return {ok:true,result:{artifact:'/test/full-message-page-'+(serial++)+'.json'}};
+      }
       throw Error('unexpected node method');
     }},
     tasks:{
@@ -491,6 +503,24 @@ test('review 4: a terminal run with unread message pages points to status, and c
   const rest=(await f.send('status',{operation:op})).result;
   assert.deepEqual([rest.messages_complete,rest.message_pages_read,rest.output_available,rest.next_tool.tool],[true,12,true,'cleanup']);
   assert.equal((await f.send('cleanup',{operation:op})).result.status,'cleaned');
+  const chatty=fixture();
+  const cop=(await chatty.send('roll',{task:'x'})).result.operation;
+  chatty.run.status='completed';chatty.run.outputMessageId='out-exact';
+  chatty.cindy.tasks.readMessages=async request=>{
+    chatty.calls.push(['readMessages',request]);
+    const items=Array.from({length:99},(_,k)=>({id:'msg-'+k,role:'assistant',content:'m'.repeat(3000)}));
+    items.push({id:'out-exact',role:'assistant',content:'[Worker final report] '+'終'.repeat(90000)});
+    return {items,nextCursor:null};
+  };
+  const chattyRes=(await chatty.send('status',{operation:cop})).result;
+  assert.equal(chattyRes.status,'completed');
+  assert.equal(chattyRes.messages_complete,true);
+  assert.equal(chattyRes.output_available,true);
+  assert.equal(chattyRes.summary_shortened,true);
+  assert.equal(chattyRes.message_pages_read,1);
+  assert.equal(chattyRes.next_tool.tool,'cleanup');
+  assert.ok(Buffer.byteLength(JSON.stringify(chatty.records.get(cop)),'utf8')<64*1024,'receipt does not re-embed the oversized final message');
+  assert.equal((await chatty.send('cleanup',{operation:cop})).result.status,'cleaned');
 });
 test('review 5: a roll stuck in routing for session A does not delay session B stop, nor A\'s own other operations',async()=>{
   let release;
