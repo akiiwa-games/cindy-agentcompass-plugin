@@ -210,31 +210,32 @@ test('screenshot review classifies as visual_analysis (not GUI computer_use), mu
   assert.equal(emptyEffort.route.bundle.effort, '', 'preserves empty effort on launch route');
 
   const sparkOnlyCatalog = {models: [REAL.models.at(-1)]};
-  const sparkHard = route('Implement a standalone algorithm.', sparkOnlyCatalog);
-  assert.equal(sparkHard.status, 'blocked', 'spark (gpt-6-luna tier 2.61) is below the 3.1 hard floor');
+  const sparkAlgo = route('Implement a standalone algorithm.', sparkOnlyCatalog);
+  assert.equal(sparkAlgo.status, 'native', 'all host-offered efforts are ranked when static alias efforts do not overlap');
+  assert.equal(sparkAlgo.route.bundle.effort, 'xhigh');
   const sparkRoutine = route('Batch rename foo to bar in all filenames.', sparkOnlyCatalog);
-  assert.equal(sparkRoutine.status, 'native');
-  assert.equal(sparkRoutine.route.bundle.effort, 'xhigh', 'minimal effort (1.61) is below the 2.3 routine floor while xhigh (2.71) clears it');
+  assert.equal(sparkRoutine.route.bundle.effort, 'xhigh', 'minimal effort (2.1) is below the 2.3 routine floor while xhigh (3.3) clears it');
 
-  const terraOnlyCatalog = {models: [REAL.models.find(r => r.route.model === 'gpt-6.1-terra')]};
-  const terraAlgo = route('Implement a standalone algorithm.', terraOnlyCatalog);
-  assert.equal(terraAlgo.status, 'native', 'all host-offered efforts are ranked even when static spec efforts partially overlap');
-  assert.equal(terraAlgo.route.bundle.effort, 'high');
+  const lunaOnlyCatalog = {models: [REAL.models.find(r => r.route.model === 'gpt-6-luna')]};
+  const lunaAlgo = route('Implement a standalone algorithm.', lunaOnlyCatalog);
+  assert.equal(lunaAlgo.status, 'native', 'all host-offered efforts are ranked even when static spec efforts partially overlap');
+  assert.equal(lunaAlgo.route.bundle.effort, 'xhigh');
   for (const debugTask of ['Fix translation.py.', 'Fix the translation parser bug in parser.py.', 'Debug translation pipeline', '修复翻译模块的 bug', 'Fix the keyboard shortcuts in editor.py.', 'Fix mouse event handler in app.ts']) {
-    const res = route(debugTask, terraOnlyCatalog);
+    const res = route(debugTask, lunaOnlyCatalog);
     assert.equal(res.decision.work_kind, 'debug_review', debugTask);
     assert.equal(res.route.bundle.effort, 'max', debugTask);
   }
-  assert.equal(route('用鼠标点击设置里的保存', terraOnlyCatalog).decision.work_kind, 'computer_use');
-  assert.equal(route('Translate README.md into Japanese.', terraOnlyCatalog).decision.work_kind, 'text_in_text_out');
-  assert.equal(route('Translate the React component documentation into Japanese.', terraOnlyCatalog).decision.work_kind, 'text_in_text_out');
+  assert.equal(route('用鼠标点击设置里的保存', lunaOnlyCatalog).decision.work_kind, 'computer_use');
+  assert.equal(route('Translate README.md into Japanese.', lunaOnlyCatalog).decision.work_kind, 'text_in_text_out');
+  assert.equal(route('Translate the React component documentation into Japanese.', lunaOnlyCatalog).decision.work_kind, 'text_in_text_out');
 
   const multiSegmentPiCatalog = {models: [
-    {route: {agentKind: 'pi', providerId: 'openrouter', model: 'openrouter/qwen/qwen3-coder', effort: 'high', fastMode: false}, efforts: ['medium', 'high'], supportsFastMode: false},
+    {route: {agentKind: 'pi', providerId: 'openrouter', model: 'openrouter/qwen/qwen3-coder-next', effort: 'high', fastMode: false}, efforts: ['medium', 'high'], supportsFastMode: false},
   ]};
   const multiSeg = route('Rename foo to bar in util.py.', multiSegmentPiCatalog);
   assert.equal(multiSeg.status, 'native', 'multi-segment Pi model IDs remain stable across canonicalization and allocator lookup');
-  assert.equal(multiSeg.route.bundle.model, 'openrouter/qwen/qwen3-coder');
+  assert.equal(multiSeg.route.bundle.model, 'openrouter/qwen/qwen3-coder-next');
+  assert.equal(route('Fix the keyboard shortcuts in editor.py.', multiSegmentPiCatalog).status, 'native');
 });
 
 test('nothing runnable: an empty or foreign catalog is blocked, never guessed', () => {

@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/profiler-core.js at 8e5d2b562fbee736205e7774fd1c2d2704ab496c (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/profiler-core.js at a2215b3e2dc57cd6a3689b05ae8d4927e7926b7f (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate rather than edit.
 /**
  * Multi-Protocol Request Extractor & Deterministic 10-Field Task Profiler
