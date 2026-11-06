@@ -114,6 +114,32 @@ test('zero configuration: the built-in engine routes over the catalog Cindy pass
   assert.deepEqual(JSON.parse(fs.readFileSync(outReplies[1].result.artifact, 'utf8')), fullPage);
 });
 
+test('a route Cindy refused to create on cools down for the retry; a request refusal does not; a created task clears it', () => {
+  const p = plugin(codex, 0, 'none');
+  const task = 'Rename the helper foo to bar in util.py and update its two callers.';
+  const [first] = rpc(p, [prepare(p, task)]);
+  const op = first.result.operation, b = first.result.bundle;
+  const {operation, ...prepared} = first.result;
+  const save = (id, record) => ({id, method: 'save', params: {operation: op, record, context: ctx(p.root)}});
+  const creating = {...prepared, state: 'creating'};
+  const refused = code => ({...prepared, state: 'prepared', createRejected: true, errorCode: code, error: code, task});
+  const file = path.join(p.stateHome, 'route-cooldowns.json');
+  rpc(p, [save(1, creating), save(2, refused('INVALID_REQUEST'))]);
+  assert.equal(fs.existsSync(file), false, 'a malformed request says nothing about the route');
+  rpc(p, [save(1, creating), save(2, refused('ROUTE_UNAVAILABLE'))]);
+  const [entry] = Object.values(JSON.parse(fs.readFileSync(file, 'utf8')));
+  assert.deepEqual([entry.code, entry.failures], ['ROUTE_UNAVAILABLE', 1]);
+  assert.ok(Math.abs(entry.until - Date.now() - 15 * 60000) < 60000);
+  const [retry] = rpc(p, [prepare(p, task)]);
+  const moved = retry.result.bundle;
+  assert.notEqual(moved.providerId + moved.model, b.providerId + b.model, 'the retry routes elsewhere');
+  assert.equal(retry.result.router.decision.cooling_down[0].model, b.model);
+  rpc(p, [save(1, creating), save(2, refused('ROUTE_UNAVAILABLE'))]);
+  assert.equal(Object.values(JSON.parse(fs.readFileSync(file, 'utf8')))[0].failures, 2, 'a consecutive refusal doubles the cooldown');
+  rpc(p, [save(1, creating), save(2, {...creating, state: 'sending', taskId: 'child-task'})]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), {}, 'a task created on the route clears it');
+});
+
 test('built-in split, self, Pi for exploration and fast mode with fresh Codex quota telemetry', () => {
   const p = plugin(codex, 0, 'none');
   const sessions = path.join(p.home, '.codex', 'sessions', '2026', '11', '03');

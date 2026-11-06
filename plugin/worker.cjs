@@ -117,10 +117,36 @@ function contract(result, ctx, task) {
   return {bundle:{...bundle,harness,modeId},prompt:prompt+RETURN_CHANNEL};
 }
 const writeDiag = (file, data) => {try {fs.writeFileSync(file, data);} catch {}};
+// Routes Cindy refused to create a task on. A retry routes elsewhere for 15 min, doubling with each consecutive refusal up
+// to 2 h; a task created on the route clears it. Only refusals about the route itself count: a malformed request or a
+// busy task says nothing about the route, and a lost answer is never a refusal.
+const ROUTE_REFUSALS = new Set(['ROUTE_UNAVAILABLE','UNSUPPORTED_CAPABILITY','PERMISSION_DENIED']);
+const COOLDOWN_MS = 15*60000, COOLDOWN_MAX_MS = 120*60000;
+const bundleKey = bundle => bundle?.providerId && bundle.model ? bundle.harness+'\0'+bundle.providerId+'\0'+bundle.model : null;
+const cooldownFile = root => path.join(root, 'route-cooldowns.json');
+function cooldowns(root) {
+  try {
+    const value=JSON.parse(fs.readFileSync(cooldownFile(root), 'utf8'));
+    return value && typeof value==='object' && !Array.isArray(value) ? value : {};
+  } catch {return {};}
+}
+function noteCreate(root, before, after, now=Date.now()) {
+  const key=bundleKey(after.bundle);
+  if (!key) return;
+  const all=cooldowns(root);
+  if (after.createRejected && !before.createRejected && ROUTE_REFUSALS.has(after.errorCode)) {
+    const old=all[key];
+    // A refusal more than 2 h after the last cooldown ended starts a new streak.
+    const streak=old && now-old.until<=COOLDOWN_MAX_MS ? old.failures+1 : 1;
+    all[key]={until:now+Math.min(COOLDOWN_MS*2**(streak-1), COOLDOWN_MAX_MS), code:after.errorCode, failures:streak};
+  } else if (after.taskId && !before.taskId && all[key]) delete all[key];
+  else return;
+  atomic(cooldownFile(root), all);
+}
 let engine=null;
-async function builtin(task, catalog, dir) {
+async function builtin(task, catalog, dir, root) {
   engine ||= import(pathToFileURL(path.join(__dirname, 'engine', 'route.mjs')).href);
-  const result=(await engine).routeTask(task, catalog, {env:process.env});
+  const result=(await engine).routeTask(task, catalog, {env:process.env, cooling:cooldowns(root)});
   writeDiag(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
   if (result.status==='blocked') throw Error(result.error);
   return result;
@@ -164,15 +190,15 @@ async function external(command, task, ctx, dir, timeoutMs=110000) {
   });
 }
 // The engine for this roll: the configured CLI, an opted-in CLI when it is installed, otherwise the built-in engine.
-async function route(conf, task, ctx, dir, catalog) {
+async function route(conf, task, ctx, dir, catalog, root) {
   if (conf.engine==='cli' && conf.command) return await external(conf.command, task, ctx, dir, conf.timeoutMs);
   if (conf.engine==='cli') {
     const found=discover();
     if (found) return await external([found, 'roll'], task, ctx, dir);
-    const result=await builtin(task, catalog, dir);
+    const result=await builtin(task, catalog, dir, root);
     return {...result, engine_note:'config.json asks for the AgentCompass CLI, which is not installed: the built-in engine routed this task.'};
   }
-  return await builtin(task, catalog, dir);
+  return await builtin(task, catalog, dir, root);
 }
 // One preparation per operation at a time; different operations never wait for each other.
 const busy=new Map();
@@ -214,7 +240,7 @@ async function handle(method, params) {
     // Nothing was created yet: route again with the current configuration, account map and catalog, so a retry after
     // a fix is not stuck on the answer that failed.
     const mappings=accountMappings(conf);
-    const result=await route(conf,params.task,ctx,dir,catalog);
+    const result=await route(conf,params.task,ctx,dir,catalog,root);
     // self/split/a router-side launch are the router's answer to the parent, not a Cindy task.
     const {bundle,prompt}=result.status==='native' ? contract(result,ctx,params.task) : {bundle:null,prompt:''};
     const record={parent:ctx.session_id, state:'prepared', engine:result.engine, router:result, bundle, prompt,
@@ -229,6 +255,8 @@ async function handle(method, params) {
     const update=params.record;
     if (!update || update.parent!==record.parent) throw Error('Parent cannot be changed');
     atomic(path.join(dir,'receipt.json'),update);
+    // The receipt is saved; a cooldown that cannot be written only loses a routing preference.
+    try {noteCreate(root,record,update);} catch {}
     return {saved:true};
   }
   if (method==='output') {

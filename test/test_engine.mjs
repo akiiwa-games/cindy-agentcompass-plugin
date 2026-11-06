@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import {codexHomes, codexQuota, routeTask, selfGate, splitGate} from '../plugin/engine/route.mjs';
+import {HARNESS, codexHomes, codexQuota, routeKey, routeTask, selfGate, splitGate} from '../plugin/engine/route.mjs';
 
 const REAL = JSON.parse(fs.readFileSync(new URL('./fixtures/cindy-0.1.121-catalog.json', import.meta.url), 'utf8'));
 // The same catalog with a Claude connection signed in, in the row shape Cindy uses for every harness.
@@ -123,6 +123,23 @@ test('quota: an exhausted Codex window moves the route to another signed-in conn
   assert.equal(moved.decision.warning, undefined);
   const only = route(task, REAL, {source: 'test', status: 'exhausted', used_percent: 97});
   assert.match(only.decision.warning, /short of quota/, 'with no other connection the route says so');
+});
+
+test('a route Cindy recently refused is skipped while another can run, and used anyway when none can', () => {
+  const task = 'Rename the helper foo to bar in util.py and update its two callers.';
+  const now = Date.now();
+  const first = routeTask(task, REAL, {quota: OK, now}).route.bundle;
+  const cooling = {[routeKey(first.harness, first.providerId, first.model)]: {until: now + 60000, code: 'ROUTE_UNAVAILABLE'}};
+  const moved = routeTask(task, REAL, {quota: OK, now, cooling});
+  assert.notEqual(moved.route.bundle.model + moved.route.bundle.providerId, first.model + first.providerId);
+  assert.deepEqual(moved.decision.cooling_down.map(c => [c.model, c.code, c.minutes_left]), [[first.model, 'ROUTE_UNAVAILABLE', 1]]);
+  assert.equal(moved.decision.cooldown_warning, undefined);
+  assert.deepEqual(routeTask(task, REAL, {quota: OK, now: now + 60001, cooling}).route.bundle, first, 'an expired cooldown is ignored');
+  const all = Object.fromEntries(REAL.models.map(r => [routeKey(HARNESS[r.route.agentKind], r.route.providerId, r.route.model),
+    {until: now + 60000, code: 'ROUTE_UNAVAILABLE'}]));
+  const every = routeTask(task, REAL, {quota: OK, now, cooling: all});
+  assert.deepEqual(every.route.bundle, first, 'with every route cooling down the roll is not blocked');
+  assert.match(every.decision.cooldown_warning, /refused/);
 });
 
 test('quota telemetry is the newest rate-limit snapshot the Codex CLI wrote; reset windows are ignored', () => {

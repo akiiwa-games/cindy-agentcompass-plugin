@@ -9,6 +9,8 @@ import {inferTaskProfile} from './profiler.mjs';
 import {resolveModelSpec} from './catalog.mjs';
 
 export const HARNESS = {cc: 'claude', codex: 'codex', pi: 'pi'};
+// One catalog route as the plugin's refusal cooldowns name it.
+export const routeKey = (harness, providerId, model) => `${harness}\0${providerId}\0${model}`;
 const MODE = {claude: 'bypassPermissions', codex: 'full-access', pi: 'full-access'};
 // AgentCompass harness order: Pi first for read-and-report work, the native coding CLI otherwise.
 const PI_FIRST = new Set(['exploration_analysis', 'research_packet', 'web_research', 'text_in_text_out']);
@@ -151,7 +153,8 @@ function canonicalOf(model) {
  *   {status:'native', route:{bundle}, decision}  one exact catalog row, effort and fast mode
  *   {status:'blocked', error}  nothing in the catalog can run it
  */
-export function routeTask(task, catalog, {env = process.env, now = Date.now(), quota = null} = {}) {
+// cooling: {routeKey: {until, code}} routes Cindy recently refused to create; skipped while another route can run.
+export function routeTask(task, catalog, {env = process.env, now = Date.now(), quota = null, cooling = {}} = {}) {
   const split = splitGate(task);
   const profile = inferTaskProfile({objective: task});
   if (split) return {status: 'split', engine: 'builtin', task_count: split.task_count, reason: split.reason,
@@ -161,9 +164,21 @@ export function routeTask(task, catalog, {env = process.env, now = Date.now(), q
   if (self) return {status: 'self', engine: 'builtin', reason: self.reason, profile,
     next_action: 'Do this in the current session; no Cindy task was started.'};
 
-  const rows = (catalog?.models || []).filter(row => HARNESS[row?.route?.agentKind] && row.route.providerId && row.route.model);
-  if (!rows.length) return {status: 'blocked', engine: 'builtin',
+  const runnable = (catalog?.models || []).filter(row => HARNESS[row?.route?.agentKind] && row.route.providerId && row.route.model);
+  if (!runnable.length) return {status: 'blocked', engine: 'builtin',
     error: 'Cindy reports no Claude, Codex or Pi model. Sign in to one in Cindy, then roll again; nothing was started.'};
+  const coolingOf = row => {
+    const entry = cooling?.[routeKey(HARNESS[row.route.agentKind], row.route.providerId, row.route.model)];
+    return entry && entry.until > now ? entry : null;
+  };
+  const skipped = runnable.filter(coolingOf).map(row => {
+    const entry = coolingOf(row);
+    return {agentKind: row.route.agentKind, providerId: row.route.providerId, model: row.route.model, code: entry.code,
+      minutes_left: Math.ceil((entry.until - now) / 60000)};
+  });
+  // Every route refused recently: a cooldown that leaves nothing to run would only block, so route as usual.
+  const allCooling = skipped.length === runnable.length;
+  const rows = allCooling ? runnable : runnable.filter(row => !coolingOf(row));
   // Connections the Codex CLI's telemetry describes: only an explicitly matched providerId, or the sole Codex connection.
   const codexProviders = new Set(rows.filter(r => r.route.agentKind === 'codex').map(r => r.route.providerId));
   const codex = quota || (codexProviders.size === 1 ? codexQuota(env, now)
@@ -227,6 +242,8 @@ export function routeTask(task, catalog, {env = process.env, now = Date.now(), q
       canonical_model: best.row._canonical, score: best.score, components: best.components, wants_fast: wantsFast,
       quota: codex, quota_penalized_routes: candidates.filter(c => c.notes.length).length,
       ...(best.notes.length ? {warning: `every runnable route is short of quota (${best.notes.join(', ')}); it may stop early`} : {}),
+      ...(skipped.length ? {cooling_down: skipped} : {}),
+      ...(allCooling ? {cooldown_warning: 'Cindy recently refused to create a task on every runnable route; this one may be refused again.'} : {}),
       alternatives: candidates.slice(1, 6).map(c => ({agentKind: c.row.route.agentKind, providerId: c.row.route.providerId,
         model: c.row.route.model, effort: c.effort, fast: c.fast, score: c.score, notes: c.notes}))},
   };

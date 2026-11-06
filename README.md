@@ -58,6 +58,10 @@ Cindy session ──ghost_call {tool:"roll", args:{task}}──▶ plugin/main.j
   `quota_penalized_routes` and warns when the chosen route itself is short of quota.
 - **fast mode**: a task that asks for it ("fast mode", "urgent", "ASAP", "加急", …) gets Codex fast mode when the row supports it and the
   quota snapshot shows less than 60% used. Unknown quota never turns fast mode on.
+- **refused routes cool down**: when Cindy refuses `tasks.create` because of the route itself (`ROUTE_UNAVAILABLE`,
+  `UNSUPPORTED_CAPABILITY`, `PERMISSION_DENIED`), that route is skipped for 15 min, doubling with each consecutive refusal up to 2 h,
+  so the retry goes elsewhere (`route-cooldowns.json` in the state directory; the decision lists `cooling_down`). A task created on
+  the route clears it. When every runnable route is cooling down, the roll still routes and warns (`cooldown_warning`).
 - **blocked**: a catalog with no Claude, Codex or Pi model, or none that meets the task's floor, is refused; nothing is guessed.
 
 Every decision is saved with the receipt (`router.stdout.json`): profile, chosen route, score components, alternatives and quota.
