@@ -682,7 +682,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-06T20:25:21.593Z",
+   "started_at": "2026-11-06T20:27:18.223Z",
    "operations": [
     {
      "name": "isolation",
@@ -711,9 +711,8 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 62 passed, 1 failed",
-       "ok": false,
-       "detail": "ndshake verifies the pending attempt and task, and a blocked classification never writes a prepared receipt.json (633.6811ms)\n✔ m2 & m4 regression: config.json validation matches README (timeout 100..65000, the old model keys are no settings any more) and no_model_meets_floor returns structured blocked (745.5577ms)\n✔ R1: a failed classification cools the channel: the retry answers at once with the failure and the plugin card, without asking Cindy; it expires, doubles, and a classified task clears it (811.3715ms)\n✔ R1: a malformed answer cools only that task, so one adversarial task cannot block the others (338.0535ms)\n✔ r1: phase 2 needs a live request of this session and task; a forged, stale or incomplete answer is refused and fills no shared cache (1297.6548ms)\n✔ r4: a blocked classification leaves a receipt the caller already holds in place (317.2029ms)\n✔ r5: an empty or partial profile starts nothing, with or without the host phase; a complete one routes (573.1902ms)\n✔ r6: the external CLI takes no profile: it is refused out loud rather than silently ignored (867.2649ms)\n✔ R3: a task of more than 15,000 characters is classified whole; one that cannot fit the quick-text prompt is refused, never cut (331.4032ms)\nℹ tests 63\nℹ suites 0\nℹ pass 62\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 16910.7819\n\n✖ failing tests:\n\ntest at test\\test_engine.mjs:1:1\n✖ <repo>\\test\\test_engine.mjs (57.2381ms)\n  'test failed'\n"
+       "name": "node --test: 81 passed, 0 failed",
+       "ok": true
       },
       {
        "name": "python unittest: 8 ran",
@@ -1323,12 +1322,12 @@
     "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:2169/v1"
+    "scorer": "http://127.0.0.1:9130/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 62,
-     "fail": 1
+     "pass": 81,
+     "fail": 0
     },
     "python": {
      "ran": 8,
@@ -1349,12 +1348,12 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-06T20:26:25.423Z",
+   "finished_at": "2026-11-06T20:28:24.103Z",
    "summary": {
     "operations": 28,
     "checks": 115,
-    "passed": 114,
-    "failed": 1,
+    "passed": 115,
+    "failed": 0,
     "artifacts": "<sandbox>\\report\\cindy"
    }
   }
@@ -1370,8 +1369,8 @@
   "win32": {
    "operations": 28,
    "checks": 115,
-   "passed": 114,
-   "failed": 1,
+   "passed": 115,
+   "failed": 0,
    "artifacts": "<sandbox>\\report\\cindy"
   }
  }

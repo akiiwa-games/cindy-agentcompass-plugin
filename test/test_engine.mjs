@@ -521,9 +521,7 @@ test('R5: the prompt carries the AgentCompass rubric, route definitions and all 
 
 test('R5: the shipped case file is the AgentCompass one, character for character (line endings follow each repository), when a checkout is at hand', {skip: !process.env.AGENTCOMPASS_CHECKOUT}, () => {
   const source = path.join(process.env.AGENTCOMPASS_CHECKOUT, 'skills', 'agent-compass', 'references', 'classifier-cases.json');
-  const text = file => fs.readFileSync(file, 'utf8').replace(/
-/g, '
-');
+  const text = file => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
   assert.equal(text(new URL('../plugin/engine/classifier-cases.json', import.meta.url)), text(source));
 });
 
