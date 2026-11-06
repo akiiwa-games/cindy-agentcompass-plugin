@@ -32,7 +32,7 @@
      "callId": "call-3",
      "ok": false,
      "errorCode": "ROUTER_BLOCKED",
-     "message": "ENOENT: no such file or directory, open '<sandbox>/epipe state/ffffffffffffffffffffffffffffffffffffffff/receipt.json' Check plugin permissions, task directory and exact account mapping; no automatic retry."
+     "message": "Unknown operation ffffffffffffffffffffffffffffffffffffffff: no receipt. Nothing is recorded for it; roll the task to start it. Check plugin permissions, task directory and exact account mapping; no automatic retry."
     }
    ]
   }
@@ -54,6 +54,7 @@
    "name": "capabilities"
   }
  ],
+ "oneshotCalls": [],
  "nodeCalls": [
   "prepare",
   "prepare",

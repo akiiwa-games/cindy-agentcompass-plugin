@@ -537,11 +537,11 @@ try {
     JSON.stringify(first(zc.r, 'roll')).slice(0, 500) + zc.result.stderr.slice(-300) + (zc.record.workerStderr || ''));
   check('Cindy creates a row of its own catalog (codex on the openai connection) with bypassPermissions', isRow(zc.create.route, REAL) &&
     zc.create.route.agentKind === 'codex' && zc.create.route.providerId === 'openai' && zc.create.permissionMode === 'bypassPermissions', zc.create);
-  check('the decision is explained: work kind, profile_source classifier, classifier_model, realtime_loop, score, alternatives, quota source, and classifier task archived',
+  check('the decision is explained: work kind, profile_source classifier, classifier_model, realtime_loop, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel',
     Boolean(zc.receipt.router?.decision?.work_kind && zc.receipt.router?.decision?.profile_source === 'classifier' &&
-    zc.receipt.router?.decision?.classifier_model === 'chatgpt/gpt-5.3-codex-spark' && typeof zc.receipt.router?.decision?.realtime_loop === 'boolean' &&
+    zc.receipt.router?.decision?.classifier_model === 'fixture-quick-text' && typeof zc.receipt.router?.decision?.realtime_loop === 'boolean' &&
     zc.receipt.router.decision.alternatives?.length && zc.receipt.router.decision.quota?.source === 'codex-cli-sessions' &&
-    (zc.record.classifierCalls || []).some(c => c.name === 'archive')), zc.receipt.router?.decision);
+    zc.record.oneshotCalls?.length === 1 && zc.record.oneshotCalls[0].expectJson === true && count(zc.record, 'create') === 1), zc.receipt.router?.decision);
   check('the text sent to Cindy is the whole task byte for byte plus the return channel', zc.sentText.startsWith(zcTask) && zc.sentText.includes('Cindy plugin task return channel') &&
     zc.receipt.prompt === zc.sentText, [zc.sentText.length, zcTask.length]);
   check('status reports running, then collects the exact final message; cleanup archives', first(zc.r, 'status while running').result?.status === 'running' && lifecycle(zc) &&
@@ -685,7 +685,7 @@ try {
   ]));
   r = replies(record);
   check('both rolls fail with the router reason, and the worker still answers', ['roll', 'roll again'].every(k => /Router returned no usable route/.test(first(r, k).message || '')) &&
-    /ENOENT|no such file/.test(first(r, 'status').message || '') && !/Node bridge unavailable/.test(JSON.stringify(r)), JSON.stringify(r).slice(0, 600) + (record.workerStderr || ''));
+    /Unknown operation/.test(first(r, 'status').message || '') && !/Node bridge unavailable/.test(JSON.stringify(r)), JSON.stringify(r).slice(0, 600) + (record.workerStderr || ''));
 
   // -------------------------------------------------------------------------------------------------------------
   // The external CLI on request: ~/.agent-compass/cindy-plugin/config.json {"engine":"cli"} for the scenarios below only.

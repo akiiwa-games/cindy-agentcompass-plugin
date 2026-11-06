@@ -3,7 +3,27 @@
   {
    "label": "catalog",
    "fixture": {
-    "catalog": "real"
+    "catalog": "real",
+    "classifierProfiles": [
+     {
+      "multi_task": true,
+      "task_count": "2",
+      "reason": "two independent tasks"
+     },
+     {
+      "multi_task": true,
+      "task_count": "3",
+      "reason": "three independent tasks"
+     },
+     {
+      "self": true,
+      "reason": "conceptual question for current session"
+     },
+     {
+      "self": true,
+      "reason": "explicitly requested direct answer in current session"
+     }
+    ]
    }
   },
   {
@@ -17,25 +37,62 @@
       "status": "split",
       "engine": "builtin",
       "task_count": "2",
-      "reason": "2 listed items marked as independent",
+      "reason": "two independent tasks",
       "profile": {
-       "work_kind": "debug_review",
+       "work_kind": "general_implementation",
        "reasoning_depth": 2,
        "code_complexity": 2,
-       "context_scale": 2,
+       "context_scale": 1,
        "divergence": 1,
-       "hallucination_risk": 3,
+       "hallucination_risk": 1,
        "error_cost": 2,
        "needs_visual": false,
        "needs_gui": false,
-       "local_only": false,
+       "local_only": true,
        "interaction_style": "engineering",
-       "expected_hours": 0.8,
+       "expected_hours": 0.5,
        "hours_confidence": "medium",
-       "urgency": "unknown",
-       "reason": "deterministic profile: work_kind=debug_review, depth=2, code=2, scale=2, div=1",
+       "urgency": "normal",
+       "reason": "two independent tasks",
        "multi_task": true,
-       "task_count": "2"
+       "task_count": "2",
+       "realtime_loop": false,
+       "self": false,
+       "wants_fast": false
+      },
+      "profile_source": "classifier",
+      "classifier_model": "fixture-quick-text",
+      "realtime_loop": false,
+      "decision": {
+       "profile": {
+        "work_kind": "general_implementation",
+        "reasoning_depth": 2,
+        "code_complexity": 2,
+        "context_scale": 1,
+        "divergence": 1,
+        "hallucination_risk": 1,
+        "error_cost": 2,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "interaction_style": "engineering",
+        "expected_hours": 0.5,
+        "hours_confidence": "medium",
+        "urgency": "normal",
+        "reason": "two independent tasks",
+        "multi_task": true,
+        "task_count": "2",
+        "realtime_loop": false,
+        "self": false,
+        "wants_fast": false
+       },
+       "profile_source": "classifier",
+       "classifier_model": "fixture-quick-text",
+       "realtime_loop": false,
+       "classifier_calibration_cases": {
+        "included": 47,
+        "total": 47
+       }
       },
       "next_action": "This assignment holds several independent deliverables. Split it and roll each task separately; nothing was started."
      }
@@ -53,25 +110,62 @@
       "status": "split",
       "engine": "builtin",
       "task_count": "3",
-      "reason": "3 listed items marked as independent",
+      "reason": "three independent tasks",
       "profile": {
-       "work_kind": "debug_review",
+       "work_kind": "general_implementation",
        "reasoning_depth": 2,
        "code_complexity": 2,
-       "context_scale": 2,
+       "context_scale": 1,
        "divergence": 1,
-       "hallucination_risk": 3,
+       "hallucination_risk": 1,
        "error_cost": 2,
        "needs_visual": false,
        "needs_gui": false,
-       "local_only": false,
+       "local_only": true,
        "interaction_style": "engineering",
-       "expected_hours": 0.8,
+       "expected_hours": 0.5,
        "hours_confidence": "medium",
-       "urgency": "unknown",
-       "reason": "deterministic profile: work_kind=debug_review, depth=2, code=2, scale=2, div=1",
+       "urgency": "normal",
+       "reason": "three independent tasks",
        "multi_task": true,
-       "task_count": "3"
+       "task_count": "3",
+       "realtime_loop": false,
+       "self": false,
+       "wants_fast": false
+      },
+      "profile_source": "classifier",
+      "classifier_model": "fixture-quick-text",
+      "realtime_loop": false,
+      "decision": {
+       "profile": {
+        "work_kind": "general_implementation",
+        "reasoning_depth": 2,
+        "code_complexity": 2,
+        "context_scale": 1,
+        "divergence": 1,
+        "hallucination_risk": 1,
+        "error_cost": 2,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "interaction_style": "engineering",
+        "expected_hours": 0.5,
+        "hours_confidence": "medium",
+        "urgency": "normal",
+        "reason": "three independent tasks",
+        "multi_task": true,
+        "task_count": "3",
+        "realtime_loop": false,
+        "self": false,
+        "wants_fast": false
+       },
+       "profile_source": "classifier",
+       "classifier_model": "fixture-quick-text",
+       "realtime_loop": false,
+       "classifier_calibration_cases": {
+        "included": 47,
+        "total": 47
+       }
       },
       "next_action": "This assignment holds several independent deliverables. Split it and roll each task separately; nothing was started."
      }
@@ -88,25 +182,62 @@
      "result": {
       "status": "self",
       "engine": "builtin",
-      "reason": "a short question with no work to delegate",
+      "reason": "conceptual question for current session",
       "profile": {
        "work_kind": "general_implementation",
        "reasoning_depth": 2,
        "code_complexity": 2,
        "context_scale": 1,
        "divergence": 1,
-       "hallucination_risk": 2,
+       "hallucination_risk": 1,
        "error_cost": 2,
        "needs_visual": false,
        "needs_gui": false,
-       "local_only": false,
+       "local_only": true,
        "interaction_style": "engineering",
-       "expected_hours": 0.8,
+       "expected_hours": 0.5,
        "hours_confidence": "medium",
-       "urgency": "unknown",
-       "reason": "deterministic profile: work_kind=general_implementation, depth=2, code=2, scale=1, div=1",
+       "urgency": "normal",
+       "reason": "conceptual question for current session",
        "multi_task": false,
-       "task_count": "1"
+       "task_count": "1",
+       "realtime_loop": false,
+       "self": true,
+       "wants_fast": false
+      },
+      "profile_source": "classifier",
+      "classifier_model": "fixture-quick-text",
+      "realtime_loop": false,
+      "decision": {
+       "profile": {
+        "work_kind": "general_implementation",
+        "reasoning_depth": 2,
+        "code_complexity": 2,
+        "context_scale": 1,
+        "divergence": 1,
+        "hallucination_risk": 1,
+        "error_cost": 2,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "interaction_style": "engineering",
+        "expected_hours": 0.5,
+        "hours_confidence": "medium",
+        "urgency": "normal",
+        "reason": "conceptual question for current session",
+        "multi_task": false,
+        "task_count": "1",
+        "realtime_loop": false,
+        "self": true,
+        "wants_fast": false
+       },
+       "profile_source": "classifier",
+       "classifier_model": "fixture-quick-text",
+       "realtime_loop": false,
+       "classifier_calibration_cases": {
+        "included": 47,
+        "total": 47
+       }
       },
       "next_action": "Do this in the current session; no Cindy task was started."
      }
@@ -123,25 +254,62 @@
      "result": {
       "status": "self",
       "engine": "builtin",
-      "reason": "the assignment asks to be answered in the current session",
+      "reason": "explicitly requested direct answer in current session",
       "profile": {
        "work_kind": "general_implementation",
        "reasoning_depth": 2,
        "code_complexity": 2,
        "context_scale": 1,
        "divergence": 1,
-       "hallucination_risk": 2,
+       "hallucination_risk": 1,
        "error_cost": 2,
        "needs_visual": false,
        "needs_gui": false,
-       "local_only": false,
+       "local_only": true,
        "interaction_style": "engineering",
-       "expected_hours": 0.8,
+       "expected_hours": 0.5,
        "hours_confidence": "medium",
-       "urgency": "unknown",
-       "reason": "deterministic profile: work_kind=general_implementation, depth=2, code=2, scale=1, div=1",
+       "urgency": "normal",
+       "reason": "explicitly requested direct answer in current session",
        "multi_task": false,
-       "task_count": "1"
+       "task_count": "1",
+       "realtime_loop": false,
+       "self": true,
+       "wants_fast": false
+      },
+      "profile_source": "classifier",
+      "classifier_model": "fixture-quick-text",
+      "realtime_loop": false,
+      "decision": {
+       "profile": {
+        "work_kind": "general_implementation",
+        "reasoning_depth": 2,
+        "code_complexity": 2,
+        "context_scale": 1,
+        "divergence": 1,
+        "hallucination_risk": 1,
+        "error_cost": 2,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "interaction_style": "engineering",
+        "expected_hours": 0.5,
+        "hours_confidence": "medium",
+        "urgency": "normal",
+        "reason": "explicitly requested direct answer in current session",
+        "multi_task": false,
+        "task_count": "1",
+        "realtime_loop": false,
+        "self": true,
+        "wants_fast": false
+       },
+       "profile_source": "classifier",
+       "classifier_model": "fixture-quick-text",
+       "realtime_loop": false,
+       "classifier_calibration_cases": {
+        "included": 47,
+        "total": 47
+       }
       },
       "next_action": "Do this in the current session; no Cindy task was started."
      }
@@ -175,7 +343,37 @@
    "name": "models"
   }
  ],
+ "oneshotCalls": [
+  {
+   "kind": "oneshot_text",
+   "chars": 29079,
+   "expectJson": true,
+   "callId": "call-1"
+  },
+  {
+   "kind": "oneshot_text",
+   "chars": 29029,
+   "expectJson": true,
+   "callId": "call-2"
+  },
+  {
+   "kind": "oneshot_text",
+   "chars": 29019,
+   "expectJson": true,
+   "callId": "call-3"
+  },
+  {
+   "kind": "oneshot_text",
+   "chars": 28986,
+   "expectJson": true,
+   "callId": "call-4"
+  }
+ ],
  "nodeCalls": [
+  "prepare",
+  "prepare",
+  "prepare",
+  "prepare",
   "prepare",
   "prepare",
   "prepare",

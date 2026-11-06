@@ -9,6 +9,13 @@ real-acceptance report and the cancel-fix notes). The plugin now lives only in t
   AgentCompass engine (`plugin/engine/`): the split and self gates, the AgentCompass profiler and allocator over the live
   `tasks.models()` catalog, Codex quota telemetry and fast mode. Nothing else has to be installed: no AgentCompass, no Python, no npm
   package, no network service.
+- **Classification through Cindy's quick-text channel.** Task profiles come only from a model or an explicit `profile`. The logic page makes
+  one `oneshot_text` request (manifest `cindy.text: ["oneshot"]`): no Agent, tools, task or session, so nothing reaches the task list; it
+  spends the user's model quota. Cindy chooses the model: the plugin card's, else the auxiliary chain. Cindy runs this channel on its xd,
+  OpenAI and xAI connections, so a Claude subscription alone answers `NO_CANDIDATE` and `roll` is blocked until a model is available or the
+  caller passes a complete `profile`. The channel takes one prompt of at most 32,768 characters with no context field, so a long task costs
+  calibration cases (47 up to about 3,800 characters, 6 at 15,000; recorded in `decision.classifier_calibration_cases`) and one that cannot
+  fit is refused, never cut. The README has the details.
 - **Two engines.** The external `agentcompass roll` is used only when the user asks for it: a `router.json` (written by
   `scripts/build_plugin.py`, or placed in `~/.agent-compass/cindy-plugin/`) binds one install, and `config.json` with
   `{"engine":"cli"}` uses the CLI found on `PATH` or in `~/.local/bin`. When that CLI is not installed the built-in engine routes and the
@@ -17,7 +24,7 @@ real-acceptance report and the cancel-fix notes). The plugin now lives only in t
 - **Harness contract.** The worker accepts only the `claude`, `codex` and `pi` harnesses, makes the launcher permission explicit (Claude
   `bypassPermissions`, Codex `full-access`, Pi's fixed full-tool worker as `full-access`), refuses an explicitly different mode instead
   of widening it, and appends the Cindy return-channel contract to the worker prompt. Cindy creates every task with
-  `permissionMode: "bypassPermissions"`.
+  `permissionMode: "bypassPermissions"`; the only tasks created are workers.
 - **Pass-through answers.** `split`, `self` and blocked answers return to the Cindy session unchanged and start no Cindy task.
 - AgentCompass keeps one Cindy-aware guard: raw shell `roll` inside a Cindy shell (its `CINDY_*` markers, no `--parent-host`) is refused,
   so a provider thread or the askpass route is never used as a Paseo parent. The sandbox run checks it.

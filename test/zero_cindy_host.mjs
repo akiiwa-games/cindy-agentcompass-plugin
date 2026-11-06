@@ -16,6 +16,8 @@
 //            Cindy 0.1.121 reported, test/fixtures) | 'real+claude' (that plus a Claude connection) | 'other-model' | 'empty'
 //   sendFault: 'lost-answer' (the run is stored, its answer never arrives)   inputOverride: text the run's input message shows
 //   saveFault: 'after-send' (the receipt save after an accepted send fails once)
+//   classifierProfile / classifierProfiles: what Cindy's quick-text channel answers (over the fixture profile), the plural one per request
+//   oneshotFault: {errorCode, message} a refusal of every quick-text request
 //   accountMap: [...] writes ~/.agent-compass/cindy-plugin/account-map.json   receiptPatch: {operation, set, unset}
 import fs from 'node:fs';
 import path from 'node:path';
@@ -48,15 +50,13 @@ const rpc = (method, params) => new Promise(resolve => {
 const host = {
   capabilities: 'full', catalog: 'matching', workingDir: null, staleRevision: false, archiveFails: false, createFault: null, finalRepeat: null,
   connection: null, sendFault: null, saveFault: null, inputOverride: null,
-  classifierProfile: null, classifierProfiles: [], classifierTasks: new Map(), classifierRuns: new Map(), classifierCalls: [],
-  classifierCreateKeys: new Map(), classifierSendKeys: new Map(),
+  classifierProfile: null, classifierProfiles: [], oneshotFault: null, oneshotCalls: [],
   tasks: new Map(), runs: new Map(), createKeys: new Map(), sendKeys: new Map(), pages: 1,
   calls: [], prepared: null, nodeCalls: [], sent: [],
 };
 const log = (name, detail) => host.calls.push({ name, ...detail });
-const logClf = (name, detail) => host.classifierCalls.push({ name, ...detail });
 const publicRun = run => { if (!run) return run; const { inputText, outputText, ...rest } = run; return rest; };
-const ALL_OPS = ['models', 'create', 'send', 'get', 'getRun', 'listRuns', 'readMessages', 'cancel', 'archive', 'setHidden'];
+const ALL_OPS = ['models', 'create', 'send', 'get', 'getRun', 'listRuns', 'readMessages', 'cancel', 'archive'];
 const DEFAULT_CLASSIFIER_PROFILE = {
   work_kind: 'general_implementation',
   interaction_style: 'engineering',
@@ -112,7 +112,7 @@ const cindy = {
       if (host.capabilities === 'denied') throw Error('PERMISSION_DENIED');
       const missing = { 'no-cancel': 'cancel', 'no-archive': 'archive' }[host.capabilities];
       const operations = ALL_OPS.filter(o => o !== missing);
-      return { operations, exactRoute: host.capabilities !== 'no-exact', createPermissionMode: true, hiddenTasks: true };
+      return { operations, exactRoute: host.capabilities !== 'no-exact', createPermissionMode: true };
     },
     models: async () => {
       log('models', {});
@@ -124,17 +124,6 @@ const cindy = {
       return { models: [{ route: shown, efforts: [route.effort], supportsFastMode: true }] };
     },
     create: async request => {
-      if (String(request.requestKey || '').endsWith(':classify:create')) {
-        logClf('create', { requestKey: request.requestKey, route: request.route, permissionMode: request.permissionMode, hidden: Boolean(request.hidden) });
-        if (host.classifierCreateKeys.has(request.requestKey)) {
-          return structuredClone(host.classifierTasks.get(host.classifierCreateKeys.get(request.requestKey)));
-        }
-        const taskId = 'clf-task-' + (host.classifierTasks.size + 1);
-        const task = { taskId, revision: 1, resolvedConfig: { ...request.route }, permissionMode: request.permissionMode, planModeEnabled: false, workingDir: trusted.workdir, hidden: Boolean(request.hidden) };
-        host.classifierTasks.set(taskId, task);
-        host.classifierCreateKeys.set(request.requestKey, taskId);
-        return structuredClone(task);
-      }
       log('create', { requestKey: request.requestKey, route: request.route, permissionMode: request.permissionMode });
       if (host.createKeys.has(request.requestKey)) { host.duplicateCreate = (host.duplicateCreate || 0) + 1; return structuredClone(host.tasks.get(host.createKeys.get(request.requestKey))); }
       const taskId = 'task-' + (host.tasks.size + 1);
@@ -145,26 +134,6 @@ const cindy = {
       return structuredClone({ ...task, revision: host.staleRevision ? task.revision - 1 : task.revision });
     },
     send: async request => {
-      if (host.classifierTasks.has(request.taskId)) {
-        const clfTask = host.classifierTasks.get(request.taskId);
-        logClf('send', { taskId: request.taskId, expectedRevision: request.expectedRevision, requestKey: request.requestKey, chars: request.text.length });
-        if (host.classifierSendKeys.has(request.requestKey)) {
-          return structuredClone(publicRun(host.classifierRuns.get(host.classifierSendKeys.get(request.requestKey))));
-        }
-        if (clfTask.archived) throw coded('INVALID_REQUEST', 'Task is archived');
-        if (request.expectedRevision !== clfTask.revision) throw coded('REVISION_CONFLICT', 'Task revision mismatch');
-        const runId = 'clf-run-' + (host.classifierRuns.size + 1);
-        const nextOverride = host.classifierProfiles.length ? host.classifierProfiles.shift() : (host.classifierProfile || {});
-        const profile = { ...DEFAULT_CLASSIFIER_PROFILE, ...nextOverride };
-        const clfRun = {
-          runId, taskId: clfTask.taskId, inputMessageId: 'clf-in-' + runId, outputMessageId: 'clf-out-' + runId,
-          status: 'completed', acceptedConfig: { ...clfTask.resolvedConfig }, inputText: request.text, outputText: JSON.stringify(profile),
-        };
-        host.classifierRuns.set(runId, clfRun);
-        host.classifierSendKeys.set(request.requestKey, runId);
-        clfTask.revision += 1;
-        return structuredClone(publicRun(clfRun));
-      }
       const task = host.tasks.get(request.taskId);
       log('send', { taskId: request.taskId, expectedRevision: request.expectedRevision, requestKey: request.requestKey, chars: request.text.length });
       if (!task) throw Error('TASK_NOT_FOUND');
@@ -182,34 +151,16 @@ const cindy = {
       return structuredClone(publicRun(run));
     },
     getRun: async request => {
-      if (host.classifierRuns.has(request.runId)) {
-        logClf('getRun', { runId: request.runId });
-        return structuredClone(publicRun(host.classifierRuns.get(request.runId)));
-      }
       log('getRun', { runId: request.runId });
       return structuredClone(publicRun(host.runs.get(request.runId)));
     },
     listRuns: async request => {
-      if (host.classifierTasks.has(request.taskId)) {
-        logClf('listRuns', { taskId: request.taskId });
-        return { items: [...host.classifierRuns.values()].filter(r => r.taskId === request.taskId).map(r => structuredClone(publicRun(r))), nextCursor: null };
-      }
       log('listRuns', { taskId: request.taskId });
       return { items: [...host.runs.values()].filter(r => r.taskId === request.taskId).map(r => structuredClone(publicRun(r))), nextCursor: null };
     },
     // As Cindy 0.1.121 stores them: page 0 opens with the run's input message (`id` = the run's inputMessageId, role
     // user, the sent text), the last page holds the output message.
     readMessages: async request => {
-      if (host.classifierTasks.has(request.taskId)) {
-        logClf('readMessages', { taskId: request.taskId, after: request.after || null });
-        const clfRun = [...host.classifierRuns.values()].find(r => r.taskId === request.taskId);
-        return {
-          items: clfRun
-            ? [{ id: clfRun.inputMessageId, role: 'user', content: clfRun.inputText }, { id: clfRun.outputMessageId, role: 'assistant', content: clfRun.outputText }]
-            : [],
-          nextCursor: null,
-        };
-      }
       log('readMessages', { after: request.after || null });
       const index = request.after ? Number(request.after) : 0;
       const last = index >= host.pages - 1;
@@ -220,47 +171,35 @@ const cindy = {
       return { items, nextCursor: last ? null : String(index + 1) };
     },
     cancel: async request => {
-      if (host.classifierRuns.has(request.runId)) {
-        logClf('cancel', { runId: request.runId });
-        const clfRun = host.classifierRuns.get(request.runId);
-        clfRun.status = 'cancelled';
-        return structuredClone(publicRun(clfRun));
-      }
       log('cancel', { runId: request.runId });
       const run = host.runs.get(request.runId);
       run.status = 'stopping';
       return structuredClone(publicRun(run));
     },
     archive: async request => {
-      if (host.classifierTasks.has(request.taskId)) {
-        logClf('archive', { taskId: request.taskId });
-        const clfTask = host.classifierTasks.get(request.taskId);
-        clfTask.archived = true;
-        return structuredClone(clfTask);
-      }
       log('archive', { taskId: request.taskId });
       if (host.archiveFails) throw coded('TASK_BUSY', 'ARCHIVE_FAILED');
       host.tasks.get(request.taskId).archived = true; return structuredClone(host.tasks.get(request.taskId));
     },
-    setHidden: async request => {
-      if (host.classifierTasks.has(request.taskId)) {
-        logClf('setHidden', { taskId: request.taskId, hidden: Boolean(request.hidden) });
-        const clfTask = host.classifierTasks.get(request.taskId);
-        clfTask.hidden = Boolean(request.hidden);
-        return structuredClone(clfTask);
-      }
-      log('setHidden', { taskId: request.taskId, hidden: Boolean(request.hidden) });
-      const task = host.tasks.get(request.taskId);
-      if (task) task.hidden = Boolean(request.hidden);
-      return structuredClone(task);
-    },
   },
   onHostMessage: callback => { host.handler = callback; },
-  send: message => { host.waiters.get(message.callId)?.(message); },
+  send: message => {
+    // Cindy's quick-text channel, as `handleOneshotText` answers it: prompt limit, then a structured refusal or the text.
+    if (message.type === 'cindy-request') {
+      const request = { kind: message.kind, chars: message.prompt?.length, expectJson: message.expectJson, callId: message.callId };
+      host.oneshotCalls.push(request);
+      if (message.kind !== 'oneshot_text') return Promise.resolve({ ok: false, message: 'unknown kind', errorCode: 'INVALID_PARAMS' });
+      if (message.prompt.length > 32768) return Promise.resolve({ ok: false, message: 'prompt too long', errorCode: 'INVALID_PARAMS' });
+      if (host.oneshotFault) return Promise.resolve({ ok: false, ...host.oneshotFault });
+      const nextOverride = host.classifierProfiles.length ? host.classifierProfiles.shift() : (host.classifierProfile || {});
+      return Promise.resolve({ ok: true, text: JSON.stringify({ ...DEFAULT_CLASSIFIER_PROFILE, ...nextOverride }), model: 'fixture-quick-text' });
+    }
+    host.waiters.get(message.callId)?.(message);
+  },
 };
 host.waiters = new Map();
 let serial = 0;
-vm.runInNewContext(fs.readFileSync(path.join(pluginDir, 'main.js'), 'utf8'), { cindy, Set, Boolean, Error, JSON });
+vm.runInNewContext(fs.readFileSync(path.join(pluginDir, 'main.js'), 'utf8'), { cindy, Set, Boolean, Error, JSON, Promise });
 if (host.capabilities === 'missing') delete cindy.tasks;
 
 const operations = { last: null };
@@ -286,7 +225,7 @@ try {
     if (step.fixture) {
       const f = step.fixture;
       for (const key of ['capabilities', 'catalog', 'workingDir', 'staleRevision', 'archiveFails', 'pages', 'finalText', 'finalRepeat', 'createFault',
-        'connection', 'sendFault', 'saveFault', 'inputOverride', 'classifierProfile', 'classifierProfiles']) if (key in f) host[key] = structuredClone(f[key]);
+        'connection', 'sendFault', 'saveFault', 'inputOverride', 'classifierProfile', 'classifierProfiles', 'oneshotFault']) if (key in f) host[key] = structuredClone(f[key]);
       if (f.accountMap) { fs.mkdirSync(stateHome, { recursive: true }); fs.writeFileSync(path.join(stateHome, 'account-map.json'), JSON.stringify(f.accountMap)); }
       if (f.receiptPatch) {
         const op = f.receiptPatch.operation.startsWith('@operation:') ? operations[f.receiptPatch.operation.slice('@operation:'.length)] : f.receiptPatch.operation;
@@ -329,7 +268,7 @@ try {
   }
 }
 fs.writeFileSync(outFile, JSON.stringify({
-  results, calls: host.calls, classifierCalls: host.classifierCalls, classifierTasks: [...host.classifierTasks.values()],
+  results, calls: host.calls, oneshotCalls: host.oneshotCalls,
   nodeCalls: host.nodeCalls, sent: host.sent, prepared: host.prepared,
   duplicateCreate: host.duplicateCreate || 0, duplicateSend: host.duplicateSend || 0,
   tasks: [...host.tasks.values()], runs: [...host.runs.values()], workerStderr: Buffer.concat(stderr).toString('utf8').slice(-2000),

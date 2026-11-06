@@ -3,7 +3,12 @@
   {
    "label": "catalog",
    "fixture": {
-    "catalog": "real+claude"
+    "catalog": "real+claude",
+    "classifierProfile": {
+     "work_kind": "general_implementation",
+     "reasoning_depth": 1,
+     "code_complexity": 1
+    }
    }
   },
   {
@@ -15,7 +20,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "42bd3e3b37d73f60c59ed1efe7f755caedcd38f7",
+      "operation": "4724364efb5dbed839ed6f30a403b8de45117547",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -27,7 +32,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "42bd3e3b37d73f60c59ed1efe7f755caedcd38f7"
+        "operation": "4724364efb5dbed839ed6f30a403b8de45117547"
        }
       }
      }
@@ -43,7 +48,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "42bd3e3b37d73f60c59ed1efe7f755caedcd38f7",
+      "operation": "4724364efb5dbed839ed6f30a403b8de45117547",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -58,7 +63,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "42bd3e3b37d73f60c59ed1efe7f755caedcd38f7"
+        "operation": "4724364efb5dbed839ed6f30a403b8de45117547"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -84,7 +89,7 @@
      "ok": true,
      "result": {
       "status": "completed",
-      "operation": "42bd3e3b37d73f60c59ed1efe7f755caedcd38f7",
+      "operation": "4724364efb5dbed839ed6f30a403b8de45117547",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -95,14 +100,14 @@
       "final_result_summary": "[Worker final report] harness-codex",
       "summary_shortened": false,
       "full_result_artifacts": [
-       "<sandbox>/home/.agent-compass/cindy-plugin/42bd3e3b37d73f60c59ed1efe7f755caedcd38f7/messages-11d6beedab3f2db2.json",
-       "<sandbox>/home/.agent-compass/cindy-plugin/42bd3e3b37d73f60c59ed1efe7f755caedcd38f7/messages-1868a0f6775cfe51.json"
+       "<sandbox>/home/.agent-compass/cindy-plugin/4724364efb5dbed839ed6f30a403b8de45117547/messages-a4aceadfb3ee16f2.json",
+       "<sandbox>/home/.agent-compass/cindy-plugin/4724364efb5dbed839ed6f30a403b8de45117547/messages-1868a0f6775cfe51.json"
       ],
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "cleanup",
        "args": {
-        "operation": "42bd3e3b37d73f60c59ed1efe7f755caedcd38f7"
+        "operation": "4724364efb5dbed839ed6f30a403b8de45117547"
        }
       },
       "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
@@ -119,7 +124,9 @@
      "ok": true,
      "result": {
       "status": "cleaned",
-      "operation": "42bd3e3b37d73f60c59ed1efe7f755caedcd38f7"
+      "operation": "4724364efb5dbed839ed6f30a403b8de45117547",
+      "taskId": "task-1",
+      "task_id": "task-1"
      }
     }
    ]
@@ -137,12 +144,12 @@
   },
   {
    "name": "create",
-   "requestKey": "42bd3e3b37d73f60c59ed1efe7f755caedcd38f7:create",
+   "requestKey": "4724364efb5dbed839ed6f30a403b8de45117547:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
     "providerId": "openai",
-    "effort": "high",
+    "effort": "low",
     "fastMode": false
    },
    "permissionMode": "bypassPermissions"
@@ -151,7 +158,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "42bd3e3b37d73f60c59ed1efe7f755caedcd38f7:send",
+   "requestKey": "4724364efb5dbed839ed6f30a403b8de45117547:send",
    "chars": 409
   },
   {
@@ -192,7 +199,16 @@
    "taskId": "task-1"
   }
  ],
+ "oneshotCalls": [
+  {
+   "kind": "oneshot_text",
+   "chars": 29053,
+   "expectJson": true,
+   "callId": "call-1"
+  }
+ ],
  "nodeCalls": [
+  "prepare",
   "prepare",
   "load",
   "save",
@@ -213,12 +229,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>/report/cindy/cindy-sent-run-1.txt",
-   "sha256": "7f364bcd106e1edaa1703ac566970d2c57ce31988522c6ce476a54314a20b6bd",
+   "sha256": "45e6a84843ccda3820b18157bf5a15bafe65ed95bd4e9a43366869f7f8906dcd",
    "chars": 409
   }
  ],
  "prepared": {
-  "operation": "42bd3e3b37d73f60c59ed1efe7f755caedcd38f7",
+  "operation": "4724364efb5dbed839ed6f30a403b8de45117547",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -232,47 +248,63 @@
      "account": "openai",
      "providerId": "openai",
      "model": "gpt-6.1-sol",
-     "effort": "high",
+     "effort": "low",
      "fast": false,
      "modeId": "full-access"
     }
    },
    "decision": {
     "work_kind": "general_implementation",
-    "difficulty": "hard",
-    "required_ability": 3.4016,
+    "difficulty": "routine",
+    "required_ability": 2.3254,
     "profile": {
      "work_kind": "general_implementation",
-     "reasoning_depth": 2,
-     "code_complexity": 2,
+     "reasoning_depth": 1,
+     "code_complexity": 1,
      "context_scale": 1,
      "divergence": 1,
-     "hallucination_risk": 2,
+     "hallucination_risk": 1,
      "error_cost": 2,
      "needs_visual": false,
      "needs_gui": false,
-     "local_only": false,
+     "local_only": true,
      "interaction_style": "engineering",
-     "expected_hours": 0.8,
+     "expected_hours": 0.5,
      "hours_confidence": "medium",
-     "urgency": "unknown",
-     "reason": "deterministic profile: work_kind=general_implementation, depth=2, code=2, scale=1, div=1",
+     "urgency": "normal",
+     "reason": "fixture classification from fake Cindy host model",
      "multi_task": false,
-     "task_count": "1"
+     "task_count": "1",
+     "realtime_loop": false,
+     "self": false,
+     "wants_fast": false
+    },
+    "profile_source": "classifier",
+    "classifier_model": "fixture-quick-text",
+    "realtime_loop": false,
+    "classifier_calibration_cases": {
+     "included": 47,
+     "total": 47
     },
     "canonical_model": "gpt-6.1-sol",
-    "score": 0.3933,
+    "score": 0.3288,
     "components": {
-     "fit": 0.978,
-     "route_fit": 1,
+     "fit": 0.77,
+     "route_fit": 0.54,
      "vector_fit": 1,
-     "subjective_fit": 0.95,
+     "subjective_fit": 1,
      "ability": 1,
-     "ability_value": 3.6,
-     "required_ability": 3.402,
+     "ability_value": 2.86,
+     "required_ability": 2.325,
+     "continuity": 0,
      "quality_bonus": 0,
+     "free_usage": 0,
+     "reset_bonus": 0,
+     "sprint_quality": 0,
+     "fast_bonus": 0,
+     "opportunity_cost": 0,
      "effort_penalty": 0,
-     "overqualification": 0,
+     "overqualification": 0.0022,
      "shortfall": 0
     },
     "wants_fast": false,
@@ -284,48 +316,48 @@
     "quota_penalized_routes": 0,
     "alternatives": [
      {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "effort": "low",
+      "fast": false,
+      "score": 0.3288,
+      "notes": []
+     },
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-opus-5-5",
+      "effort": "low",
+      "fast": false,
+      "score": 0.3229,
+      "notes": []
+     },
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.3212,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-5.3-codex-spark",
+      "effort": "minimal",
+      "fast": false,
+      "score": 0.321,
+      "notes": []
+     },
+     {
       "agentKind": "pi",
       "providerId": "openai",
       "model": "chatgpt/gpt-6.1-sol",
-      "effort": "high",
+      "effort": "low",
       "fast": false,
-      "score": 0.3833,
-      "notes": []
-     },
-     {
-      "agentKind": "codex",
-      "providerId": "openai",
-      "model": "gpt-6.1-sol",
-      "effort": "medium",
-      "fast": false,
-      "score": 0.3789,
-      "notes": []
-     },
-     {
-      "agentKind": "pi",
-      "providerId": "openai",
-      "model": "chatgpt/gpt-6.1-sol",
-      "effort": "medium",
-      "fast": false,
-      "score": 0.3689,
-      "notes": []
-     },
-     {
-      "agentKind": "codex",
-      "providerId": "openai",
-      "model": "gpt-6-sol",
-      "effort": "high",
-      "fast": false,
-      "score": 0.3642,
-      "notes": []
-     },
-     {
-      "agentKind": "codex",
-      "providerId": "openai",
-      "model": "gpt-6.1-terra",
-      "effort": "high",
-      "fast": false,
-      "score": 0.3595,
+      "score": 0.3188,
       "notes": []
      }
     ]
@@ -337,11 +369,11 @@
    "account": "openai",
    "providerId": "openai",
    "model": "gpt-6.1-sol",
-   "effort": "high",
+   "effort": "low",
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [codex-1793696601857]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [codex-1793996611828]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>/work dir",
   "mappings": [],
   "attempts": 1
@@ -356,7 +388,7 @@
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
     "providerId": "openai",
-    "effort": "high",
+    "effort": "low",
     "fastMode": false
    },
    "permissionMode": "bypassPermissions",
@@ -375,10 +407,10 @@
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
     "providerId": "openai",
-    "effort": "high",
+    "effort": "low",
     "fastMode": false
    },
-   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [codex-1793696601857]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [codex-1793996611828]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
    "outputMessageId": "out-final"
   }
  ],

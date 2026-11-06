@@ -3,7 +3,12 @@
   {
    "label": "catalog",
    "fixture": {
-    "catalog": "real"
+    "catalog": "real",
+    "classifierProfile": {
+     "work_kind": "exploration_analysis",
+     "interaction_style": "exploration",
+     "code_complexity": 0
+    }
    }
   },
   {
@@ -15,7 +20,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "7d3dc1d051d40de375f9aebe1482d779b30ddb16",
+      "operation": "ba6028120224347b4014a17db09ad5a5443b6c44",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -27,7 +32,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "7d3dc1d051d40de375f9aebe1482d779b30ddb16"
+        "operation": "ba6028120224347b4014a17db09ad5a5443b6c44"
        }
       }
      }
@@ -43,7 +48,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "7d3dc1d051d40de375f9aebe1482d779b30ddb16",
+      "operation": "ba6028120224347b4014a17db09ad5a5443b6c44",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -58,7 +63,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "7d3dc1d051d40de375f9aebe1482d779b30ddb16"
+        "operation": "ba6028120224347b4014a17db09ad5a5443b6c44"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -84,7 +89,7 @@
      "ok": true,
      "result": {
       "status": "completed",
-      "operation": "7d3dc1d051d40de375f9aebe1482d779b30ddb16",
+      "operation": "ba6028120224347b4014a17db09ad5a5443b6c44",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -95,14 +100,14 @@
       "final_result_summary": "[Worker final report] harness-pi",
       "summary_shortened": false,
       "full_result_artifacts": [
-       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\7d3dc1d051d40de375f9aebe1482d779b30ddb16\\messages-dec9892156017898.json",
-       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\7d3dc1d051d40de375f9aebe1482d779b30ddb16\\messages-a4a8d1c3e0cca10e.json"
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\ba6028120224347b4014a17db09ad5a5443b6c44\\messages-626f05ef942b6615.json",
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\ba6028120224347b4014a17db09ad5a5443b6c44\\messages-a4a8d1c3e0cca10e.json"
       ],
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "cleanup",
        "args": {
-        "operation": "7d3dc1d051d40de375f9aebe1482d779b30ddb16"
+        "operation": "ba6028120224347b4014a17db09ad5a5443b6c44"
        }
       },
       "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
@@ -119,7 +124,9 @@
      "ok": true,
      "result": {
       "status": "cleaned",
-      "operation": "7d3dc1d051d40de375f9aebe1482d779b30ddb16"
+      "operation": "ba6028120224347b4014a17db09ad5a5443b6c44",
+      "taskId": "task-1",
+      "task_id": "task-1"
      }
     }
    ]
@@ -137,7 +144,7 @@
   },
   {
    "name": "create",
-   "requestKey": "7d3dc1d051d40de375f9aebe1482d779b30ddb16:create",
+   "requestKey": "ba6028120224347b4014a17db09ad5a5443b6c44:create",
    "route": {
     "agentKind": "pi",
     "model": "chatgpt/gpt-6.1-terra",
@@ -151,7 +158,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "7d3dc1d051d40de375f9aebe1482d779b30ddb16:send",
+   "requestKey": "ba6028120224347b4014a17db09ad5a5443b6c44:send",
    "chars": 452
   },
   {
@@ -192,7 +199,16 @@
    "taskId": "task-1"
   }
  ],
+ "oneshotCalls": [
+  {
+   "kind": "oneshot_text",
+   "chars": 29096,
+   "expectJson": true,
+   "callId": "call-1"
+  }
+ ],
  "nodeCalls": [
+  "prepare",
   "prepare",
   "load",
   "save",
@@ -213,12 +229,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "08b5287900c57195d4d5e16da8efa7681ab206ae5dc3fa709a6f737ea01249c9",
+   "sha256": "95ea33fa4fd4312a2609339b4182c76bf1505c3a4bd8a5622340c0a1539c5639",
    "chars": 452
   }
  ],
  "prepared": {
-  "operation": "7d3dc1d051d40de375f9aebe1482d779b30ddb16",
+  "operation": "ba6028120224347b4014a17db09ad5a5443b6c44",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -240,39 +256,55 @@
    "decision": {
     "work_kind": "exploration_analysis",
     "difficulty": "hard",
-    "required_ability": 3.3854,
+    "required_ability": 3.1305,
     "profile": {
      "work_kind": "exploration_analysis",
      "reasoning_depth": 2,
      "code_complexity": 0,
-     "context_scale": 2,
+     "context_scale": 1,
      "divergence": 1,
-     "hallucination_risk": 3,
-     "error_cost": 1,
+     "hallucination_risk": 1,
+     "error_cost": 2,
      "needs_visual": false,
      "needs_gui": false,
      "local_only": true,
      "interaction_style": "exploration",
-     "expected_hours": 0.8,
+     "expected_hours": 0.5,
      "hours_confidence": "medium",
-     "urgency": "unknown",
-     "reason": "deterministic profile: work_kind=exploration_analysis, depth=2, code=0, scale=2, div=1",
+     "urgency": "normal",
+     "reason": "fixture classification from fake Cindy host model",
      "multi_task": false,
-     "task_count": "1"
+     "task_count": "1",
+     "realtime_loop": false,
+     "self": false,
+     "wants_fast": false
+    },
+    "profile_source": "classifier",
+    "classifier_model": "fixture-quick-text",
+    "realtime_loop": false,
+    "classifier_calibration_cases": {
+     "included": 47,
+     "total": 47
     },
     "canonical_model": "gpt-6.1-terra",
-    "score": 0.3415,
+    "score": 0.329,
     "components": {
-     "fit": 0.774,
-     "route_fit": 0.563,
-     "vector_fit": 0.979,
-     "subjective_fit": 0.708,
+     "fit": 0.766,
+     "route_fit": 0.4,
+     "vector_fit": 1,
+     "subjective_fit": 0.731,
      "ability": 1,
      "ability_value": 3.7,
-     "required_ability": 3.385,
+     "required_ability": 3.131,
+     "continuity": 0,
      "quality_bonus": 0,
+     "free_usage": 0,
+     "reset_bonus": 0,
+     "sprint_quality": 0,
+     "fast_bonus": 0,
+     "opportunity_cost": 0,
      "effort_penalty": 0,
-     "overqualification": 0.0006,
+     "overqualification": 0.0108,
      "shortfall": 0
     },
     "wants_fast": false,
@@ -284,48 +316,48 @@
     "quota_penalized_routes": 0,
     "alternatives": [
      {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6.1-terra",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.3255,
+      "notes": []
+     },
+     {
       "agentKind": "codex",
       "providerId": "openai",
       "model": "gpt-6.1-terra",
+      "effort": "high",
+      "fast": false,
+      "score": 0.319,
+      "notes": []
+     },
+     {
+      "agentKind": "codex",
+      "providerId": "openai",
+      "model": "gpt-6.1-terra",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.3155,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6.1-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3315,
+      "score": 0.3095,
       "notes": []
      },
      {
       "agentKind": "pi",
       "providerId": "openai",
-      "model": "chatgpt/gpt-6.1-terra",
-      "effort": "medium",
-      "fast": false,
-      "score": 0.3217,
-      "notes": []
-     },
-     {
-      "agentKind": "pi",
-      "providerId": "openai",
-      "model": "chatgpt/gpt-6.1-terra",
+      "model": "chatgpt/gpt-6-luna",
       "effort": "xhigh",
       "fast": false,
-      "score": 0.3208,
-      "notes": []
-     },
-     {
-      "agentKind": "pi",
-      "providerId": "openai",
-      "model": "chatgpt/gpt-6-astra",
-      "effort": "low",
-      "fast": false,
-      "score": 0.3189,
-      "notes": []
-     },
-     {
-      "agentKind": "codex",
-      "providerId": "openai",
-      "model": "gpt-6.1-terra",
-      "effort": "medium",
-      "fast": false,
-      "score": 0.3117,
+      "score": 0.305,
       "notes": []
      }
     ]
@@ -341,7 +373,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi-1793696524412]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi-1793996760887]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1
@@ -378,7 +410,7 @@
     "effort": "high",
     "fastMode": false
    },
-   "inputText": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi-1793696524412]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "inputText": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi-1793996760887]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
    "outputMessageId": "out-final"
   }
  ],

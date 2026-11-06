@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-03T09:03:04.293Z",
+   "started_at": "2026-11-06T20:22:50.771Z",
    "operations": [
     {
      "name": "isolation",
@@ -33,7 +33,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 53 passed, 0 failed",
+       "name": "node --test: 81 passed, 0 failed",
        "ok": true
       },
       {
@@ -421,7 +421,7 @@
        "ok": true
       },
       {
-       "name": "the decision is explained: work kind, score, alternatives, quota source",
+       "name": "the decision is explained: work kind, profile_source classifier, classifier_model, realtime_loop, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel",
        "ok": true
       },
       {
@@ -439,7 +439,7 @@
      "intent": "codex for an edit, Pi for read-and-report exploration, Claude (cc) for a review; each an exact catalog row with bypassPermissions, through to cleanup",
      "checks": [
       {
-       "name": "codex: the built-in engine chose codex (gpt-6.1-sol/high) with launcher mode full-access",
+       "name": "codex: the built-in engine chose codex (gpt-6.1-sol/low) with launcher mode full-access",
        "ok": true
       },
       {
@@ -455,7 +455,7 @@
        "ok": true
       },
       {
-       "name": "claude: the built-in engine chose cc (claude-opus-5-5/max) with launcher mode bypassPermissions",
+       "name": "claude: the built-in engine chose cc (claude-opus-5-5/high) with launcher mode bypassPermissions",
        "ok": true
       },
       {
@@ -466,7 +466,7 @@
     },
     {
      "name": "built-in split, self, fast and quota",
-     "intent": "split and self come back from the built-in engine and start nothing; fast mode follows the signal word and the Codex quota telemetry; an exhausted Codex window moves the route to Claude",
+     "intent": "split and self come back from the built-in engine and start nothing; fast mode follows the classified profile and the Codex quota telemetry; an exhausted Codex window moves the route to Claude",
      "checks": [
       {
        "name": "split: task_count 2 and 3 from the built-in engine, with the next action for the parent",
@@ -477,7 +477,7 @@
        "ok": true
       },
       {
-       "name": "split and self created nothing and sent nothing",
+       "name": "split and self created no worker task and sent no worker input",
        "ok": true
       },
       {
@@ -585,11 +585,11 @@
      "intent": "Claude max and high (router.json build), and Pi (CLI opt-in), reach exact catalog routes with Cindy bypassPermissions; codex is the first operation",
      "checks": [
       {
-       "name": "claude-max: the router chose claude/claude-opus-5-5 at max and the plugin made bypassPermissions explicit",
+       "name": "claude-max: the router chose claude/claude-opus-5-5 at xhigh and the plugin made bypassPermissions explicit",
        "ok": true
       },
       {
-       "name": "claude-max: Cindy creates cc/claude/claude-opus-5-5/max with bypassPermissions and the run completes",
+       "name": "claude-max: Cindy creates cc/claude/claude-opus-5-5/xhigh with bypassPermissions and the run completes",
        "ok": true
       },
       {
@@ -641,14 +641,14 @@
     "os_release": "6.18.40.1-microsoft-standard-WSL2",
     "node": "v24.22.2",
     "python": "3.12.16",
-    "agentcompass_version": "0.3.5",
+    "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:38593/v1"
+    "scorer": "http://127.0.0.1:35087/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 53,
+     "pass": 81,
      "fail": 0
     },
     "python": {
@@ -670,7 +670,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-03T09:03:26.575Z",
+   "finished_at": "2026-11-06T20:23:41.237Z",
    "summary": {
     "operations": 28,
     "checks": 115,
@@ -682,7 +682,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-03T09:01:29.431Z",
+   "started_at": "2026-11-06T20:25:21.593Z",
    "operations": [
     {
      "name": "isolation",
@@ -711,8 +711,9 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 53 passed, 0 failed",
-       "ok": true
+       "name": "node --test: 62 passed, 1 failed",
+       "ok": false,
+       "detail": "ndshake verifies the pending attempt and task, and a blocked classification never writes a prepared receipt.json (633.6811ms)\n✔ m2 & m4 regression: config.json validation matches README (timeout 100..65000, the old model keys are no settings any more) and no_model_meets_floor returns structured blocked (745.5577ms)\n✔ R1: a failed classification cools the channel: the retry answers at once with the failure and the plugin card, without asking Cindy; it expires, doubles, and a classified task clears it (811.3715ms)\n✔ R1: a malformed answer cools only that task, so one adversarial task cannot block the others (338.0535ms)\n✔ r1: phase 2 needs a live request of this session and task; a forged, stale or incomplete answer is refused and fills no shared cache (1297.6548ms)\n✔ r4: a blocked classification leaves a receipt the caller already holds in place (317.2029ms)\n✔ r5: an empty or partial profile starts nothing, with or without the host phase; a complete one routes (573.1902ms)\n✔ r6: the external CLI takes no profile: it is refused out loud rather than silently ignored (867.2649ms)\n✔ R3: a task of more than 15,000 characters is classified whole; one that cannot fit the quick-text prompt is refused, never cut (331.4032ms)\nℹ tests 63\nℹ suites 0\nℹ pass 62\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 16910.7819\n\n✖ failing tests:\n\ntest at test\\test_engine.mjs:1:1\n✖ <repo>\\test\\test_engine.mjs (57.2381ms)\n  'test failed'\n"
       },
       {
        "name": "python unittest: 8 ran",
@@ -1099,7 +1100,7 @@
        "ok": true
       },
       {
-       "name": "the decision is explained: work kind, score, alternatives, quota source",
+       "name": "the decision is explained: work kind, profile_source classifier, classifier_model, realtime_loop, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel",
        "ok": true
       },
       {
@@ -1117,7 +1118,7 @@
      "intent": "codex for an edit, Pi for read-and-report exploration, Claude (cc) for a review; each an exact catalog row with bypassPermissions, through to cleanup",
      "checks": [
       {
-       "name": "codex: the built-in engine chose codex (gpt-6.1-sol/high) with launcher mode full-access",
+       "name": "codex: the built-in engine chose codex (gpt-6.1-sol/low) with launcher mode full-access",
        "ok": true
       },
       {
@@ -1133,7 +1134,7 @@
        "ok": true
       },
       {
-       "name": "claude: the built-in engine chose cc (claude-opus-5-5/max) with launcher mode bypassPermissions",
+       "name": "claude: the built-in engine chose cc (claude-opus-5-5/high) with launcher mode bypassPermissions",
        "ok": true
       },
       {
@@ -1144,7 +1145,7 @@
     },
     {
      "name": "built-in split, self, fast and quota",
-     "intent": "split and self come back from the built-in engine and start nothing; fast mode follows the signal word and the Codex quota telemetry; an exhausted Codex window moves the route to Claude",
+     "intent": "split and self come back from the built-in engine and start nothing; fast mode follows the classified profile and the Codex quota telemetry; an exhausted Codex window moves the route to Claude",
      "checks": [
       {
        "name": "split: task_count 2 and 3 from the built-in engine, with the next action for the parent",
@@ -1155,7 +1156,7 @@
        "ok": true
       },
       {
-       "name": "split and self created nothing and sent nothing",
+       "name": "split and self created no worker task and sent no worker input",
        "ok": true
       },
       {
@@ -1263,11 +1264,11 @@
      "intent": "Claude max and high (router.json build), and Pi (CLI opt-in), reach exact catalog routes with Cindy bypassPermissions; codex is the first operation",
      "checks": [
       {
-       "name": "claude-max: the router chose claude/claude-opus-5-5 at max and the plugin made bypassPermissions explicit",
+       "name": "claude-max: the router chose claude/claude-opus-5-5 at xhigh and the plugin made bypassPermissions explicit",
        "ok": true
       },
       {
-       "name": "claude-max: Cindy creates cc/claude/claude-opus-5-5/max with bypassPermissions and the run completes",
+       "name": "claude-max: Cindy creates cc/claude/claude-opus-5-5/xhigh with bypassPermissions and the run completes",
        "ok": true
       },
       {
@@ -1319,15 +1320,15 @@
     "os_release": "10.0.26100",
     "node": "v24.12.0",
     "python": "3.13.7",
-    "agentcompass_version": "0.3.5",
+    "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:7662/v1"
+    "scorer": "http://127.0.0.1:2169/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 53,
-     "fail": 0
+     "pass": 62,
+     "fail": 1
     },
     "python": {
      "ran": 8,
@@ -1348,12 +1349,12 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-03T09:02:33.096Z",
+   "finished_at": "2026-11-06T20:26:25.423Z",
    "summary": {
     "operations": 28,
     "checks": 115,
-    "passed": 115,
-    "failed": 0,
+    "passed": 114,
+    "failed": 1,
     "artifacts": "<sandbox>\\report\\cindy"
    }
   }
@@ -1369,8 +1370,8 @@
   "win32": {
    "operations": 28,
    "checks": 115,
-   "passed": 115,
-   "failed": 0,
+   "passed": 114,
+   "failed": 1,
    "artifacts": "<sandbox>\\report\\cindy"
   }
  }

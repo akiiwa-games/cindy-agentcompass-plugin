@@ -21,9 +21,9 @@ PLUGIN = Path(__file__).resolve().parents[1] / 'plugin'
 
 def sources():
     """Every file the manifest declares (itself, the logic page, the node worker, the icon and the locale resources) and
-    the built-in engine the worker imports."""
+    the built-in engine the worker imports, with its calibration data."""
     manifest = json.loads((PLUGIN / 'ghost.json').read_text(encoding='utf-8'))
-    engine = sorted(f'engine/{path.name}' for path in (PLUGIN / 'engine').glob('*.mjs'))
+    engine = sorted(f'engine/{path.name}' for path in (PLUGIN / 'engine').iterdir() if path.suffix in ('.mjs', '.json'))
     return ['ghost.json', manifest['entry'], manifest['node']['entry'], manifest['icon'], *manifest['locales'].values(), *engine]
 
 

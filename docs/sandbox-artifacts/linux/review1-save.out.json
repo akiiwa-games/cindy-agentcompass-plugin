@@ -16,7 +16,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "91d4f1f83ebeeb702f3c2d9ba564678a9bd87edf",
+      "operation": "1e7c7f4f64977685ff9900aa66b3dea4b580b3f4",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -24,15 +24,15 @@
       "error": null,
       "error_code": null,
       "automatic_callback": false,
-      "receipt_saved": false,
-      "receipt_error": "EIO: the receipt could not be written",
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "91d4f1f83ebeeb702f3c2d9ba564678a9bd87edf"
+        "operation": "1e7c7f4f64977685ff9900aa66b3dea4b580b3f4"
        }
-      }
+      },
+      "receipt_saved": false,
+      "receipt_error": "EIO: the receipt could not be written"
      }
     }
    ]
@@ -46,7 +46,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "91d4f1f83ebeeb702f3c2d9ba564678a9bd87edf",
+      "operation": "1e7c7f4f64977685ff9900aa66b3dea4b580b3f4",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -61,7 +61,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "91d4f1f83ebeeb702f3c2d9ba564678a9bd87edf"
+        "operation": "1e7c7f4f64977685ff9900aa66b3dea4b580b3f4"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -82,7 +82,7 @@
   },
   {
    "name": "create",
-   "requestKey": "91d4f1f83ebeeb702f3c2d9ba564678a9bd87edf:create",
+   "requestKey": "1e7c7f4f64977685ff9900aa66b3dea4b580b3f4:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
@@ -96,30 +96,31 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "91d4f1f83ebeeb702f3c2d9ba564678a9bd87edf:send",
+   "requestKey": "1e7c7f4f64977685ff9900aa66b3dea4b580b3f4:send",
    "chars": 433
   },
   {
    "name": "saveFault",
-   "operation": "91d4f1f83ebeeb702f3c2d9ba564678a9bd87edf"
+   "operation": "1e7c7f4f64977685ff9900aa66b3dea4b580b3f4"
   },
   {
    "name": "capabilities"
-  },
-  {
-   "name": "listRuns",
-   "taskId": "task-1"
-  },
-  {
-   "name": "readMessages",
-   "after": null
   },
   {
    "name": "getRun",
    "runId": "run-1"
   }
  ],
+ "oneshotCalls": [
+  {
+   "kind": "oneshot_text",
+   "chars": 29079,
+   "expectJson": true,
+   "callId": "call-1"
+  }
+ ],
  "nodeCalls": [
+  "prepare",
   "prepare",
   "load",
   "save",
@@ -133,12 +134,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>/report/cindy/cindy-sent-run-1.txt",
-   "sha256": "ff1981751b6e5bb6be8255b196cfdc4775300d7144905f6eb696ef7a79a8e059",
+   "sha256": "a3b41e4cf87b1d5674e66b36272eae16378b9f4bfcdb98b29b2db5d228b116db",
    "chars": 433
   }
  ],
  "prepared": {
-  "operation": "91d4f1f83ebeeb702f3c2d9ba564678a9bd87edf",
+  "operation": "1e7c7f4f64977685ff9900aa66b3dea4b580b3f4",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -160,39 +161,55 @@
    "decision": {
     "work_kind": "general_implementation",
     "difficulty": "hard",
-    "required_ability": 3.4016,
+    "required_ability": 3.1711,
     "profile": {
      "work_kind": "general_implementation",
      "reasoning_depth": 2,
      "code_complexity": 2,
      "context_scale": 1,
      "divergence": 1,
-     "hallucination_risk": 2,
+     "hallucination_risk": 1,
      "error_cost": 2,
      "needs_visual": false,
      "needs_gui": false,
-     "local_only": false,
+     "local_only": true,
      "interaction_style": "engineering",
-     "expected_hours": 0.8,
+     "expected_hours": 0.5,
      "hours_confidence": "medium",
-     "urgency": "unknown",
-     "reason": "deterministic profile: work_kind=general_implementation, depth=2, code=2, scale=1, div=1",
+     "urgency": "normal",
+     "reason": "fixture classification from fake Cindy host model",
      "multi_task": false,
-     "task_count": "1"
+     "task_count": "1",
+     "realtime_loop": false,
+     "self": false,
+     "wants_fast": false
+    },
+    "profile_source": "classifier",
+    "classifier_model": "fixture-quick-text",
+    "realtime_loop": false,
+    "classifier_calibration_cases": {
+     "included": 47,
+     "total": 47
     },
     "canonical_model": "gpt-6.1-sol",
-    "score": 0.3933,
+    "score": 0.3647,
     "components": {
-     "fit": 0.978,
-     "route_fit": 1,
+     "fit": 0.897,
+     "route_fit": 0.54,
      "vector_fit": 1,
      "subjective_fit": 0.95,
      "ability": 1,
      "ability_value": 3.6,
-     "required_ability": 3.402,
+     "required_ability": 3.171,
+     "continuity": 0,
      "quality_bonus": 0,
+     "free_usage": 0,
+     "reset_bonus": 0,
+     "sprint_quality": 0,
+     "fast_bonus": 0,
+     "opportunity_cost": 0,
      "effort_penalty": 0,
-     "overqualification": 0,
+     "overqualification": 0.0045,
      "shortfall": 0
     },
     "wants_fast": false,
@@ -204,12 +221,12 @@
     "quota_penalized_routes": 0,
     "alternatives": [
      {
-      "agentKind": "pi",
+      "agentKind": "codex",
       "providerId": "openai",
-      "model": "chatgpt/gpt-6.1-sol",
+      "model": "gpt-6-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3833,
+      "score": 0.3566,
       "notes": []
      },
      {
@@ -218,34 +235,34 @@
       "model": "gpt-6.1-sol",
       "effort": "medium",
       "fast": false,
-      "score": 0.3789,
+      "score": 0.3548,
       "notes": []
      },
      {
       "agentKind": "pi",
       "providerId": "openai",
       "model": "chatgpt/gpt-6.1-sol",
-      "effort": "medium",
+      "effort": "high",
       "fast": false,
-      "score": 0.3689,
+      "score": 0.3547,
       "notes": []
      },
      {
       "agentKind": "codex",
       "providerId": "openai",
-      "model": "gpt-6-sol",
-      "effort": "high",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
       "fast": false,
-      "score": 0.3642,
+      "score": 0.3519,
       "notes": []
      },
      {
-      "agentKind": "codex",
+      "agentKind": "pi",
       "providerId": "openai",
-      "model": "gpt-6.1-terra",
+      "model": "chatgpt/gpt-6-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3595,
+      "score": 0.3466,
       "notes": []
      }
     ]
@@ -261,7 +278,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [816f5772]\nFIXTURE-SCENARIO: ok review1-save\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [5e7d9eb3]\nFIXTURE-SCENARIO: ok review1-save\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>/work dir",
   "mappings": [],
   "attempts": 1
@@ -297,7 +314,7 @@
     "effort": "high",
     "fastMode": false
    },
-   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [816f5772]\nFIXTURE-SCENARIO: ok review1-save\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
+   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [5e7d9eb3]\nFIXTURE-SCENARIO: ok review1-save\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
   }
  ],
  "workerStderr": ""

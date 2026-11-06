@@ -24,7 +24,7 @@ class BuildPluginTests(unittest.TestCase):
             code, doc = build('--output', output, '--router-cmd', json.dumps([sys.executable, '-m', 'agentcompass', 'roll']))
             self.assertEqual(code, 0, doc)
             shipped = sorted(p.relative_to(output).as_posix() for p in output.rglob('*') if p.is_file())
-            self.assertEqual(shipped, ['assets/icon.png', 'engine/allocator.mjs', 'engine/catalog.mjs', 'engine/profiler.mjs',
+            self.assertEqual(shipped, ['assets/icon.png', 'engine/allocator.mjs', 'engine/catalog.mjs', 'engine/classifier-cases.json', 'engine/profiler.mjs',
                                        'engine/route.mjs', 'ghost.json', 'locales/en.json', 'locales/ja.json', 'locales/ko.json',
                                        'locales/zh-CN.json', 'main.js', 'router.json', 'worker.cjs'])
             config = json.loads((output / 'router.json').read_text(encoding='utf-8'))

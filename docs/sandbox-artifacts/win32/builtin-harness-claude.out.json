@@ -3,7 +3,14 @@
   {
    "label": "catalog",
    "fixture": {
-    "catalog": "real+claude"
+    "catalog": "real+claude",
+    "classifierProfile": {
+     "work_kind": "debug_review",
+     "reasoning_depth": 3,
+     "code_complexity": 0,
+     "context_scale": 2,
+     "hallucination_risk": 3
+    }
    }
   },
   {
@@ -15,7 +22,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "a299f6f1eb3638f9f9dc4ed31c6724510704bea9",
+      "operation": "949ec5154b638a7316f9cd83c63676da2c13f440",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -27,7 +34,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "a299f6f1eb3638f9f9dc4ed31c6724510704bea9"
+        "operation": "949ec5154b638a7316f9cd83c63676da2c13f440"
        }
       }
      }
@@ -43,7 +50,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "a299f6f1eb3638f9f9dc4ed31c6724510704bea9",
+      "operation": "949ec5154b638a7316f9cd83c63676da2c13f440",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -58,7 +65,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "a299f6f1eb3638f9f9dc4ed31c6724510704bea9"
+        "operation": "949ec5154b638a7316f9cd83c63676da2c13f440"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -84,7 +91,7 @@
      "ok": true,
      "result": {
       "status": "completed",
-      "operation": "a299f6f1eb3638f9f9dc4ed31c6724510704bea9",
+      "operation": "949ec5154b638a7316f9cd83c63676da2c13f440",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -95,14 +102,14 @@
       "final_result_summary": "[Worker final report] harness-claude",
       "summary_shortened": false,
       "full_result_artifacts": [
-       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\a299f6f1eb3638f9f9dc4ed31c6724510704bea9\\messages-2344b74bd8dc4a39.json",
-       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\a299f6f1eb3638f9f9dc4ed31c6724510704bea9\\messages-280a29d6f762999b.json"
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\949ec5154b638a7316f9cd83c63676da2c13f440\\messages-4d4b6cf79379f9fb.json",
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\949ec5154b638a7316f9cd83c63676da2c13f440\\messages-280a29d6f762999b.json"
       ],
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "cleanup",
        "args": {
-        "operation": "a299f6f1eb3638f9f9dc4ed31c6724510704bea9"
+        "operation": "949ec5154b638a7316f9cd83c63676da2c13f440"
        }
       },
       "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
@@ -119,7 +126,9 @@
      "ok": true,
      "result": {
       "status": "cleaned",
-      "operation": "a299f6f1eb3638f9f9dc4ed31c6724510704bea9"
+      "operation": "949ec5154b638a7316f9cd83c63676da2c13f440",
+      "taskId": "task-1",
+      "task_id": "task-1"
      }
     }
    ]
@@ -137,12 +146,12 @@
   },
   {
    "name": "create",
-   "requestKey": "a299f6f1eb3638f9f9dc4ed31c6724510704bea9:create",
+   "requestKey": "949ec5154b638a7316f9cd83c63676da2c13f440:create",
    "route": {
     "agentKind": "cc",
     "providerId": "anthropic",
     "model": "claude-opus-5-5",
-    "effort": "max",
+    "effort": "high",
     "fastMode": false
    },
    "permissionMode": "bypassPermissions"
@@ -151,7 +160,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "a299f6f1eb3638f9f9dc4ed31c6724510704bea9:send",
+   "requestKey": "949ec5154b638a7316f9cd83c63676da2c13f440:send",
    "chars": 431
   },
   {
@@ -192,7 +201,16 @@
    "taskId": "task-1"
   }
  ],
+ "oneshotCalls": [
+  {
+   "kind": "oneshot_text",
+   "chars": 29075,
+   "expectJson": true,
+   "callId": "call-1"
+  }
+ ],
  "nodeCalls": [
+  "prepare",
   "prepare",
   "load",
   "save",
@@ -213,12 +231,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "21ac70be804e3dc1e1c76a97f1c366ca827d9b737b883dc987b3eab3cf5711c5",
+   "sha256": "5a631a62f913b367843d9f315c58841273bc8c4473902454967555292edf9163",
    "chars": 431
   }
  ],
  "prepared": {
-  "operation": "a299f6f1eb3638f9f9dc4ed31c6724510704bea9",
+  "operation": "949ec5154b638a7316f9cd83c63676da2c13f440",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -232,18 +250,18 @@
      "account": "anthropic",
      "providerId": "anthropic",
      "model": "claude-opus-5-5",
-     "effort": "max",
+     "effort": "high",
      "fast": false,
      "modeId": "bypassPermissions"
     }
    },
    "decision": {
     "work_kind": "debug_review",
-    "difficulty": "hard",
-    "required_ability": 3.5659,
+    "difficulty": "coupled",
+    "required_ability": 3.7738,
     "profile": {
      "work_kind": "debug_review",
-     "reasoning_depth": 2,
+     "reasoning_depth": 3,
      "code_complexity": 0,
      "context_scale": 2,
      "divergence": 1,
@@ -251,27 +269,43 @@
      "error_cost": 2,
      "needs_visual": false,
      "needs_gui": false,
-     "local_only": false,
+     "local_only": true,
      "interaction_style": "engineering",
-     "expected_hours": 0.8,
+     "expected_hours": 0.5,
      "hours_confidence": "medium",
-     "urgency": "unknown",
-     "reason": "deterministic profile: work_kind=debug_review, depth=2, code=0, scale=2, div=1",
+     "urgency": "normal",
+     "reason": "fixture classification from fake Cindy host model",
      "multi_task": false,
-     "task_count": "1"
+     "task_count": "1",
+     "realtime_loop": false,
+     "self": false,
+     "wants_fast": false
+    },
+    "profile_source": "classifier",
+    "classifier_model": "fixture-quick-text",
+    "realtime_loop": false,
+    "classifier_calibration_cases": {
+     "included": 47,
+     "total": 47
     },
     "canonical_model": "claude-opus-5-5",
-    "score": 0.4157,
+    "score": 0.3738,
     "components": {
-     "fit": 0.984,
-     "route_fit": 1,
+     "fit": 0.913,
+     "route_fit": 0.57,
      "vector_fit": 1,
-     "subjective_fit": 0.965,
+     "subjective_fit": 0.971,
      "ability": 1,
-     "ability_value": 4.95,
-     "required_ability": 3.566,
-     "quality_bonus": 0.049,
-     "effort_penalty": 0.0286,
+     "ability_value": 4.6,
+     "required_ability": 3.774,
+     "continuity": 0,
+     "quality_bonus": 0,
+     "free_usage": 0,
+     "reset_bonus": 0,
+     "sprint_quality": 0,
+     "fast_bonus": 0,
+     "opportunity_cost": 0,
+     "effort_penalty": 0,
      "overqualification": 0,
      "shortfall": 0
     },
@@ -287,36 +321,18 @@
       "agentKind": "cc",
       "providerId": "anthropic",
       "model": "claude-opus-5-5",
-      "effort": "high",
-      "fast": false,
-      "score": 0.3953,
-      "notes": []
-     },
-     {
-      "agentKind": "cc",
-      "providerId": "anthropic",
-      "model": "claude-opus-5-5",
       "effort": "medium",
       "fast": false,
-      "score": 0.3799,
+      "score": 0.3609,
       "notes": []
      },
      {
-      "agentKind": "cc",
-      "providerId": "anthropic",
-      "model": "claude-sonnet-5-5",
-      "effort": "max",
+      "agentKind": "codex",
+      "providerId": "openai",
+      "model": "gpt-6-astra",
+      "effort": "high",
       "fast": false,
-      "score": 0.3704,
-      "notes": []
-     },
-     {
-      "agentKind": "cc",
-      "providerId": "anthropic",
-      "model": "claude-opus-5-5",
-      "effort": "low",
-      "fast": false,
-      "score": 0.3583,
+      "score": 0.3495,
       "notes": []
      },
      {
@@ -325,7 +341,25 @@
       "model": "gpt-6-astra",
       "effort": "xhigh",
       "fast": false,
-      "score": 0.3582,
+      "score": 0.3463,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6-astra",
+      "effort": "high",
+      "fast": false,
+      "score": 0.3395,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6-astra",
+      "effort": "xhigh",
+      "fast": false,
+      "score": 0.3363,
       "notes": []
      }
     ]
@@ -337,11 +371,11 @@
    "account": "anthropic",
    "providerId": "anthropic",
    "model": "claude-opus-5-5",
-   "effort": "max",
+   "effort": "high",
    "fast": false,
    "modeId": "bypassPermissions"
   },
-  "prompt": "Review the diff in src/auth for security regressions and subtle bugs (read-only review). [claude-1793696525681]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Review the diff in src/auth for security regressions and subtle bugs (read-only review). [claude-1793996761886]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1
@@ -356,7 +390,7 @@
     "agentKind": "cc",
     "providerId": "anthropic",
     "model": "claude-opus-5-5",
-    "effort": "max",
+    "effort": "high",
     "fastMode": false
    },
    "permissionMode": "bypassPermissions",
@@ -375,10 +409,10 @@
     "agentKind": "cc",
     "providerId": "anthropic",
     "model": "claude-opus-5-5",
-    "effort": "max",
+    "effort": "high",
     "fastMode": false
    },
-   "inputText": "Review the diff in src/auth for security regressions and subtle bugs (read-only review). [claude-1793696525681]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "inputText": "Review the diff in src/auth for security regressions and subtle bugs (read-only review). [claude-1793996761886]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
    "outputMessageId": "out-final"
   }
  ],

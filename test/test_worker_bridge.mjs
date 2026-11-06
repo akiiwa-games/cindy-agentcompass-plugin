@@ -105,14 +105,29 @@ const makeProfile = (overrides = {}) => ({
   ...overrides,
 });
 const withProfile = (overrides = {}) => ({profile: makeProfile(overrides)});
-const classified = (overrides = {}, model = 'chatgpt/gpt-5.3-codex-spark', attemptId = undefined) => ({
+const QUICK_MODEL = 'openai/fixture-quick-text';
+const classified = (overrides = {}, attemptId = undefined) => ({
   classification: {
     ok: true,
-    model,
+    model: QUICK_MODEL,
     ...(attemptId ? {attemptId} : {}),
     rawOutput: JSON.stringify(makeProfile(overrides)),
   },
 });
+const refusedBy = (reason, attemptId) => ({classification: {ok: false, attemptId, reason, error: `Cindy refused: ${reason}`}});
+// The two phases the logic page runs: ask, then bring back the answer.
+function classifyWith(p, task, answer, context = ctx(p.root)) {
+  const params = {task, catalog: CATALOG, classifyViaHost: true, context};
+  const [ask] = rpc(p, [{id: 1, method: 'prepare', params}]);
+  assert.equal(ask.result?.state, 'classify', JSON.stringify(ask));
+  const [reply] = rpc(p, [{id: 2, method: 'prepare', params: {...params, ...answer(ask.result.classifier.attemptId)}}]);
+  return reply;
+}
+const classifierCooldownsOf = p => JSON.parse(fs.readFileSync(path.join(p.stateHome, 'classifier-cooldowns.json'), 'utf8'));
+function expireClassifierCooldowns(p) {
+  const file = path.join(p.stateHome, 'classifier-cooldowns.json');
+  fs.writeFileSync(file, JSON.stringify(Object.fromEntries(Object.entries(classifierCooldownsOf(p)).map(([key, entry]) => [key, {...entry, until: Date.now() - 1}]))));
+}
 
 const native = bundle => ({status: 'native', parent_id: 'true-session', parent_host: 'native',
   route: {bundle}, worker_prompt_file: '@PROMPT'});
@@ -122,21 +137,23 @@ const codex = native({provider: 'codex', harness: 'codex', account: 'codex', mod
 test('zero configuration: the built-in engine routes over the catalog Cindy passed, with no AgentCompass anywhere', () => {
   const p = plugin(codex, 0, 'none');
   const task = 'Rename the helper foo to bar in util.py and update its two callers.\r\n原文';
-  // Phase 1: classifyViaHost asks the Cindy logic page to run the fast catalog classifier model.
+  // Phase 1: classifyViaHost asks the Cindy logic page to put the prompt to the quick-text channel; Cindy picks the model.
   const [askClf] = rpc(p, [prepare(p, task, 1, CATALOG, {classifyViaHost: true})]);
   assert.equal(askClf.result?.state, 'classify');
-  assert.equal(askClf.result?.classifier?.model, 'chatgpt/gpt-5.3-codex-spark');
-  assert.equal(askClf.result?.classifier?.route?.effort, 'minimal');
-  assert.equal(typeof askClf.result?.classifier?.attemptId, 'string');
+  assert.deepEqual(Object.keys(askClf.result.classifier).sort(), ['attemptId', 'prompt', 'timeoutMs']);
+  assert.equal(typeof askClf.result.classifier.attemptId, 'string');
+  assert.ok(askClf.result.classifier.prompt.length <= 32768);
+  assert.equal(askClf.result.classifier.timeoutMs, 65000);
   // Phase 2: classification result is validated against the pending attempt, cached to score-cache.json, and routed.
   const [reply] = rpc(p, [prepare(p, task, 1, CATALOG, {
-    ...classified({realtime_loop: true}, askClf.result.classifier.model, askClf.result.classifier.attemptId),
+    ...classified({realtime_loop: true}, askClf.result.classifier.attemptId),
     classifyViaHost: true,
   })]);
   assert.equal(reply.result?.router?.status, 'native', JSON.stringify(reply));
   assert.equal(reply.result.engine, 'builtin');
   assert.equal(reply.result.router.decision.profile_source, 'classifier');
-  assert.equal(reply.result.router.decision.classifier_model, 'chatgpt/gpt-5.3-codex-spark');
+  assert.equal(reply.result.router.decision.classifier_model, QUICK_MODEL);
+  assert.deepEqual(reply.result.router.decision.classifier_calibration_cases, {included: 47, total: 47});
   assert.equal(reply.result.router.decision.realtime_loop, true);
   // A second session rolling the identical task text hits score-cache.json directly without a second classification step.
   const [cachedReply] = rpc(p, [{
@@ -171,7 +188,7 @@ test('a route Cindy refused to create on cools down for the retry; a request ref
   const p = plugin(codex, 0, 'none');
   const task = 'Rename the helper foo to bar in util.py and update its two callers.';
   const [ask] = rpc(p, [prepare(p, task, 1, CATALOG, {classifyViaHost: true})]);
-  const [first] = rpc(p, [prepare(p, task, 1, CATALOG, classified({}, ask.result.classifier.model, ask.result.classifier.attemptId))]);
+  const [first] = rpc(p, [prepare(p, task, 1, CATALOG, classified({}, ask.result.classifier.attemptId))]);
   const op = first.result.operation, b = first.result.bundle;
   const {operation, ...prepared} = first.result;
   const save = (id, record) => ({id, method: 'save', params: {operation: op, record, context: ctx(p.root)}});
@@ -314,9 +331,9 @@ test('config.json {"engine":"cli"} with AgentCompass not installed falls back to
   fs.writeFileSync(path.join(p.stateHome, 'config.json'), '{"engine":"gpt"}');
   const [bad] = rpc(p, [prepare(p, 'another')]);
   assert.match(bad.error.message, /Unreadable plugin configuration.*"engine" must be/);
-  fs.writeFileSync(path.join(p.stateHome, 'config.json'), '{"classifierEffort":"extreme"}');
-  const [badEffort] = rpc(p, [prepare(p, 'another')]);
-  assert.match(badEffort.error.message, /Unreadable plugin configuration.*"classifierEffort" must be/);
+  fs.writeFileSync(path.join(p.stateHome, 'config.json'), '{"classifierTimeoutMs":"soon"}');
+  const [badTimeout] = rpc(p, [prepare(p, 'another')]);
+  assert.match(badTimeout.error.message, /Unreadable plugin configuration.*"classifierTimeoutMs" must be/);
 });
 
 test('~/.agent-compass/cindy-plugin/account-map.json supplies the CLI connection bindings; a malformed one is refused', () => {
@@ -354,7 +371,7 @@ test('review 6: a router that exits without reading stdin (EPIPE) fails that rol
   const huge = 'x'.repeat(8 * 1024 * 1024);
   const replies = rpc(p, [prepare(p, huge, 1), prepare(p, huge + 'again', 2), {id: 3, method: 'load', params: {operation: 'f'.repeat(40), context: ctx(p.root)}}]);
   for (const reply of replies.slice(0, 2)) assert.match(reply.error.message, /Router returned no usable route/);
-  assert.match(replies[2].error.message, /ENOENT|no such file/, 'the third request was still answered');
+  assert.match(replies[2].error.message, /Unknown operation/, 'the third request was still answered');
   assert.deepEqual(receipts(p), []);
 });
 
@@ -387,7 +404,7 @@ test('review 5: a slow route for one session does not hold up another operation 
   assert.deepEqual(replies.order, [2, 1], 'the load was answered while the route was still running');
 });
 
-test('B1 & M3 regression: two-phase classification handshake verifies pending attempt/task/model and blocked classification never writes prepared receipt.json', () => {
+test('B1 & M3 regression: two-phase classification handshake verifies the pending attempt and task, and a blocked classification never writes a prepared receipt.json', () => {
   const p = plugin(codex, 0, 'none');
   const task = 'Implement retry backoff in client.ts';
 
@@ -398,76 +415,57 @@ test('B1 & M3 regression: two-phase classification handshake verifies pending at
   assert.equal(unsolicited.result?.router?.decision?.reason, 'unsolicited_or_mismatched_classification');
   assert.deepEqual(receipts(p), [], 'M3: blocked unsolicited classification writes no receipt.json');
 
-  // 2. Phase 1 mints a unique attemptId; if classification fails (e.g. timeout), state is blocked, no receipt.json is written,
-  // and the next Phase 1 call increments the attempt counter and mints a fresh attemptId (B1).
+  // 2. Phase 1 mints a unique attemptId; if classification fails, state is blocked and no receipt.json is written.
   const [ask1] = rpc(p, [prepare(p, task, 2, CATALOG, {classifyViaHost: true})]);
   assert.equal(ask1.result?.state, 'classify');
   const attemptId1 = ask1.result.classifier.attemptId;
   assert.equal(typeof attemptId1, 'string');
 
-  const [failedClf] = rpc(p, [prepare(p, task, 3, CATALOG, {
-    classifyViaHost: true,
-    classification: {
-      ok: false,
-      attemptId: attemptId1,
-      model: ask1.result.classifier.model,
-      route: ask1.result.classifier.route,
-      reason: 'timeout',
-      error: 'Classifier timed out after 15000ms',
-    },
-  })]);
+  const [failedClf] = rpc(p, [prepare(p, task, 3, CATALOG, {classifyViaHost: true, ...refusedBy('classifier_timeout', attemptId1)})]);
   assert.equal(failedClf.result?.state, 'blocked');
   assert.equal(failedClf.result?.router?.status, 'blocked');
-  assert.equal(failedClf.result?.router?.decision?.reason, 'timeout');
+  assert.equal(failedClf.result?.router?.decision?.reason, 'classifier_timeout');
   assert.deepEqual(receipts(p), [], 'M3: failed classification leaves no prepared receipt.json');
 
   // Replaying a classification for the already-consumed attemptId1 is rejected.
-  const [replayed] = rpc(p, [prepare(p, task, 4, CATALOG, classified({}, ask1.result.classifier.model, attemptId1))]);
+  const [replayed] = rpc(p, [prepare(p, task, 4, CATALOG, classified({}, attemptId1))]);
   assert.equal(replayed.result?.state, 'blocked');
   assert.equal(replayed.result?.router?.decision?.reason, 'unsolicited_or_mismatched_classification');
   assert.deepEqual(receipts(p), []);
 
-  // 3. Retrying Phase 1 on the same task mints a new attemptId (B1); mismatched model/attemptId is rejected; matching attemptId succeeds.
+  // 3. After the cooldown, Phase 1 on the same task mints a new attemptId (B1); a mismatched attemptId is rejected; a matching one succeeds.
+  expireClassifierCooldowns(p);
   const [ask2] = rpc(p, [prepare(p, task, 5, CATALOG, {classifyViaHost: true})]);
   assert.equal(ask2.result?.state, 'classify');
   const attemptId2 = ask2.result.classifier.attemptId;
   assert.notEqual(attemptId2, attemptId1, 'B1: retry mints a fresh attemptId');
 
-  const [wrongAttempt] = rpc(p, [prepare(p, task, 6, CATALOG, classified({}, ask2.result.classifier.model, attemptId1))]);
+  const [wrongAttempt] = rpc(p, [prepare(p, task, 6, CATALOG, classified({}, attemptId1))]);
   assert.equal(wrongAttempt.result?.state, 'blocked');
   assert.equal(wrongAttempt.result?.router?.decision?.reason, 'unsolicited_or_mismatched_classification');
 
   const [ask3] = rpc(p, [prepare(p, task, 7, CATALOG, {classifyViaHost: true})]);
-  const attemptId3 = ask3.result.classifier.attemptId;
-  const [okReply] = rpc(p, [prepare(p, task, 8, CATALOG, classified({}, ask3.result.classifier.model, attemptId3))]);
+  const [okReply] = rpc(p, [prepare(p, task, 8, CATALOG, classified({}, ask3.result.classifier.attemptId))]);
   assert.equal(okReply.result?.state, 'prepared');
   assert.equal(okReply.result?.router?.status, 'native');
   assert.equal(receipts(p).length, 1);
 });
 
-test('m2 & m4 regression: config.json validation matches README (efforts none/off/ultra, timeout 100..120000, non-empty classifierModels) and no_model_meets_floor returns structured blocked', () => {
+test('m2 & m4 regression: config.json validation matches README (timeout 100..65000, the old model keys are no settings any more) and no_model_meets_floor returns structured blocked', () => {
   const p = plugin(codex, 0, 'none');
 
-  // m2: efforts none, off, ultra are accepted in config.json.
-  for (const effort of ['none', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']) {
-    fs.writeFileSync(path.join(p.stateHome, 'config.json'), JSON.stringify({classifierEffort: effort, classifierTimeoutMs: 5000}));
-    const [ok] = rpc(p, [prepare(p, `Task for effort ${effort}`, 1, CATALOG, withProfile())]);
-    assert.equal(ok.result?.router?.status, 'native', `classifierEffort=${effort} should be accepted`);
-  }
-
-  // m2: classifierTimeoutMs outside 100..120000 is rejected.
-  for (const badTimeout of [0, 50, 99, 120001, -10, '1000']) {
+  for (const badTimeout of [0, 50, 99, 65001, 120000, -10, '1000']) {
     fs.writeFileSync(path.join(p.stateHome, 'config.json'), JSON.stringify({classifierTimeoutMs: badTimeout}));
     const [bad] = rpc(p, [prepare(p, 'Task with bad timeout', 1, CATALOG, withProfile())]);
-    assert.match(bad.error?.message || '', /classifierTimeoutMs.*100.*120000/);
+    assert.match(bad.error?.message || '', /classifierTimeoutMs.*100.*65000/);
   }
+  // A config.json from the earlier version does not stop the plugin, and its keys choose nothing.
+  fs.writeFileSync(path.join(p.stateHome, 'config.json'), JSON.stringify({classifierModel: 'x', classifierModels: [], classifierEffort: 'extreme', classifierTimeoutMs: 5000}));
+  const [configured] = rpc(p, [prepare(p, 'Task with old keys', 1, CATALOG, {classifyViaHost: true})]);
+  assert.deepEqual(Object.keys(configured.result.classifier).sort(), ['attemptId', 'prompt', 'timeoutMs']);
+  assert.equal(configured.result.classifier.timeoutMs, 5000);
 
-  // m2: empty classifierModels array is rejected.
-  fs.writeFileSync(path.join(p.stateHome, 'config.json'), JSON.stringify({classifierModels: []}));
-  const [emptyModels] = rpc(p, [prepare(p, 'Task with empty classifierModels', 1, CATALOG, withProfile())]);
-  assert.match(emptyModels.error?.message || '', /classifierModels.*non-empty array/);
-
-  // Reset config.json and verify m4: when no catalog model meets the capability floor, worker.cjs returns structured blocked (not an RPC error).
+  // m4: when no catalog model meets the capability floor, worker.cjs returns structured blocked (not an RPC error).
   fs.rmSync(path.join(p.stateHome, 'config.json'), {force: true});
   const minimalOnlyCatalog = {
     models: [
@@ -487,4 +485,171 @@ test('m2 & m4 regression: config.json validation matches README (efforts none/of
   assert.equal(floorBlocked.result?.state, 'blocked');
   assert.equal(floorBlocked.result?.router?.status, 'blocked');
   assert.equal(floorBlocked.result?.router?.decision?.reason, 'no_model_meets_floor');
+});
+
+test('R1: a failed classification cools the channel: the retry answers at once with the failure and the plugin card, without asking Cindy; it expires, doubles, and a classified task clears it', () => {
+  const p = plugin(codex, 0, 'none');
+  const task = 'Add pagination to the list endpoint.';
+  const failed = classifyWith(p, task, id => refusedBy('classifier_no_candidate', id));
+  assert.equal(failed.result.router.decision.reason, 'classifier_no_candidate');
+  assert.match(failed.result.router.next_action, /plugin card/);
+  const {channel} = classifierCooldownsOf(p);
+  assert.deepEqual([channel.reason, channel.failures], ['classifier_no_candidate', 1]);
+  assert.ok(Math.abs(channel.until - Date.now() - 30000) < 5000);
+
+  // Asked again at once: no second classify step, for this task or any other; the answer names the failure and where to act.
+  for (const again of [task, 'A different task entirely.']) {
+    const [cooling] = rpc(p, [prepare(p, again, 1, CATALOG, {classifyViaHost: true})]);
+    assert.equal(cooling.result.state, 'blocked');
+    assert.equal(cooling.result.classifier, undefined, 'Cindy is not asked');
+    assert.equal(cooling.result.router.decision.reason, 'classifier_cooling_down');
+    assert.equal(cooling.result.router.cooldown.reason, 'classifier_no_candidate');
+    assert.ok(cooling.result.router.cooldown.retry_after_seconds <= 30);
+    assert.match(cooling.result.router.error, /classifier_no_candidate.*Cindy refused/);
+    assert.match(cooling.result.router.next_action, /plugin card/);
+  }
+  // A complete explicit profile needs no classifier, so the cooldown does not hold it.
+  const [explicit] = rpc(p, [prepare(p, task, 1, CATALOG, {classifyViaHost: true, ...withProfile()})]);
+  assert.equal(explicit.result.router.status, 'native');
+
+  // A consecutive failure doubles the wait.
+  expireClassifierCooldowns(p);
+  classifyWith(p, 'Second failure.', id => refusedBy('classifier_rate_limited', id));
+  const doubled = classifierCooldownsOf(p).channel;
+  assert.deepEqual([doubled.reason, doubled.failures], ['classifier_rate_limited', 2]);
+  assert.ok(Math.abs(doubled.until - Date.now() - 60000) < 5000);
+
+  // A classified task clears it.
+  expireClassifierCooldowns(p);
+  const ok = classifyWith(p, 'Third try works.', id => classified({}, id));
+  assert.equal(ok.result.router.status, 'native');
+  assert.deepEqual(classifierCooldownsOf(p), {});
+});
+
+test('R1: a malformed answer cools only that task, so one adversarial task cannot block the others', () => {
+  const p = plugin(codex, 0, 'none');
+  const reply = classifyWith(p, 'Task that makes the model babble.', id => ({classification: {ok: true, attemptId: id, model: QUICK_MODEL, rawOutput: 'not json'}}));
+  assert.equal(reply.result.router.decision.reason, 'invalid_classifier_output');
+  assert.deepEqual(Object.keys(classifierCooldownsOf(p)).map(key => key.split(':')[0]), ['task']);
+  const [same] = rpc(p, [prepare(p, 'Task that makes the model babble.', 1, CATALOG, {classifyViaHost: true})]);
+  assert.equal(same.result.router.decision.reason, 'classifier_cooling_down');
+  const [other] = rpc(p, [prepare(p, 'An ordinary task.', 1, CATALOG, {classifyViaHost: true})]);
+  assert.equal(other.result.state, 'classify');
+});
+
+test('r1: phase 2 needs a live request of this session and task; a forged, stale or incomplete answer is refused and fills no shared cache', () => {
+  const p = plugin(codex, 0, 'none');
+  const task = 'Implement rate limiting in gateway.ts';
+  const other = {...ctx(p.root), session_id: 'other-session'};
+  const prepareAs = (id, context, extra) => ({id, method: 'prepare', params: {task, catalog: CATALOG, context, ...extra}});
+  const refused = reply => {
+    assert.equal(reply.result?.router?.decision?.reason, 'unsolicited_or_mismatched_classification', JSON.stringify(reply));
+    assert.deepEqual(receipts(p), []);
+  };
+  const [ask] = rpc(p, [prepareAs(1, ctx(p.root), {classifyViaHost: true})]);
+  const pendingFile = path.join(p.stateHome, ask.result.operation, 'pending-classify.json');
+  assert.ok(fs.existsSync(pendingFile));
+  // Another session has no request of its own, whatever attempt it names; ours stays usable.
+  refused(rpc(p, [prepareAs(2, other, classified({realtime_loop: true}, ask.result.classifier.attemptId))])[0]);
+  assert.ok(fs.existsSync(pendingFile));
+  // Every field of the answer is required: each of these also uses the request up.
+  for (const answer of [
+    classified({}),
+    classified({}, 'forged-attempt'),
+    {classification: {ok: true, attemptId: 'whatever', model: QUICK_MODEL}},
+    {classification: {attemptId: 'whatever', rawOutput: '{}'}},
+  ]) {
+    const [again] = rpc(p, [prepareAs(3, ctx(p.root), {classifyViaHost: true})]);
+    assert.equal(again.result.state, 'classify');
+    refused(rpc(p, [prepareAs(4, ctx(p.root), answer)])[0]);
+    assert.equal(fs.existsSync(pendingFile), false, 'an attempt is good for one answer');
+  }
+  // An answer without an ok of true or false, with the right attempt, is not an answer.
+  const [fresh] = rpc(p, [prepareAs(5, ctx(p.root), {classifyViaHost: true})]);
+  refused(rpc(p, [prepareAs(6, ctx(p.root), {classification: {attemptId: fresh.result.classifier.attemptId, rawOutput: JSON.stringify(makeProfile())}})])[0]);
+  // A request older than five minutes has lapsed.
+  const [stale] = rpc(p, [prepareAs(7, ctx(p.root), {classifyViaHost: true})]);
+  fs.writeFileSync(pendingFile, JSON.stringify({...JSON.parse(fs.readFileSync(pendingFile, 'utf8')), createdAt: Date.now() - 5 * 60000 - 1}));
+  refused(rpc(p, [prepareAs(8, ctx(p.root), classified({}, stale.result.classifier.attemptId))])[0]);
+  // None of that reached the cache another session reads: it has to ask for itself.
+  const [clean] = rpc(p, [prepareAs(9, other, {classifyViaHost: true})]);
+  assert.equal(clean.result.state, 'classify');
+  assert.equal(clean.result.router, undefined);
+  assert.equal(fs.existsSync(path.join(p.stateHome, 'score-cache.json')), false);
+});
+
+test('r4: a blocked classification leaves a receipt the caller already holds in place', () => {
+  const p = plugin(codex, 0, 'none');
+  const task = 'Rename foo to bar in util.py.';
+  const [held] = rpc(p, [prepare(p, task, 1, CATALOG, withProfile())]);
+  assert.equal(held.result.state, 'prepared');
+  const file = path.join(p.stateHome, held.result.operation, 'receipt.json');
+  const before = fs.readFileSync(file, 'utf8');
+  const reply = classifyWith(p, task, id => refusedBy('classifier_internal', id));
+  assert.equal(reply.result.state, 'blocked');
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  const [load] = rpc(p, [{id: 3, method: 'load', params: {operation: held.result.operation, context: ctx(p.root)}}]);
+  assert.equal(load.result.state, 'prepared');
+});
+
+test('r5: an empty or partial profile starts nothing, with or without the host phase; a complete one routes', () => {
+  const p = plugin(codex, 0, 'none');
+  for (const partial of [{}, {work_kind: 'general_implementation'}, {self: true}]) {
+    for (const viaHost of [false, true]) {
+      const [reply] = rpc(p, [prepare(p, 'Fix util.py', 1, CATALOG, {profile: partial, classifyViaHost: viaHost})]);
+      assert.equal(reply.result?.state, 'blocked', JSON.stringify(partial));
+      assert.equal(reply.result.router.decision.reason, 'invalid_caller_profile');
+      assert.equal(reply.result.bundle, null);
+      assert.match(reply.result.router.next_action, /expected_hours/);
+    }
+  }
+  assert.deepEqual(receipts(p), []);
+  const {reason, ...complete} = makeProfile();
+  const [good] = rpc(p, [prepare(p, 'Fix util.py', 1, CATALOG, {profile: complete, classifyViaHost: true})]);
+  assert.equal(good.result.router.status, 'native');
+  assert.equal(good.result.router.decision.profile_source, 'caller');
+});
+
+test('r6: the external CLI takes no profile: it is refused out loud rather than silently ignored', () => {
+  for (const config of ['plugin', 'cli']) {
+    const p = plugin(codex, 0, config);
+    const env = {};
+    if (config === 'cli') {
+      const bin = path.join(p.root, 'bin');
+      launcher(p, bin);
+      env.PATH = only([bin]);
+    }
+    const [refused] = rpc(p, [prepare(p, 'Fix util.py', 1, CATALOG, withProfile())], env);
+    assert.equal(refused.result?.state, 'blocked', JSON.stringify(refused));
+    assert.equal(refused.result.router.decision.reason, 'profile_not_supported_by_cli');
+    assert.equal(p.routerCalls(), 0, 'the CLI never ran');
+    assert.deepEqual(receipts(p), []);
+    const [routed] = rpc(p, [prepare(p, 'Fix util.py', 2, CATALOG)], env);
+    assert.equal(routed.result?.engine, 'cli', 'without a profile the CLI routes as before');
+    assert.equal(p.routerCalls(), 1);
+  }
+});
+
+test('R3: a task of more than 15,000 characters is classified whole; one that cannot fit the quick-text prompt is refused, never cut', () => {
+  const p = plugin(codex, 0, 'none');
+  const long = 'x'.repeat(15001);
+  const [ask] = rpc(p, [prepare(p, long, 1, CATALOG, {classifyViaHost: true})]);
+  assert.equal(ask.result.state, 'classify');
+  assert.ok(ask.result.classifier.prompt.length <= 32768);
+  assert.ok(ask.result.classifier.prompt.includes(long));
+  const [routed] = rpc(p, [prepare(p, long, 2, CATALOG, classified({}, ask.result.classifier.attemptId))]);
+  assert.equal(routed.result.router.status, 'native');
+  const cases = routed.result.router.decision.classifier_calibration_cases;
+  assert.equal(cases.total, 47);
+  assert.ok(cases.included > 0 && cases.included < 47, JSON.stringify(cases));
+
+  const [tooLong] = rpc(p, [prepare(p, 'x'.repeat(32768), 3, CATALOG, {classifyViaHost: true})]);
+  assert.equal(tooLong.result.state, 'blocked');
+  assert.equal(tooLong.result.router.decision.reason, 'task_too_long_for_classifier');
+  assert.match(tooLong.result.router.error, /never truncated/);
+  assert.match(tooLong.result.router.next_action, /explicit `profile`/);
+  assert.equal(fs.existsSync(path.join(p.stateHome, 'classifier-cooldowns.json')), false, 'its length says nothing about the channel');
+  // The same task with a complete explicit profile does not need the channel at all, up to Cindy's own send limit.
+  const [explicit] = rpc(p, [prepare(p, 'x'.repeat(20000), 4, CATALOG, withProfile())]);
+  assert.equal(explicit.result.router.status, 'native');
 });

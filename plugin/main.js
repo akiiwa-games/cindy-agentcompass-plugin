@@ -85,150 +85,26 @@
     }
     return reply;
   }
-  // One-shot structured classification via Cindy's tasks API on a fast/cheap catalog model; always cleaned up.
-  let classifySeq=0;
-  async function runClassifier(operation,classifier,ctx,caps) {
-    const model=classifier.model || classifier.route?.model || null;
-    const attemptId=classifier.attemptId || ('a'+(++classifySeq));
-    const reqPrefix=operation+':'+attemptId+':classify:';
-    const timeoutMs=Number.isFinite(classifier.timeoutMs) && classifier.timeoutMs>0 ? classifier.timeoutMs : 15000;
-    const cleanupTimeoutMs=Number.isFinite(classifier.cleanupTimeoutMs) && classifier.cleanupTimeoutMs>0
-      ? classifier.cleanupTimeoutMs
-      : Math.min(500,Math.max(50,Math.floor(timeoutMs/2)));
-    const pollMs=Number.isFinite(classifier.pollMs) && classifier.pollMs>0 ? classifier.pollMs : Math.min(100,Math.max(10,Math.floor(timeoutMs/20)));
-    const maxPolls=typeof setTimeout==='function' ? Math.max(20,Math.ceil(timeoutMs/pollMs)+5) : 10;
-    const canHide=Boolean(caps?.hiddenTasks || caps?.operations?.includes('setHidden'));
-    let draftTask=null, run=null, createPromise=null, sendPromise=null, finished=false;
-    const deadline=Date.now()+timeoutMs;
-    const withTimeout=promise=>{
-      const left=Math.max(1,deadline-Date.now());
-      if (typeof setTimeout!=='function') return promise;
-      return new Promise((resolve,reject)=>{
-        const timer=setTimeout(()=>reject(Object.assign(Error('Classifier timed out after '+timeoutMs+'ms'),{code:'CLASSIFIER_TIMEOUT'})),left);
-        promise.then(
-          v=>{if (typeof clearTimeout==='function') clearTimeout(timer);resolve(v);},
-          e=>{if (typeof clearTimeout==='function') clearTimeout(timer);reject(e);}
-        );
-      });
-    };
-    const withCleanupTimeout=(promise,ms=cleanupTimeoutMs)=>{
-      let p;
-      try {p=Promise.resolve(promise).catch(()=>null);} catch {return Promise.resolve(null);}
-      if (typeof setTimeout!=='function') return p;
-      return new Promise(resolve=>{
-        const timer=setTimeout(()=>resolve(null),ms);
-        p.then(v=>{if (typeof clearTimeout==='function') clearTimeout(timer);resolve(v);});
-      });
-    };
-    const cleanedTaskIds=new Set();
-    const cleanedRunIds=new Set();
-    const cleanupClassifierTask=async targetTaskId=>{
-      if (!targetTaskId || cleanedTaskIds.has(targetTaskId)) return;
-      cleanedTaskIds.add(targetTaskId);
-      if (typeof cindy.tasks?.archive==='function') {
-        await withCleanupTimeout(cindy.tasks.archive({taskId:targetTaskId}));
-      }
-      if (canHide && typeof cindy.tasks?.setHidden==='function') {
-        await withCleanupTimeout(cindy.tasks.setHidden({taskId:targetTaskId,hidden:true}));
-      }
-    };
-    const cleanupClassifierRun=async (targetRun,cancelSuffix='cancel')=>{
-      const runId=typeof targetRun==='string' ? targetRun : targetRun?.runId;
-      if (!runId || cleanedRunIds.has(runId)) return;
-      if (typeof targetRun==='object' && targetRun && terminal.has(targetRun.status)) return;
-      cleanedRunIds.add(runId);
-      if (typeof cindy.tasks?.cancel==='function') {
-        let cur=await withCleanupTimeout(cindy.tasks.cancel({runId,requestKey:reqPrefix+cancelSuffix}));
-        for (let i=0;i<5 && cur && !terminal.has(cur.status);i++) {
-          await pause(10);
-          cur=await withCleanupTimeout(cindy.tasks.getRun({runId}));
-        }
-      }
-    };
+  // One structured classification through Cindy's quick-text channel: no Agent, no tools, no task, no session. Cindy picks the
+  // model (the plugin card's, else its auxiliary chain) and answers within 60 s; the timer only ends the wait on a host that never does.
+  async function runClassifier(classifier,callId) {
+    const attemptId=classifier.attemptId;
+    const failed=(code,error)=>({ok:false,attemptId,reason:'classifier_'+String(code || 'error').toLowerCase(),error});
+    let timer=null;
+    const expired=new Promise((_,reject)=>{
+      if (typeof setTimeout==='function') timer=setTimeout(()=>reject(Object.assign(
+        Error('Cindy did not answer the classification within '+classifier.timeoutMs+' ms'),{code:'TIMEOUT'})),classifier.timeoutMs);
+    });
     try {
-      createPromise=Promise.resolve().then(()=>cindy.tasks.create({
-        requestKey:reqPrefix+'create',
-        title:'AgentCompass classifier '+operation.slice(0,8),
-        route:classifier.route,
-        permissionMode:'ask',
-        ...(canHide ? {hidden:true} : {})
-      }));
-      createPromise.then(lateTask=>{
-        if (finished && lateTask?.taskId) {
-          void cleanupClassifierTask(lateTask.taskId);
-        }
-      },()=>{});
-      draftTask=await withTimeout(createPromise);
-      if (!draftTask?.taskId || !sameRoute(draftTask.resolvedConfig,classifier.route) || draftTask.permissionMode!=='ask' ||
-          draftTask.planModeEnabled || draftTask.workingDir!==ctx.workdir) {
-        return {ok:false,attemptId,model,route:classifier.route,reason:'classifier_draft_mismatch',
-          error:'Classifier draft route, permission or workingDir did not match the requested configuration.'};
-      }
-      sendPromise=Promise.resolve().then(()=>cindy.tasks.send({
-        taskId:draftTask.taskId,
-        expectedRevision:draftTask.revision,
-        requestKey:reqPrefix+'send',
-        text:classifier.prompt
-      }));
-      sendPromise.then(lateRun=>{
-        if (finished && lateRun?.runId) {
-          void cleanupClassifierRun(lateRun,'late-cancel').then(()=>{
-            if (draftTask?.taskId) return cleanupClassifierTask(draftTask.taskId);
-          });
-        }
-      },()=>{});
-      run=await withTimeout(sendPromise);
-      let polls=0;
-      while (run && !terminal.has(run.status)) {
-        if (Date.now()>=deadline || ++polls>maxPolls) {
-          throw Object.assign(Error('Classifier timed out after '+timeoutMs+'ms'),{code:'CLASSIFIER_TIMEOUT'});
-        }
-        await pause(Math.min(pollMs,Math.max(1,deadline-Date.now())));
-        run=await withTimeout(cindy.tasks.getRun({runId:run.runId}));
-      }
-      if (!run || run.status!=='completed') {
-        return {ok:false,attemptId,model,route:classifier.route,reason:'classifier_run_'+(run?.status || 'failed'),
-          error:run?.error || ('Classifier run ended with status '+(run?.status || 'unknown'))};
-      }
-      let after=null, rawOutput='';
-      for (let i=0;i<5;i++) {
-        const page=await withTimeout(cindy.tasks.readMessages({taskId:draftTask.taskId,limit:100,...(after ? {after} : {})}));
-        const items=page?.items || [];
-        const exact=run.outputMessageId ? items.find(item=>item.id===run.outputMessageId) : null;
-        if (exact) {rawOutput=text(exact.content);break;}
-        const assistants=items.filter(item=>item.role==='assistant');
-        if (assistants.length) rawOutput=text(assistants[assistants.length-1].content);
-        if (!page?.nextCursor) break;
-        after=page.nextCursor;
-      }
-      if (!rawOutput.trim()) {
-        return {ok:false,attemptId,model,route:classifier.route,reason:'empty_classifier_output',
-          error:'Classifier task produced no assistant output.'};
-      }
-      return {ok:true,attemptId,model,route:classifier.route,rawOutput};
+      const reply=await Promise.race([cindy.send({type:'cindy-request',kind:'oneshot_text',prompt:classifier.prompt,expectJson:true,
+        ...(callId ? {callId} : {})}),expired]);
+      if (reply?.ok!==true) return failed(reply?.errorCode,reply?.message || 'Cindy refused the classification request.');
+      if (typeof reply.text!=='string' || !reply.text.trim()) return failed('EMPTY_OUTPUT','Cindy returned no classification text.');
+      return {ok:true,attemptId,model:reply.model || null,rawOutput:reply.text};
     } catch(error) {
-      const isTimeout=error?.code==='CLASSIFIER_TIMEOUT' || /timed out/i.test(error?.message || '');
-      return {ok:false,attemptId,model,route:classifier.route,reason:isTimeout ? 'timeout' : 'classifier_error',
-        error:error?.message || String(error)};
+      return failed(error?.code,error?.message || String(error));
     } finally {
-      finished=true;
-      if (!draftTask && createPromise) {
-        draftTask=await withCleanupTimeout(createPromise,Math.min(80,cleanupTimeoutMs));
-      }
-      if (!run && sendPromise) {
-        run=await withCleanupTimeout(sendPromise,Math.min(80,cleanupTimeoutMs));
-      }
-      if (!run && draftTask?.taskId && sendPromise && typeof cindy.tasks?.listRuns==='function') {
-        const page=await withCleanupTimeout(cindy.tasks.listRuns({taskId:draftTask.taskId,limit:20}));
-        const active=(page?.items || []).find(r=>r?.runId && !terminal.has(r.status));
-        if (active) run=active;
-      }
-      if (run?.runId && !terminal.has(run.status)) {
-        await cleanupClassifierRun(run,'cancel');
-      }
-      if (draftTask?.taskId) {
-        await cleanupClassifierTask(draftTask.taskId);
-      }
+      if (timer!==null && typeof clearTimeout==='function') clearTimeout(timer);
     }
   }
   const memory = new Map();
@@ -434,14 +310,14 @@
         terminal.has(run.status) ? 'The run is '+run.status+' but its messages are not all collected yet. Call status again to read the remaining pages; do not clean up before messages_complete is true.' :
         'No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation.'};
   }
-  async function roll(msg,ctx,caps,canArchive) {
+  async function roll(msg,ctx,canArchive) {
     for (const [op,mem] of memory) if (mem.createRejected) await tryPersist(msg,op,mem);
     // The catalog the built-in engine routes over: exactly what this Cindy can run now.
     const rawCatalog=await cindy.tasks.models();
     const initExtra={classifyViaHost:true,...(msg.args.profile!==undefined ? {profile:msg.args.profile} : {})};
     let prepared=await writePrepare(msg,msg.args.task,rawCatalog,initExtra);
     if (prepared.state==='classify' && prepared.classifier) {
-      const classification=await runClassifier(prepared.operation,prepared.classifier,ctx,caps);
+      const classification=await runClassifier(prepared.classifier,msg.callId);
       prepared=await writePrepare(msg,msg.args.task,rawCatalog,{...initExtra,classification});
     }
     const operation=prepared.operation;
@@ -490,7 +366,7 @@
       record.taskId=task.taskId;
       if (!sameRoute(task.resolvedConfig,route) || task.permissionMode!=='bypassPermissions' ||
           task.planModeEnabled || task.workingDir!==ctx.workdir) {
-        record.state='blocked';record.error='Created draft has different route/permissions/workdir. Configure plugin task directory to the current project; no model input sent.';
+        record.state='blocked';record.error='Created draft has different route/permissions/workdir. On the AgentCompass plugin page set Working folder to the project of this session and Write access to Full access; no model input sent.';
         await discardDraft(record,canArchive);
         const saveError=await tryPersist(msg,operation,record);
         return {status:'blocked',operation,taskId:task.taskId,task_id:task.taskId,executed:false,error:record.error,
@@ -650,7 +526,7 @@
     const caps=await capabilities();
     const canArchive=caps.operations.includes('archive') && typeof cindy.tasks.archive==='function';
     // Routing one roll holds only that assignment's lock: other sessions and other operations go on meanwhile.
-    if (msg.tool==='roll') return await exclusive('roll\0'+ctx.session_id+'\0'+String(msg.args.task),()=>roll(msg,ctx,caps,canArchive));
+    if (msg.tool==='roll') return await exclusive('roll\0'+ctx.session_id+'\0'+String(msg.args.task),()=>roll(msg,ctx,canArchive));
     if (!['status','stop','cleanup'].includes(msg.tool)) throw Error('Unsupported tool');
     const operation=msg.args.operation;
     return await exclusive('op\0'+operation,async()=>{

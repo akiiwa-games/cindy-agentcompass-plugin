@@ -8,6 +8,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {validateGhostManifest} from './vendor/cindy-plugin-protocol/plugin-manifest.bcdea7e27f97.mjs';
+import {CALLER_REQUIRED_KEYS} from '../plugin/engine/route.mjs';
 
 const DIR = path.resolve(process.env.CINDY_MARKET_PLUGIN_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'plugin'));
 const LOCALES = ['en', 'ja', 'ko', 'zh-CN'];
@@ -56,13 +57,15 @@ test('identity, versions and tools meet the official repository rules', () => {
     text(tool.description, `tools.${tool.name}.description`, 1024);
     assert.ok(JSON.stringify(tool.parameters).length <= 16384, `tools.${tool.name}.parameters exceeds 16KB`);
   }
-  // M2 & M5 regressions: agent.hiddenTasks is enabled and roll declares optional profile parameter.
-  assert.equal(manifest.agent?.hiddenTasks, true, 'M2: manifest.agent.hiddenTasks must be true so classifier tasks can be hidden');
+  // R4: classification is a quick-text request, so no hidden tasks are declared; M5: roll declares the optional profile parameter.
+  assert.deepEqual(manifest.cindy, {text: ['oneshot']}, 'R4: the classifier uses cindy.text oneshot and names no model');
+  assert.equal(manifest.agent?.hiddenTasks, undefined, 'R4: no task is created for classification');
   const rollTool = manifest.tools.find(t => t.name === 'roll');
   assert.deepEqual(rollTool.parameters.required, ['task'], 'M5: only task is required on roll; profile is optional');
   const profileProp = rollTool.parameters.properties?.profile;
   assert.equal(profileProp?.type, 'object', 'M5: roll.parameters.properties.profile must be declared as an object');
   assert.equal(typeof profileProp?.description, 'string');
+  assert.deepEqual(profileProp.required, CALLER_REQUIRED_KEYS, 'r5: the tool schema names every field a caller profile must give');
 });
 
 test('the icon is a real, non-empty PNG of 128 or 256 px under 512 KB', () => {
@@ -166,4 +169,5 @@ test('the built-in engine is complete in the package and depends on nothing outs
     assert.doesNotMatch(source, /\brequire\(|\bimport\(|\bfetch\(|node:(?:http|https|net|child_process)/, rel);
   }
   assert.deepEqual([...seen].sort(), ['engine/allocator.mjs', 'engine/catalog.mjs', 'engine/profiler.mjs', 'engine/route.mjs']);
+  assert.ok(files.some(f => f.rel === 'engine/classifier-cases.json'), 'the calibration data route.mjs reads ships in the package');
 });

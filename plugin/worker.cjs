@@ -11,7 +11,6 @@ const {spawn,spawnSync} = require('node:child_process');
 const readline = require('node:readline');
 const {pathToFileURL} = require('node:url');
 const HOME_STATE = path.join(os.homedir(), '.agent-compass', 'cindy-plugin');
-const VALID_EFFORTS = new Set(['none', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 // Configuration, read again on every request so a fix made after a failed roll applies to its retry. First found wins:
 //   router.json next to this file (scripts/build_plugin.py), then ~/.agent-compass/cindy-plugin/router.json:
 //     {"command": [...complete roll command...], "accountMappings": [...], "stateRoot": "..."}  the external CLI
@@ -21,26 +20,10 @@ const VALID_EFFORTS = new Set(['none', 'off', 'minimal', 'low', 'medium', 'high'
 function validateClassifierConfig(value) {
   if (!value || typeof value !== 'object') return {};
   const out = {};
-  if (value.classifierModel !== undefined) {
-    if (typeof value.classifierModel !== 'string' || !value.classifierModel.trim())
-      throw Error('"classifierModel" must be a non-empty string');
-    out.classifierModel = value.classifierModel.trim();
-  }
-  if (value.classifierModels !== undefined) {
-    if (!Array.isArray(value.classifierModels) || !value.classifierModels.length ||
-        value.classifierModels.some(m => typeof m !== 'string' || !m.trim()))
-      throw Error('"classifierModels" must be a non-empty array of non-empty strings');
-    out.classifierModels = value.classifierModels.map(m => m.trim());
-  }
-  if (value.classifierEffort !== undefined) {
-    if (typeof value.classifierEffort !== 'string' || !VALID_EFFORTS.has(value.classifierEffort))
-      throw Error('"classifierEffort" must be one of none, off, minimal, low, medium, high, xhigh, max, ultra');
-    out.classifierEffort = value.classifierEffort;
-  }
   if (value.classifierTimeoutMs !== undefined) {
     if (typeof value.classifierTimeoutMs !== 'number' || !Number.isInteger(value.classifierTimeoutMs) ||
-        value.classifierTimeoutMs < 100 || value.classifierTimeoutMs > 120000)
-      throw Error('"classifierTimeoutMs" must be an integer between 100 and 120000');
+        value.classifierTimeoutMs < 100 || value.classifierTimeoutMs > 65000)
+      throw Error('"classifierTimeoutMs" must be an integer between 100 and 65000');
     out.classifierTimeoutMs = value.classifierTimeoutMs;
   }
   if (value.classifierCacheTtlMs !== undefined) {
@@ -136,7 +119,9 @@ function context(value) {
 function owned(root, operation, ctx) {
   if (typeof operation !== 'string' || !/^[a-f0-9]{40}$/.test(operation)) throw Error('Invalid operation');
   const dir = path.join(root, operation);
-  const record = JSON.parse(fs.readFileSync(path.join(dir, 'receipt.json'), 'utf8'));
+  const file = path.join(dir, 'receipt.json');
+  if (!fs.existsSync(file)) throw Error('Unknown operation '+operation+': no receipt. Nothing is recorded for it; roll the task to start it.');
+  const record = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (record.parent !== ctx.session_id) throw Error('Operation belongs to a different parent session');
   return {dir, record};
 }
@@ -183,101 +168,91 @@ function noteCreate(root, before, after, now=Date.now()) {
   else return;
   atomic(cooldownFile(root), all);
 }
+// Classifier failures. Cindy chooses the quick-text model, so a retry cannot go elsewhere: it answers at once with the failure and
+// where to change the model, and asks the host again only after 30 s, doubling to 5 min; a classified task clears it. A malformed
+// answer may be that task's doing and must not hold up other tasks, so it cools only that task; any other failure is the channel's.
+const CLASSIFIER_COOLDOWN_MS = 30000, CLASSIFIER_COOLDOWN_MAX_MS = 5*60000;
+const TASK_SCOPED_FAILURES = new Set(['classifier_bad_model_output', 'classifier_empty_output', 'invalid_classifier_output']);
+const classifierCooldownFile = root => path.join(root, 'classifier-cooldowns.json');
+function classifierCooldowns(root) {
+  try {
+    const value=JSON.parse(fs.readFileSync(classifierCooldownFile(root), 'utf8'));
+    return value && typeof value==='object' && !Array.isArray(value) ? value : {};
+  } catch {return {};}
+}
+function classifierCooling(root, taskDigest, now=Date.now()) {
+  const all=classifierCooldowns(root);
+  return [all.channel, all['task:'+taskDigest]].find(entry => entry && entry.until>now) || null;
+}
+function noteClassifierOutcome(root, taskDigest, result, now=Date.now()) {
+  const all=classifierCooldowns(root);
+  if (result.profile_source!=='unavailable') {
+    if (!all.channel && !all['task:'+taskDigest]) return;
+    delete all.channel;
+    delete all['task:'+taskDigest];
+  } else {
+    const reason=result.decision?.reason || 'classifier_failed';
+    const key=TASK_SCOPED_FAILURES.has(reason) ? 'task:'+taskDigest : 'channel';
+    const old=all[key];
+    const failures=old && now-old.until<=CLASSIFIER_COOLDOWN_MAX_MS ? old.failures+1 : 1;
+    all[key]={until:now+Math.min(CLASSIFIER_COOLDOWN_MS*2**(failures-1), CLASSIFIER_COOLDOWN_MAX_MS), failures, reason,
+      error:result.error, model:result.classifier_model || null};
+    for (const [other, entry] of Object.entries(all)) if (now-entry.until>CLASSIFIER_COOLDOWN_MAX_MS) delete all[other];
+  }
+  atomic(classifierCooldownFile(root), all);
+}
+// The answer to one classification request; an answer nobody asked for, or that arrives too late, is refused.
+const PENDING_CLASSIFY_TTL_MS = 5*60000;
 let engine=null;
-const sameRoute = (a, b) => ['agentKind', 'providerId', 'model', 'effort', 'fastMode'].every(k => a?.[k] === b?.[k]);
 async function builtin(input, catalog, dir, root, conf = {}, extra = {}) {
   engine ||= import(pathToFileURL(path.join(__dirname, 'engine', 'route.mjs')).href);
   const mod = await engine;
   const cacheFile = path.join(root, 'score-cache.json');
-  const cooling = cooldowns(root);
   const pendingFile = path.join(dir, 'pending-classify.json');
-  const readPending = () => {
-    try { return JSON.parse(fs.readFileSync(pendingFile, 'utf8')); }
-    catch { return null; }
-  };
+  const taskDigest = digest(mod.taskCacheDescriptor(input));
+  let classification = null;
   if (extra.classification !== undefined && extra.classification !== null) {
-    const pending = readPending();
+    let pending = null;
+    try { pending = JSON.parse(fs.readFileSync(pendingFile, 'utf8')); } catch {}
     try { fs.rmSync(pendingFile, {force: true}); } catch {}
     const clf = extra.classification;
-    const taskDigest = digest(mod.taskCacheDescriptor(input));
-    const validHandshake = Boolean(
-      pending &&
-      pending.active === true &&
-      pending.parent === extra.parent &&
-      pending.taskDigest === taskDigest &&
-      (!pending.attemptId || !clf.attemptId || clf.attemptId === pending.attemptId) &&
-      (!clf.model || clf.model === pending.model) &&
-      (!clf.route || sameRoute(clf.route, pending.route))
-    );
-    if (!validHandshake) {
-      const blocked = {
-        status: 'blocked',
-        engine: 'builtin',
-        profile: null,
-        profile_source: 'unavailable',
-        classifier_model: clf?.model || pending?.model || null,
-        decision: {
-          profile: null,
-          profile_source: 'unavailable',
-          classifier_model: clf?.model || pending?.model || null,
-          realtime_loop: null,
-          reason: 'unsolicited_or_mismatched_classification',
-        },
-        error: 'Rejected unsolicited or mismatched classification payload: no matching pending classification for this operation and task.',
-        next_action: 'Call roll without a pre-supplied classification so the plugin can initiate a verified classification handshake.',
-      };
+    const answered = clf.ok === true ? typeof clf.rawOutput === 'string' : clf.ok === false;
+    if (!answered || !pending || pending.parent !== extra.parent || pending.taskDigest !== taskDigest ||
+        typeof clf.attemptId !== 'string' || clf.attemptId !== pending.attemptId ||
+        !(Date.now() - pending.createdAt <= PENDING_CLASSIFY_TTL_MS)) {
+      const blocked = mod.unsolicitedClassificationRoute();
       writeDiag(path.join(dir, 'router.stdout.json'), JSON.stringify(blocked, null, 2));
       return blocked;
     }
-    atomic(pendingFile, {...pending, active: false});
+    classification = {...clf, calibration_cases: pending.calibrationCases};
   } else if (extra.classifyViaHost && extra.profile === undefined) {
-    const req = mod.prepareClassifierRequest(input, catalog, {config: conf, cooling, cacheFile});
-    if (req && !req.cached) {
-      const prev = readPending();
-      const attempt = (Number.isInteger(prev?.attempt) ? prev.attempt : 0) + 1;
-      const taskDigest = digest(mod.taskCacheDescriptor(input));
-      const nonce = crypto.randomBytes(4).toString('hex');
-      const attemptId = `${taskDigest.slice(0, 12)}-${attempt}-${nonce}`;
-      atomic(pendingFile, {
-        active: true,
-        parent: extra.parent,
-        taskDigest,
-        attempt,
-        attemptId,
-        model: req.model,
-        route: req.route,
-        createdAt: Date.now(),
-      });
-      return {
-        status: 'classify',
-        engine: 'builtin',
-        classifier: {
-          attemptId,
-          taskDigest: taskDigest.slice(0, 16),
-          attempt,
-          route: req.route,
-          model: req.model,
-          prompt: req.prompt,
-          timeoutMs: req.timeoutMs,
-        },
-      };
+    const req = mod.prepareClassifierRequest(input, {config: conf, cacheFile});
+    if (!req.cached) {
+      const refused = req.overLimitBy ? mod.classifierTaskTooLongRoute(req) :
+        classifierCooling(root, taskDigest) ? mod.classifierCoolingRoute(classifierCooling(root, taskDigest)) : null;
+      if (refused) {
+        writeDiag(path.join(dir, 'router.stdout.json'), JSON.stringify(refused, null, 2));
+        return refused;
+      }
+      const attemptId = crypto.randomUUID();
+      atomic(pendingFile, {parent: extra.parent, taskDigest, attemptId, calibrationCases: req.calibrationCases, createdAt: Date.now()});
+      return {status: 'classify', engine: 'builtin', classifier: {attemptId, prompt: req.prompt, timeoutMs: req.timeoutMs}};
     }
   }
   const result = mod.routeTask(input, catalog, {
     env: process.env,
-    cooling,
+    cooling: cooldowns(root),
     config: conf,
     cacheFile,
     profile: extra.profile ?? null,
-    classification: extra.classification ?? null,
+    classification,
   });
+  // Only a classification this plugin asked for can come to here, so only that can fill the shared cache or touch the record.
+  if (classification) try {noteClassifierOutcome(root, taskDigest, result);} catch {}
   writeDiag(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
   if (result.status === 'blocked') {
     if (result.decision?.reason === 'no_runnable_model') throw Error(result.error);
-    if (result.decision?.reason === 'no_model_meets_floor' ||
-        (result.profile_source === 'unavailable' && (extra.classifyViaHost || extra.classification || extra.returnBlocked || extra.profile !== undefined))) {
-      return result;
-    }
+    if (result.decision?.reason === 'no_model_meets_floor' || result.profile_source === 'unavailable') return result;
     throw Error(result.error);
   }
   return result;
@@ -322,15 +297,17 @@ async function external(command, task, ctx, dir, timeoutMs=110000) {
 }
 // The engine for this roll: the configured CLI, an opted-in CLI when it is installed, otherwise the built-in engine.
 async function route(conf, task, ctx, dir, catalog, root, extra = {}) {
-  if (conf.engine==='cli' && conf.command) return await external(conf.command, task, ctx, dir, conf.timeoutMs);
-  if (conf.engine==='cli') {
-    const found=discover();
-    if (found) return await external([found, 'roll'], task, ctx, dir);
-    const result=await builtin(task, catalog, dir, root, conf, extra);
-    if (result.status === 'classify') return result;
-    return {...result, engine_note:'config.json asks for the AgentCompass CLI, which is not installed: the built-in engine routed this task.'};
+  const found=conf.engine==='cli' && !conf.command ? discover() : null;
+  if (conf.engine==='cli' && (conf.command || found)) {
+    if (extra.profile!==undefined) return {status:'blocked', engine:'cli', profile:null, profile_source:'unavailable',
+      decision:{reason:'profile_not_supported_by_cli', profile_source:'unavailable'},
+      error:'The configured AgentCompass CLI classifies the task itself and takes no profile; the profile was not used and nothing was started.',
+      next_action:'Call roll without `profile`, or remove the CLI configuration (router.json, or {"engine":"cli"} in config.json) to use the built-in engine.'};
+    return conf.command ? await external(conf.command, task, ctx, dir, conf.timeoutMs) : await external([found, 'roll'], task, ctx, dir);
   }
-  return await builtin(task, catalog, dir, root, conf, extra);
+  const result=await builtin(task, catalog, dir, root, conf, extra);
+  if (conf.engine!=='cli' || result.status==='classify') return result;
+  return {...result, engine_note:'config.json asks for the AgentCompass CLI, which is not installed: the built-in engine routed this task.'};
 }
 // One preparation per operation at a time; different operations never wait for each other.
 const busy=new Map();
@@ -378,15 +355,12 @@ async function handle(method, params) {
       classifyViaHost:Boolean(params.classifyViaHost),
       profile:params.profile,
       classification:params.classification,
-      returnBlocked:Boolean(params.returnBlocked),
     });
     if (result.status==='classify') {
       return {operation, parent:ctx.session_id, state:'classify', engine:result.engine, classifier:result.classifier};
     }
+    // A blocked answer is not saved over the receipt: a caller may already hold this operation from an earlier answer.
     if (result.status==='blocked') {
-      if (old?.state === 'prepared') {
-        try { fs.rmSync(file, {force: true}); } catch {}
-      }
       return {
         operation,
         parent:ctx.session_id,

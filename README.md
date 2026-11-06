@@ -30,15 +30,16 @@ Cindy session ──ghost_call {tool:"roll", args:{task}}──▶ plugin/main.j
              status → getRun / readMessages (every page saved on disk) → exact outputMessageId → final report
 ```
 
-- `plugin/ghost.json`: Cindy v3 manifest (`minCindyVersion: "0.1.121"`, `sessionContext`, `agent.tasks`, `agent.hiddenTasks`, a Node worker)
+- `plugin/ghost.json`: Cindy v3 manifest (`minCindyVersion: "0.1.121"`, `sessionContext`, `agent.tasks`, `cindy.text`, a Node worker)
   with four tools: `roll` (accepting `task` and an optional explicit `profile` override), `status`, `stop`, `cleanup`; the icon
   `plugin/assets/icon.png` (from `scripts/make_icon.mjs`) and `en`, `zh-CN`, `ja`, `ko` resources in `plugin/locales/`, as the official
   plugin repository requires.
 - `plugin/engine/`: the built-in router. `route.mjs` holds the live model classifier prompt/schema/validator/cache, the profile-driven
   split and self gates, the catalog scoring, the quota reading and fast mode; `catalog.mjs`, `profiler.mjs` and `allocator.mjs` are the
-  AgentCompass model catalog, profile schema validator and allocator (MIT, vendored).
-- `plugin/main.js`: the logic page. Requires the experimental tasks API, runs the short-lived classifier task when the built-in engine
-  needs a live task profile (and archives/hides it immediately in `finally`), picks the one catalog route that exactly matches the routed
+  AgentCompass model catalog, profile schema validator and allocator (MIT, vendored); `classifier-cases.json` is the AgentCompass rubric and
+  calibration set, unchanged.
+- `plugin/main.js`: the logic page. Requires the experimental tasks API, puts the classification to Cindy's quick-text channel when the
+  built-in engine needs a live task profile, picks the one catalog route that exactly matches the routed
   harness/connection/model/effort/fast setting, creates and checks the draft, sends the full prompt once, and collects results.
 - `plugin/worker.cjs`: the node bridge. Validates the host context, coordinates the two-step built-in classification and routing, turns the
   route into an explicit Cindy contract (only `claude`, `codex`, `pi`; Claude `bypassPermissions`, Codex and Pi `full-access`; an explicitly
@@ -54,22 +55,34 @@ Cindy session ──ghost_call {tool:"roll", args:{task}}──▶ plugin/main.j
 `wants_fast`) come strictly from the live classifier model's semantic judgment or an explicit caller-supplied `profile`—never from
 keyword, regex or length heuristics on the task text:
 
-- **live model classification**: when no caller `profile` is supplied and the task input is not already cached, the plugin selects the
-  cheapest, fastest available model in `cindy.tasks.models()` (default preference order: `gpt-5.3-codex-spark`, `gpt-5.4-mini`, `gpt-6-luna`,
-  `claude-haiku-5-5`, `claude-haiku-4-5`, `gemini-3.8-flash-high`, `gemini-3-flash`, `deepseek-v4.1-flash-free`, `grok-4-fast`, `grok-4.7`,
-  `gpt-6.1-terra`, `claude-sonnet-5-5`, `gpt-6-sol`, `gpt-6.1-sol`; if none of those are present, it falls back to the lowest `usd_per_hour`,
-  `cost` and `tier` in `catalog.mjs`) at its lightest supported effort (`none`, `off`, `minimal` or `low`). It runs a single-turn, tool-free
-  JSON classification via `cindy.tasks` with Cindy's strictest minimal permission mode (`permissionMode: "ask"`, plus `hidden: true` when the
-  host supports hidden tasks) and a unique per-attempt `requestKey`, wrapping the task inside an `untrusted_task_evidence` JSON envelope with
-  prompt-injection rules, validates every field against `TASK_PROFILE_SCHEMA` (aligned with AgentCompass `SCORER_PROMPT` / `TASK_PROFILE_SCHEMA`,
-  including `realtime_loop` and `expected_hours` in `0.05..24`), caches the validated profile in memory and
-  `~/.agent-compass/cindy-plugin/score-cache.json` (keyed by prompt/schema digest, classifier config and full task input), and immediately
-  cancels (`cindy.tasks.cancel`), archives (`cindy.tasks.archive`) and hides (`cindy.tasks.setHidden`) the classifier task in `finally` (and
-  on any late `create`/`send` completion after timeout) with bounded cleanup timeouts so no clutter remains in the Cindy task list.
-- **when the classifier is unavailable**: if the classifier task times out, errors, or returns non-JSON or invalid schema fields, the built-in
-  engine **never** falls back to keyword profiling (`inferTaskProfile`). Instead it returns `status: "blocked"` with
-  `profile_source: "unavailable"` (and `classifier_model` naming the attempted model), without persisting a `prepared` receipt, or uses an
-  explicit caller-provided `profile` (`profile_source: "caller"`).
+- **live model classification**: when no caller `profile` is supplied and the task input is not already cached, the logic page makes one
+  request on Cindy's quick-text channel (`cindy.send({type:'cindy-request',kind:'oneshot_text',expectJson:true})`, manifest
+  `cindy.text: ["oneshot"]`): one model request with no Agent, no tools, no task and no session, so nothing appears in the task list. It
+  spends the user's model quota, including when the answer is `split` or `self`. **Cindy chooses the model**: the one picked on the plugin
+  card, else the manifest's `oneshotModel` (this plugin sets none), else the auxiliary chain in Cindy settings. The plugin cannot name it and
+  learns it from the answer (`classifier_model`). A machine whose only sign-in is a Claude subscription has no quick-text model unless the
+  user adds one: Cindy runs this channel on its xd, OpenAI and xAI connections.
+- **the prompt**: the AgentCompass `SCORER_PROMPT`, then `plugin/engine/classifier-cases.json` (the AgentCompass file
+  `skills/agent-compass/references/classifier-cases.json`, unchanged: route definitions, rubric, 47 calibration cases), the schema, and last the whole
+  task inside an `untrusted_task_evidence` JSON envelope with prompt-injection rules. The answer is validated against `TASK_PROFILE_SCHEMA`
+  (including `realtime_loop` and `expected_hours` in `0.05..24`) and cached in memory and in
+  `~/.agent-compass/cindy-plugin/score-cache.json`, keyed by prompt/schema digest and full task input.
+- **the 32,768-character budget**: this channel takes a single `prompt` of at most 32,768 characters and has no separate context field, so the
+  task and the instructions share it. The rubric and route definitions always go whole; calibration cases take what is left, whole ones only, in
+  an order fixed by the case file alone (live kinds first, one of each kind before any second), never by what the task says. All 47 fit a task
+  of up to about 3,800 characters; 35 at 6,000, 20 at 10,000, 6 at 15,000, 1 at 17,000. `decision.classifier_calibration_cases` records
+  `{included, total}`. A task that does not fit with no cases left (about 17,400 characters once JSON-escaped) is refused with
+  `task_too_long_for_classifier`, never cut; give it an explicit `profile`.
+- **when the classifier is unavailable**: on any failure the built-in engine **never** falls back to keyword profiling. It returns
+  `status: "blocked"` with `profile_source: "unavailable"`, a `decision.reason` of `classifier_<Cindy's code>` (`classifier_no_candidate`,
+  `classifier_timeout`, `classifier_rate_limited`, ...) or `invalid_classifier_output`, no `prepared` receipt, and a `next_action` saying the model
+  can be changed on the plugin card. An existing receipt is left in place.
+- **a failed classification cools down**: Cindy chooses the model, so a retry cannot go elsewhere. For 30 s, doubling to 5 min with each
+  consecutive failure, `roll` answers at once with `classifier_cooling_down`, the original failure and the same hint, without asking Cindy
+  (`classifier-cooldowns.json` in the state directory). A malformed answer cools only that task, any other failure the whole channel. A
+  classified task clears it; cached tasks and explicit profiles are not held up.
+- **an explicit `profile`** must give every field in the tool schema's `required` list, otherwise `invalid_caller_profile` and nothing starts.
+  The external CLI classifies for itself and takes no profile: passing one answers `profile_not_supported_by_cli`.
 - **split**: when the profile has `multi_task: true`, `roll` returns `status: "split"` with `task_count`; nothing starts. Roll each task
   separately.
 - **self**: when the profile has `self: true` (or `delegate: false`), `roll` returns `status: "self"`; nothing starts.
@@ -93,16 +106,13 @@ Every decision is saved with the receipt (`router.stdout.json`): `profile_source
 
 ### Classifier configuration (`~/.agent-compass/cindy-plugin/config.json`)
 
-All classifier fields in `config.json` are optional:
+All classifier fields in `config.json` are optional. The model is not one of them: pick it on the plugin card.
 
-- `classifierModel` (`string`): non-empty preferred model ID (or `<providerId>/<model>` / `<agentKind>/<model>`) from `cindy.tasks.models()`.
-- `classifierModels` (`string[]`): non-empty ordered array of non-empty preferred classifier model strings tried before the built-in default order.
-- `classifierEffort` (`"none" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra"`): preferred effort when the
-  chosen classifier catalog row offers it (defaults to the lightest offered effort: `none`, `off`, `minimal`, then `low`).
-- `classifierTimeoutMs` (`integer`, `100..120000`, default `15000`): timeout in milliseconds for the classifier run before it is cancelled
-  and archived.
+- `classifierTimeoutMs` (`integer`, `100..65000`, default `65000`): how long the logic page waits for Cindy, which itself answers within 60 s.
 - `classifierCacheTtlMs` (`integer`, `0..86400000`, default `600000`): TTL in milliseconds for cached profiles in `score-cache.json` (`0`
   disables cache hits).
+
+`classifierModel`, `classifierModels` and `classifierEffort` of earlier versions are ignored.
 
 ## Engines
 
@@ -174,8 +184,8 @@ npm run test:sandbox:linux  # the same plus unit tests in the WSL docker-desktop
 `validateGhostManifest` (vendored unmodified under `test/vendor/`, Apache-2.0) plus the repository's id, version, tool, icon,
 locale and package rules, and that the engine imports only Node built-ins and package files.
 
-`test/sandbox-e2e.mjs` substitutes only the Cindy host (`test/zero_cindy_host.mjs`, fed the catalog a real Cindy 0.1.121 reported), the
-model behind the external router's classifier (a local OpenAI-compatible fixture) and discovery placeholders for provider CLIs. Everything
+`test/sandbox-e2e.mjs` substitutes only the Cindy host (`test/zero_cindy_host.mjs`, fed the catalog a real Cindy 0.1.121 reported, and
+answering the quick-text channel with a fixture profile), the model behind the external router's classifier (a local OpenAI-compatible fixture) and discovery placeholders for provider CLIs. Everything
 else runs for real: the market install with nothing else on the machine; the built-in engine producing Codex, Claude and Pi routes,
 `split`, `self`, fast mode and quota moves from real Codex telemetry files; the external `agentcompass roll` when opted in, and the
 built-in fallback when the CLI is missing; concurrent rolls across sessions, a forged `session_context`, 12 message pages, a 2.6 MB reply,
