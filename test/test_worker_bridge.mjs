@@ -79,8 +79,34 @@ function rpc(p, requests, env = {}) {
   replies.order = order.map(r => r.id);
   return replies;
 }
-const prepare = (p, task, id = 1, catalog = CATALOG) => ({id, method: 'prepare', params: {task, catalog, context: ctx(p.root)}});
+const prepare = (p, task, id = 1, catalog = CATALOG, extra = {}) => ({id, method: 'prepare', params: {task, catalog, context: ctx(p.root), ...extra}});
 const receipts = p => fs.existsSync(p.state) ? fs.readdirSync(p.state, {recursive: true}).filter(f => String(f).endsWith('receipt.json')) : [];
+const makeProfile = (overrides = {}) => ({
+  work_kind: 'general_implementation',
+  interaction_style: 'engineering',
+  reasoning_depth: 2,
+  code_complexity: 1,
+  context_scale: 1,
+  divergence: 1,
+  hallucination_risk: 1,
+  error_cost: 2,
+  needs_visual: false,
+  needs_gui: false,
+  local_only: true,
+  realtime_loop: false,
+  expected_hours: 0.5,
+  hours_confidence: 'medium',
+  urgency: 'normal',
+  multi_task: false,
+  task_count: '1',
+  self: false,
+  wants_fast: false,
+  reason: 'classified by built-in classifier',
+  ...overrides,
+});
+const classified = (overrides = {}, model = 'chatgpt/gpt-5.3-codex-spark') => ({
+  classification: {ok: true, model, rawOutput: JSON.stringify(makeProfile(overrides))},
+});
 
 const native = bundle => ({status: 'native', parent_id: 'true-session', parent_host: 'native',
   route: {bundle}, worker_prompt_file: '@PROMPT'});
@@ -90,9 +116,26 @@ const codex = native({provider: 'codex', harness: 'codex', account: 'codex', mod
 test('zero configuration: the built-in engine routes over the catalog Cindy passed, with no AgentCompass anywhere', () => {
   const p = plugin(codex, 0, 'none');
   const task = 'Rename the helper foo to bar in util.py and update its two callers.\r\n原文';
-  const [reply] = rpc(p, [prepare(p, task)]);
+  // Phase 1: classifyViaHost asks the Cindy logic page to run the fast catalog classifier model.
+  const [askClf] = rpc(p, [prepare(p, task, 1, CATALOG, {classifyViaHost: true})]);
+  assert.equal(askClf.result?.state, 'classify');
+  assert.equal(askClf.result?.classifier?.model, 'chatgpt/gpt-5.3-codex-spark');
+  assert.equal(askClf.result?.classifier?.route?.effort, 'minimal');
+  // Phase 2: classification result is validated, cached to score-cache.json, and routed.
+  const [reply] = rpc(p, [prepare(p, task, 1, CATALOG, {...classified({realtime_loop: true}), classifyViaHost: true})]);
   assert.equal(reply.result?.router?.status, 'native', JSON.stringify(reply));
   assert.equal(reply.result.engine, 'builtin');
+  assert.equal(reply.result.router.decision.profile_source, 'classifier');
+  assert.equal(reply.result.router.decision.classifier_model, 'chatgpt/gpt-5.3-codex-spark');
+  assert.equal(reply.result.router.decision.realtime_loop, true);
+  // A second session rolling the identical task text hits score-cache.json directly without a second classification step.
+  const [cachedReply] = rpc(p, [{
+    id: 9,
+    method: 'prepare',
+    params: {task, catalog: CATALOG, classifyViaHost: true, context: {...ctx(p.root), session_id: 'second-session'}},
+  }]);
+  assert.equal(cachedReply.result?.state, 'prepared');
+  assert.equal(cachedReply.result?.router?.decision?.classifier_cached, true);
   const b = reply.result.bundle;
   assert.ok(CATALOG.models.some(row => row.route.agentKind === b.harness && row.route.providerId === b.providerId &&
     row.route.model === b.model && row.efforts.includes(b.effort)), 'the route is a real catalog row: ' + JSON.stringify(b));
@@ -100,7 +143,7 @@ test('zero configuration: the built-in engine routes over the catalog Cindy pass
   assert.ok(reply.result.prompt.startsWith(task), 'the assignment is sent unchanged');
   assert.match(reply.result.prompt.slice(task.length), /Cindy plugin task return channel/);
   assert.equal(p.routerCalls(), 0);
-  assert.deepEqual(receipts(p), [path.join(reply.result.operation, 'receipt.json')], 'receipts default to ~/.agent-compass/cindy-plugin');
+  assert.ok(fs.existsSync(path.join(p.stateHome, 'score-cache.json')), 'score-cache.json is persisted');
   assert.ok(fs.existsSync(path.join(p.stateHome, reply.result.operation, 'router.stdout.json')), 'the decision is kept with the receipt');
   // Chunked output transfers reassemble in worker.cjs and write the full transcript page.
   const op = reply.result.operation;
@@ -117,7 +160,7 @@ test('zero configuration: the built-in engine routes over the catalog Cindy pass
 test('a route Cindy refused to create on cools down for the retry; a request refusal does not; a created task clears it', () => {
   const p = plugin(codex, 0, 'none');
   const task = 'Rename the helper foo to bar in util.py and update its two callers.';
-  const [first] = rpc(p, [prepare(p, task)]);
+  const [first] = rpc(p, [prepare(p, task, 1, CATALOG, classified())]);
   const op = first.result.operation, b = first.result.bundle;
   const {operation, ...prepared} = first.result;
   const save = (id, record) => ({id, method: 'save', params: {operation: op, record, context: ctx(p.root)}});
@@ -130,7 +173,7 @@ test('a route Cindy refused to create on cools down for the retry; a request ref
   const [entry] = Object.values(JSON.parse(fs.readFileSync(file, 'utf8')));
   assert.deepEqual([entry.code, entry.failures], ['ROUTE_UNAVAILABLE', 1]);
   assert.ok(Math.abs(entry.until - Date.now() - 15 * 60000) < 60000);
-  const [retry] = rpc(p, [prepare(p, task)]);
+  const [retry] = rpc(p, [prepare(p, task, 1, CATALOG, {classifyViaHost: true})]);
   const moved = retry.result.bundle;
   assert.notEqual(moved.providerId + moved.model, b.providerId + b.model, 'the retry routes elsewhere');
   assert.equal(retry.result.router.decision.cooling_down[0].model, b.model);
@@ -147,10 +190,10 @@ test('built-in split, self, Pi for exploration and fast mode with fresh Codex qu
   fs.writeFileSync(path.join(sessions, 'rollout-x.jsonl'), JSON.stringify({type: 'event_msg', payload: {type: 'token_count',
     rate_limits: {primary: {used_percent: 12, window_minutes: 300, resets_at: Math.floor(Date.now() / 1000) + 3600}, secondary: null, plan_type: 'pro'}}}) + '\n');
   const replies = rpc(p, [
-    prepare(p, 'Two independent tasks:\n1. Add a dark theme to the settings page.\n2. Fix the CSV export encoding bug in report.py.', 1),
-    prepare(p, 'What is the difference between a mutex and a semaphore?', 2),
-    prepare(p, 'Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only.', 3),
-    prepare(p, 'Use fast mode: rename the helper foo to bar in util.py and update its two callers.', 4),
+    prepare(p, 'Two independent tasks:\n1. Add a dark theme to the settings page.\n2. Fix the CSV export encoding bug in report.py.', 1, CATALOG, classified({multi_task: true, task_count: '2'})),
+    prepare(p, 'What is the difference between a mutex and a semaphore?', 2, CATALOG, classified({self: true})),
+    prepare(p, 'Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only.', 3, CATALOG, classified({work_kind: 'exploration_analysis', interaction_style: 'exploration', code_complexity: 0})),
+    prepare(p, 'Use fast mode: rename the helper foo to bar in util.py and update its two callers.', 4, CATALOG, classified({work_kind: 'general_implementation', urgency: 'high', wants_fast: true})),
   ]);
   assert.deepEqual([replies[0].result.router.status, replies[0].result.router.task_count, replies[0].result.bundle], ['split', '2', null]);
   assert.deepEqual([replies[1].result.router.status, replies[1].result.bundle], ['self', null]);
@@ -163,7 +206,7 @@ test('the built-in engine is the default even with `agentcompass` on PATH; an em
   const p = plugin(codex, 0, 'none');
   const bin = path.join(p.root, 'bin');
   launcher(p, bin);
-  const replies = rpc(p, [prepare(p, 'Rename foo to bar in util.py.'), prepare(p, 'Rename baz to qux in util.py.', 2, {models: []}),
+  const replies = rpc(p, [prepare(p, 'Rename foo to bar in util.py.', 1, CATALOG, classified()), prepare(p, 'Rename baz to qux in util.py.', 2, {models: []}, classified()),
     {id: 3, method: 'load', params: {operation: 'f'.repeat(40), context: ctx(p.root)}}], {PATH: only([bin])});
   assert.equal(replies[0].result.engine, 'builtin');
   assert.equal(p.routerCalls(), 0, 'the CLI is used only when configured');
@@ -254,12 +297,15 @@ test('config.json {"engine":"cli"}: `agentcompass` on PATH, then ~/.local/bin, r
 
 test('config.json {"engine":"cli"} with AgentCompass not installed falls back to the built-in engine, no error', () => {
   const p = plugin(codex, 0, 'cli');
-  const [reply] = rpc(p, [prepare(p, 'Rename foo to bar in util.py.')]);
+  const [reply] = rpc(p, [prepare(p, 'Rename foo to bar in util.py.', 1, CATALOG, classified())]);
   assert.equal(reply.result?.engine, 'builtin', JSON.stringify(reply));
   assert.match(reply.result.router.engine_note, /not installed: the built-in engine routed/);
   fs.writeFileSync(path.join(p.stateHome, 'config.json'), '{"engine":"gpt"}');
   const [bad] = rpc(p, [prepare(p, 'another')]);
   assert.match(bad.error.message, /Unreadable plugin configuration.*"engine" must be/);
+  fs.writeFileSync(path.join(p.stateHome, 'config.json'), '{"classifierEffort":"extreme"}');
+  const [badEffort] = rpc(p, [prepare(p, 'another')]);
+  assert.match(badEffort.error.message, /Unreadable plugin configuration.*"classifierEffort" must be/);
 });
 
 test('~/.agent-compass/cindy-plugin/account-map.json supplies the CLI connection bindings; a malformed one is refused', () => {

@@ -33,38 +33,71 @@ Cindy session ──ghost_call {tool:"roll", args:{task}}──▶ plugin/main.j
 - `plugin/ghost.json`: Cindy v3 manifest (`minCindyVersion: "0.1.121"`, `sessionContext`, `agent.tasks`, a Node worker) with four tools:
   `roll`, `status`, `stop`, `cleanup`; the icon `plugin/assets/icon.png` (from `scripts/make_icon.mjs`) and `en`, `zh-CN`, `ja`, `ko`
   resources in `plugin/locales/`, as the official plugin repository requires.
-- `plugin/engine/`: the built-in router. `route.mjs` holds the split and self gates, the catalog scoring, the quota reading and fast mode;
-  `catalog.mjs`, `profiler.mjs` and `allocator.mjs` are the AgentCompass model catalog, task profiler and allocator (MIT, vendored).
-- `plugin/main.js`: the logic page. Requires the experimental tasks API, picks the one catalog route that exactly matches the routed
+- `plugin/engine/`: the built-in router. `route.mjs` holds the live model classifier prompt/schema/validator/cache, the profile-driven
+  split and self gates, the catalog scoring, the quota reading and fast mode; `catalog.mjs`, `profiler.mjs` and `allocator.mjs` are the
+  AgentCompass model catalog, profile schema validator and allocator (MIT, vendored).
+- `plugin/main.js`: the logic page. Requires the experimental tasks API, runs the short-lived classifier task when the built-in engine
+  needs a live task profile (and archives it immediately in `finally`), picks the one catalog route that exactly matches the routed
   harness/connection/model/effort/fast setting, creates and checks the draft, sends the full prompt once, and collects results.
-- `plugin/worker.cjs`: the node bridge. Validates the host context, routes the task, turns the route into an explicit Cindy contract (only
-  `claude`, `codex`, `pi`; Claude `bypassPermissions`, Codex and Pi `full-access`; an explicitly different mode is refused), appends the
-  return-channel contract, and keeps durable receipts and message pages under `~/.agent-compass/cindy-plugin/`.
+- `plugin/worker.cjs`: the node bridge. Validates the host context, coordinates the two-step built-in classification and routing, turns the
+  route into an explicit Cindy contract (only `claude`, `codex`, `pi`; Claude `bypassPermissions`, Codex and Pi `full-access`; an explicitly
+  different mode is refused), appends the return-channel contract, and keeps durable receipts and message pages under
+  `~/.agent-compass/cindy-plugin/`.
 - `scripts/build_plugin.py`: writes a plugin source directory bound to one external AgentCompass install (optional).
 - `scripts/cindy_0_1_121_cancel_hotfix.py` and `patches/cindy-0.1.121-cancel.patch`: the opt-in local fix for cancellation on Cindy 0.1.121.
 
-## The built-in engine
+## The built-in engine and live classifier
 
-`roll` routes the complete task, unchanged, against the catalog Cindy reports for this machine (`tasks.models()`):
+`roll` routes the complete task, unchanged, against the catalog Cindy reports for this machine (`tasks.models()`). All task profile fields
+(`work_kind`, difficulty integers, `multi_task`/`task_count`, `needs_visual`, `needs_gui`, `local_only`, `realtime_loop`, `self`,
+`wants_fast`) come strictly from the live classifier model's semantic judgment or an explicit caller-supplied `profile`—never from
+keyword, regex or length heuristics on the task text:
 
-- **split**: an assignment with two or more independent deliverables (task headings, or listed items marked independent) returns
-  `status: "split"` with `task_count`; nothing starts. Roll each task separately.
-- **self**: an explicit request not to delegate, or a short question with no work in it, returns `status: "self"`; nothing starts.
-- **native**: otherwise the AgentCompass profiler sets the work kind and difficulty, and the allocator scores every Claude, Codex and Pi
-  row with each effort the row offers. The best one is started. Where one model is offered by both Pi and its native CLI, Pi wins for
-  read-and-report work and the native CLI otherwise, as in AgentCompass.
+- **live model classification**: when no caller `profile` is supplied and the task text is not already cached, the plugin selects the
+  cheapest, fastest available model in `cindy.tasks.models()` (default preference order: `gpt-5.3-codex-spark`, `gpt-6-luna`,
+  `claude-haiku-5-5`, `gemini-3-flash`, `gpt-6.1-terra`, `claude-sonnet-5-5`, `gpt-6-sol`, `gpt-6.1-sol`) at its lightest supported effort
+  (`minimal` or `low`). It runs a single-turn, tool-free JSON classification via `cindy.tasks` (`permissionMode: "default"`), wrapping the
+  task text inside an `untrusted_task_evidence` JSON envelope with prompt-injection defenses, validates every field against
+  `TASK_PROFILE_SCHEMA` (aligned with AgentCompass `SCORER_PROMPT` / `TASK_PROFILE_SCHEMA`, including `realtime_loop`), caches the
+  validated profile in memory and `~/.agent-compass/cindy-plugin/score-cache.json`, and immediately archives (`cindy.tasks.archive`) and/or
+  cancels (`cindy.tasks.cancel`) the classifier task in `finally` so no clutter remains in the Cindy task list.
+- **when the classifier is unavailable**: if the classifier task times out, errors, returns non-JSON or invalid schema fields, or echoes an
+  injected profile literal from untrusted task text, the built-in engine **never** falls back to keyword profiling (`inferTaskProfile`).
+  Instead it returns `status: "blocked"` with `profile_source: "unavailable"` (and `classifier_model` naming the attempted model), or uses
+  an explicit caller-provided `profile` (`profile_source: "caller"`).
+- **split**: when the profile has `multi_task: true`, `roll` returns `status: "split"` with `task_count`; nothing starts. Roll each task
+  separately.
+- **self**: when the profile has `self: true` (or `delegate: false`), `roll` returns `status: "self"`; nothing starts.
+- **native**: otherwise the allocator (`rankCandidates`) scores every Claude, Codex and Pi row with each effort the row offers against the
+  profile. The best one is started. Where one model is offered by both Pi and its native CLI, Pi wins for read-and-report work and the
+  native CLI otherwise, as in AgentCompass. `realtime_loop` is preserved on both `profile` and `decision`.
 - **quota**: the newest rate-limit snapshot the Codex CLI wrote to its session logs (`$CODEX_HOME`, else `~/.codex` and Cindy's own
   `<app data>/CindyGlobal/codex-home`) lowers the score of routes on that connection when it is high or exhausted. The decision lists
   `quota_penalized_routes` and warns when the chosen route itself is short of quota.
-- **fast mode**: a task that asks for it ("fast mode", "urgent", "ASAP", "加急", …) gets Codex fast mode when the row supports it and the
+- **fast mode**: a task whose profile sets `wants_fast: true` (or `urgency: "high"`) gets Codex fast mode when the row supports it and the
   quota snapshot shows less than 60% used. Unknown quota never turns fast mode on.
 - **refused routes cool down**: when Cindy refuses `tasks.create` because of the route itself (`ROUTE_UNAVAILABLE`,
   `UNSUPPORTED_CAPABILITY`, `PERMISSION_DENIED`), that route is skipped for 15 min, doubling with each consecutive refusal up to 2 h,
   so the retry goes elsewhere (`route-cooldowns.json` in the state directory; the decision lists `cooling_down`). A task created on
   the route clears it. When every runnable route is cooling down, the roll still routes and warns (`cooldown_warning`).
-- **blocked**: a catalog with no Claude, Codex or Pi model, or none that meets the task's floor, is refused; nothing is guessed.
+- **blocked**: a catalog with no Claude, Codex or Pi model, an unavailable/failed classifier without a caller profile, or no route that
+  meets the task's floor, is refused (`status: "blocked"`); nothing is guessed.
 
-Every decision is saved with the receipt (`router.stdout.json`): profile, chosen route, score components, alternatives and quota.
+Every decision is saved with the receipt (`router.stdout.json`): `profile_source` (`"classifier"`, `"caller"` or `"unavailable"`),
+`classifier_model`, `realtime_loop`, `profile`, chosen route, score components, alternatives and quota.
+
+### Classifier configuration (`~/.agent-compass/cindy-plugin/config.json`)
+
+All classifier fields in `config.json` are optional:
+
+- `classifierModel` (`string`): preferred model ID (or `<providerId>/<model>` / `<agentKind>/<model>`) from `cindy.tasks.models()`.
+- `classifierModels` (`string[]`): ordered list of preferred classifier models tried before the built-in default order.
+- `classifierEffort` (`"none" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra"`): preferred effort when the
+  chosen classifier catalog row offers it (defaults to the lightest offered effort: `minimal`, then `low`).
+- `classifierTimeoutMs` (`integer`, `100..120000`, default `15000`): timeout in milliseconds for the classifier run before it is cancelled
+  and archived.
+- `classifierCacheTtlMs` (`integer`, `0..86400000`, default `600000`): TTL in milliseconds for cached profiles in `score-cache.json` (`0`
+  disables cache hits).
 
 ## Engines
 

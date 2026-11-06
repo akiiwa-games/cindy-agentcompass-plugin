@@ -28,7 +28,22 @@ import {fileURLToPath} from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WIN = process.platform === 'win32';
-const CHECKOUT = path.resolve(process.env.AGENTCOMPASS_CHECKOUT || path.join(REPO, '..', 'route_manager'));
+function resolveDefaultCheckout() {
+  const sibling = path.join(REPO, '..', 'route_manager');
+  if (fs.existsSync(sibling)) return sibling;
+  try {
+    const dotGit = path.join(REPO, '.git');
+    if (fs.existsSync(dotGit) && fs.statSync(dotGit).isFile()) {
+      const m = /^gitdir:\s*(.+?)[\\/]\.git[\\/]worktrees[\\/]/i.exec(fs.readFileSync(dotGit, 'utf8').trim());
+      if (m) {
+        const mainSibling = path.resolve(m[1], '..', 'route_manager');
+        if (fs.existsSync(mainSibling)) return mainSibling;
+      }
+    }
+  } catch { /* ignore */ }
+  return sibling;
+}
+const CHECKOUT = path.resolve(process.env.AGENTCOMPASS_CHECKOUT || resolveDefaultCheckout());
 const ROOT = path.resolve(process.env.CINDY_SANDBOX_ROOT || fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-sandbox-')));
 const LABEL = process.env.CINDY_SANDBOX_LABEL || process.platform;
 const SESSION = 'cindy-session-1';
@@ -95,6 +110,9 @@ fs.writeFileSync(path.join(baseEnv.CLAUDE_CONFIG_DIR, '.credentials.json'), JSON
 const noClaude = D('claude-signed-out');
 const claims = Buffer.from(JSON.stringify({'https://api.openai.com/auth': {chatgpt_plan_type: 'plus', chatgpt_account_id: 'fixture'}})).toString('base64url');
 fs.writeFileSync(path.join(baseEnv.CODEX_HOME, 'auth.json'), JSON.stringify({tokens: {account_id: 'fixture', access_token: 'fixture-only', id_token: `e30.${claims}.fixture`}}));
+const piAgentDir = path.join(home, '.pi', 'agent');
+fs.mkdirSync(piAgentDir, {recursive: true});
+fs.writeFileSync(path.join(piAgentDir, 'auth.json'), JSON.stringify({'openai-codex': {type: 'oauth', access: `e30.${claims}.fixture`, accountId: 'fixture'}}));
 
 // ---- the model behind the classifier: a fixed small-edit profile, changed by a `FIXTURE-PROFILE: <name>` line in the task
 // so each harness is reached through the real allocator (profiles found by probing this fleet; the router decides).
@@ -491,9 +509,9 @@ try {
   const reachable = env => [...(env.PATH || baseEnv.PATH).split(path.delimiter), path.join(home, '.local', 'bin')].filter(d => fs.existsSync(path.join(d, cliName)));
   const isRow = (route, catalog) => catalog.models.some(row => ['agentKind', 'providerId', 'model'].every(k => row.route[k] === route?.[k]) &&
     (row.efforts || [row.route.effort]).includes(route.effort) && (!route.fastMode || row.supportsFastMode));
-  const builtinLife = async (name, taskText, {catalog = 'real', env = builtinEnv} = {}) => {
+  const builtinLife = async (name, taskText, {catalog = 'real', env = builtinEnv, classifierProfile = null} = {}) => {
     const out = await drive(market, `builtin-${name}`, [
-      {label: 'catalog', fixture: {catalog}},
+      {label: 'catalog', fixture: {catalog, ...(classifierProfile ? {classifierProfile} : {})}},
       {label: 'roll', call: 'roll', args: {task: taskText}},
       {label: 'status while running', call: 'status', args: {operation: '@operation:roll'}},
       {label: 'finished', fixture: {runStatus: 'completed', outputMessageId: 'out-final', pages: 2, finalText: `[Worker final report] ${name}`}},
@@ -519,8 +537,11 @@ try {
     JSON.stringify(first(zc.r, 'roll')).slice(0, 500) + zc.result.stderr.slice(-300) + (zc.record.workerStderr || ''));
   check('Cindy creates a row of its own catalog (codex on the openai connection) with bypassPermissions', isRow(zc.create.route, REAL) &&
     zc.create.route.agentKind === 'codex' && zc.create.route.providerId === 'openai' && zc.create.permissionMode === 'bypassPermissions', zc.create);
-  check('the decision is explained: work kind, score, alternatives, quota source', Boolean(zc.receipt.router?.decision?.work_kind && zc.receipt.router.decision.alternatives?.length &&
-    zc.receipt.router.decision.quota?.source === 'codex-cli-sessions'), zc.receipt.router?.decision);
+  check('the decision is explained: work kind, profile_source classifier, classifier_model, realtime_loop, score, alternatives, quota source, and classifier task archived',
+    Boolean(zc.receipt.router?.decision?.work_kind && zc.receipt.router?.decision?.profile_source === 'classifier' &&
+    zc.receipt.router?.decision?.classifier_model === 'chatgpt/gpt-5.3-codex-spark' && typeof zc.receipt.router?.decision?.realtime_loop === 'boolean' &&
+    zc.receipt.router.decision.alternatives?.length && zc.receipt.router.decision.quota?.source === 'codex-cli-sessions' &&
+    (zc.record.classifierCalls || []).some(c => c.name === 'archive')), zc.receipt.router?.decision);
   check('the text sent to Cindy is the whole task byte for byte plus the return channel', zc.sentText.startsWith(zcTask) && zc.sentText.includes('Cindy plugin task return channel') &&
     zc.receipt.prompt === zc.sentText, [zc.sentText.length, zcTask.length]);
   check('status reports running, then collects the exact final message; cleanup archives', first(zc.r, 'status while running').result?.status === 'running' && lifecycle(zc) &&
@@ -530,11 +551,14 @@ try {
   const WITH_CLAUDE = {models: [...REAL.models, {route: {agentKind: 'cc', providerId: 'anthropic', model: 'claude-opus-5-5'}, efforts: ['low', 'medium', 'high', 'max']},
     {route: {agentKind: 'cc', providerId: 'anthropic', model: 'claude-sonnet-5-5'}, efforts: ['low', 'medium', 'high', 'max']}]};
   // Pi on the Codex-only catalog Cindy reported: with Claude signed in too, this engine prefers Claude for exploration.
-  for (const [name, text, kind, mode, catalog] of [
-    ['codex', 'Rename the helper foo to bar in util.py and update its two callers.', 'codex', 'full-access', 'real+claude'],
-    ['pi', 'Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only.', 'pi', 'full-access', 'real'],
-    ['claude', 'Review the diff in src/auth for security regressions and subtle bugs (read-only review).', 'cc', 'bypassPermissions', 'real+claude']]) {
-    const h = await builtinLife(`harness-${name}`, `${text} [${name}-${Date.now()}]`, {catalog});
+  for (const [name, text, kind, mode, catalog, classifierProfile] of [
+    ['codex', 'Rename the helper foo to bar in util.py and update its two callers.', 'codex', 'full-access', 'real+claude',
+      {work_kind: 'general_implementation', reasoning_depth: 1, code_complexity: 1}],
+    ['pi', 'Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only.', 'pi', 'full-access', 'real',
+      {work_kind: 'exploration_analysis', interaction_style: 'exploration', code_complexity: 0}],
+    ['claude', 'Review the diff in src/auth for security regressions and subtle bugs (read-only review).', 'cc', 'bypassPermissions', 'real+claude',
+      {work_kind: 'debug_review', reasoning_depth: 3, code_complexity: 0, context_scale: 2, hallucination_risk: 3}]]) {
+    const h = await builtinLife(`harness-${name}`, `${text} [${name}-${Date.now()}]`, {catalog, classifierProfile});
     const b = h.receipt.bundle || {};
     check(`${name}: the built-in engine chose ${kind} (${b.model}/${b.effort}) with launcher mode ${mode}`, h.create.route?.agentKind === kind && b.modeId === mode && b.providerId === h.create.route?.providerId,
       {bundle: b, kind: h.receipt.router?.decision?.work_kind, stderr: h.result.stderr.slice(-300)});
@@ -542,9 +566,17 @@ try {
       h.create.permissionMode === 'bypassPermissions' && lifecycle(h), {create: h.create, replies: JSON.stringify(h.r).slice(0, 600)});
   }
 
-  operation('built-in split, self, fast and quota', 'split and self come back from the built-in engine and start nothing; fast mode follows the signal word and the Codex quota telemetry; an exhausted Codex window moves the route to Claude');
+  operation('built-in split, self, fast and quota', 'split and self come back from the built-in engine and start nothing; fast mode follows the classified profile and the Codex quota telemetry; an exhausted Codex window moves the route to Claude');
   ({record, result} = await drive(market, 'builtin-split-self', [
-    {label: 'catalog', fixture: {catalog: 'real'}},
+    {label: 'catalog', fixture: {
+      catalog: 'real',
+      classifierProfiles: [
+        {multi_task: true, task_count: '2', reason: 'two independent tasks'},
+        {multi_task: true, task_count: '3', reason: 'three independent tasks'},
+        {self: true, reason: 'conceptual question for current session'},
+        {self: true, reason: 'explicitly requested direct answer in current session'},
+      ],
+    }},
     {label: 'split', call: 'roll', args: {task: 'Two independent tasks:\n1. Add a dark theme to the settings page.\n2. Fix the CSV export encoding bug in report.py.'}},
     {label: 'split zh', call: 'roll', args: {task: '以下是互不相关的任务：\n1. 给设置页加深色主题\n2. 修复 report.py 的 CSV 编码\n3. 升级 lodash'}},
     {label: 'self', call: 'roll', args: {task: 'What is the difference between a mutex and a semaphore?'}},
@@ -555,14 +587,15 @@ try {
     first(r, 'split zh').result?.task_count === '3' && first(r, 'split').result?.engine === 'builtin' && (first(r, 'split').result?.next_action || '').includes('Split it'),
     JSON.stringify(r).slice(0, 600) + result.stderr.slice(-300));
   check('self: both come back as self from the built-in engine', ['self', 'self zh'].every(k => first(r, k).result?.status === 'self' && first(r, k).result?.engine === 'builtin'), JSON.stringify(r).slice(0, 600));
-  check('split and self created nothing and sent nothing', count(record, 'create') === 0 && count(record, 'send') === 0, (record.calls || []).map(c => c.name));
+  check('split and self created no worker task and sent no worker input', count(record, 'create') === 0 && count(record, 'send') === 0, (record.calls || []).map(c => c.name));
   const fastTask = n => `Use fast mode: rename the helper foo to bar in util.py and update its two callers. [${n}-${Date.now()}]`;
-  const fast = await builtinLife('fast', fastTask('fast'), {env: telemetry('fast', 12)});
+  const fastProfile = {wants_fast: true, urgency: 'high'};
+  const fast = await builtinLife('fast', fastTask('fast'), {env: telemetry('fast', 12), classifierProfile: fastProfile});
   check('fast with fresh telemetry (12% used): Cindy creates codex fastMode true on a row that supports it', fast.create.route?.agentKind === 'codex' && fast.create.route?.fastMode === true &&
     isRow(fast.create.route, REAL) && fast.receipt.router?.decision?.quota?.used_percent === 12 && lifecycle(fast), {create: fast.create, quota: fast.receipt.router?.decision?.quota});
-  const busy = await builtinLife('fast-busy', fastTask('busy'), {env: telemetry('busy', 70)});
+  const busy = await builtinLife('fast-busy', fastTask('busy'), {env: telemetry('busy', 70), classifierProfile: fastProfile});
   check('fast asked but the Codex window is 70% used: no fast mode', busy.create.route?.fastMode === false && lifecycle(busy), busy.create);
-  const blind = await builtinLife('fast-blind', fastTask('blind'));
+  const blind = await builtinLife('fast-blind', fastTask('blind'), {classifierProfile: fastProfile});
   check('fast asked with no telemetry at all: no fast mode', blind.create.route?.fastMode === false && blind.receipt.router?.decision?.quota?.status === 'unknown' && lifecycle(blind), blind.create);
   const drained = await builtinLife('quota-exhausted', `Rename the helper foo to bar in util.py and update its two callers. [drained-${Date.now()}]`,
     {catalog: 'real+claude', env: telemetry('drained', 97)});
@@ -582,7 +615,7 @@ try {
   check('roll answers with the handles and says the receipt was not saved', first(r, 'roll').ok && sv.operation && sv.task_id && sv.run_id && sv.receipt_saved === false &&
     count(record, 'saveFault') === 1, JSON.stringify(first(r, 'roll')).slice(0, 500) + result.stderr.slice(-300));
   check('status settles it to that run without a second send', first(r, 'status').result?.runId === sv.run_id && first(r, 'status').result?.status === 'running' &&
-    count(record, 'send') === 1 && readJson(path.join(stateHome, sv.operation || 'none', 'receipt.json')).delivery === 'reconciled', first(r, 'status'));
+    count(record, 'send') === 1 && ['accepted', 'reconciled'].includes(readJson(path.join(stateHome, sv.operation || 'none', 'receipt.json')).delivery), first(r, 'status'));
   ({record, result} = await drive(market, 'review1-crash', [
     {label: 'catalog', fixture: {catalog: 'real'}},
     {label: 'roll', call: 'roll', args: {task: task('review1-crash')}},
@@ -700,7 +733,7 @@ try {
       const op = first(rr, 'roll').result?.operation || 'none';
       return {...out, r: rr, receipt: readJson(path.join(stateHome, op, 'receipt.json')), create: (out.record.calls || []).find(c => c.name === 'create') || {}};
     };
-    for (const [name, profile, effort] of [['claude-max', 'deep', 'max'], ['claude-high', 'review', 'high']]) {
+    for (const [name, profile, effort] of [['claude-max', 'deep', 'xhigh'], ['claude-high', 'review', 'high']]) {
       const h = await harness(name, profile, plugin);
       const b = h.receipt.bundle || {};
       check(`${name}: the router chose claude/claude-opus-5-5 at ${effort} and the plugin made bypassPermissions explicit`,

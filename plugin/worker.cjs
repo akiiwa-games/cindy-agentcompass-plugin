@@ -11,12 +11,50 @@ const {spawn,spawnSync} = require('node:child_process');
 const readline = require('node:readline');
 const {pathToFileURL} = require('node:url');
 const HOME_STATE = path.join(os.homedir(), '.agent-compass', 'cindy-plugin');
+const VALID_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
 // Configuration, read again on every request so a fix made after a failed roll applies to its retry. First found wins:
 //   router.json next to this file (scripts/build_plugin.py), then ~/.agent-compass/cindy-plugin/router.json:
 //     {"command": [...complete roll command...], "accountMappings": [...], "stateRoot": "..."}  the external CLI
 //   ~/.agent-compass/cindy-plugin/config.json {"engine": "cli"}: the external CLI found on PATH or in ~/.local/bin, the
 //     built-in engine when it is not installed
 //   none of them (a market install): the built-in engine
+function validateClassifierConfig(value) {
+  if (!value || typeof value !== 'object') return {};
+  const out = {};
+  if (value.classifierModel !== undefined) {
+    if (typeof value.classifierModel !== 'string' || !value.classifierModel.trim())
+      throw Error('"classifierModel" must be a non-empty string');
+    out.classifierModel = value.classifierModel.trim();
+  }
+  if (value.classifierModels !== undefined) {
+    if (!Array.isArray(value.classifierModels) || value.classifierModels.some(m => typeof m !== 'string' || !m.trim()))
+      throw Error('"classifierModels" must be an array of non-empty strings');
+    out.classifierModels = value.classifierModels.map(m => m.trim());
+  }
+  if (value.classifierEffort !== undefined) {
+    if (typeof value.classifierEffort !== 'string' || !VALID_EFFORTS.has(value.classifierEffort))
+      throw Error('"classifierEffort" must be one of minimal, low, medium, high, xhigh, max');
+    out.classifierEffort = value.classifierEffort;
+  }
+  if (value.classifierTimeoutMs !== undefined) {
+    if (typeof value.classifierTimeoutMs !== 'number' || !Number.isInteger(value.classifierTimeoutMs) ||
+        value.classifierTimeoutMs < 50 || value.classifierTimeoutMs > 120000)
+      throw Error('"classifierTimeoutMs" must be an integer between 50 and 120000');
+    out.classifierTimeoutMs = value.classifierTimeoutMs;
+  }
+  if (value.classifierCacheTtlMs !== undefined) {
+    if (typeof value.classifierCacheTtlMs !== 'number' || !Number.isInteger(value.classifierCacheTtlMs) ||
+        value.classifierCacheTtlMs < 0 || value.classifierCacheTtlMs > 86400000)
+      throw Error('"classifierCacheTtlMs" must be an integer between 0 and 86400000');
+    out.classifierCacheTtlMs = value.classifierCacheTtlMs;
+  }
+  if (value.stateRoot !== undefined) {
+    if (typeof value.stateRoot !== 'string' || !value.stateRoot.trim())
+      throw Error('"stateRoot" must be a non-empty string');
+    out.stateRoot = value.stateRoot;
+  }
+  return out;
+}
 function settings() {
   for (const file of [path.join(__dirname, 'router.json'), path.join(HOME_STATE, 'router.json')]) {
     if (!fs.existsSync(file)) continue;
@@ -29,7 +67,8 @@ function settings() {
     const value = JSON.parse(fs.readFileSync(file, 'utf8'));
     const engine = value?.engine ?? 'builtin';
     if (!['builtin', 'cli'].includes(engine)) throw Error('"engine" must be "builtin" or "cli"');
-    return {engine, source:null, optIn:file};
+    const clf = validateClassifierConfig(value);
+    return {engine, ...clf, source:null, optIn:file};
   } catch (error) {return {source:file, error:'Unreadable plugin configuration '+file+': '+error.message};}
 }
 const stateRoot = conf => conf.stateRoot || HOME_STATE;
@@ -144,11 +183,37 @@ function noteCreate(root, before, after, now=Date.now()) {
   atomic(cooldownFile(root), all);
 }
 let engine=null;
-async function builtin(task, catalog, dir, root) {
+async function builtin(task, catalog, dir, root, conf = {}, extra = {}) {
   engine ||= import(pathToFileURL(path.join(__dirname, 'engine', 'route.mjs')).href);
-  const result=(await engine).routeTask(task, catalog, {env:process.env, cooling:cooldowns(root)});
+  const mod = await engine;
+  const cacheFile = path.join(root, 'score-cache.json');
+  const cooling = cooldowns(root);
+  if (extra.classifyViaHost && extra.profile === undefined && !extra.classification) {
+    const req = mod.prepareClassifierRequest(task, catalog, {config: conf, cooling, cacheFile});
+    if (req && !req.cached) {
+      return {
+        status: 'classify',
+        engine: 'builtin',
+        classifier: {route: req.route, model: req.model, prompt: req.prompt, timeoutMs: req.timeoutMs},
+      };
+    }
+  }
+  const result = mod.routeTask(task, catalog, {
+    env: process.env,
+    cooling,
+    config: conf,
+    cacheFile,
+    profile: extra.profile ?? null,
+    classification: extra.classification ?? null,
+  });
   writeDiag(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
-  if (result.status==='blocked') throw Error(result.error);
+  if (result.status === 'blocked') {
+    if (result.decision?.reason === 'no_runnable_model') throw Error(result.error);
+    if (result.profile_source === 'unavailable' && (extra.classifyViaHost || extra.classification || extra.returnBlocked)) {
+      return result;
+    }
+    throw Error(result.error);
+  }
   return result;
 }
 async function external(command, task, ctx, dir, timeoutMs=110000) {
@@ -190,15 +255,16 @@ async function external(command, task, ctx, dir, timeoutMs=110000) {
   });
 }
 // The engine for this roll: the configured CLI, an opted-in CLI when it is installed, otherwise the built-in engine.
-async function route(conf, task, ctx, dir, catalog, root) {
+async function route(conf, task, ctx, dir, catalog, root, extra = {}) {
   if (conf.engine==='cli' && conf.command) return await external(conf.command, task, ctx, dir, conf.timeoutMs);
   if (conf.engine==='cli') {
     const found=discover();
     if (found) return await external([found, 'roll'], task, ctx, dir);
-    const result=await builtin(task, catalog, dir, root);
+    const result=await builtin(task, catalog, dir, root, conf, extra);
+    if (result.status === 'classify') return result;
     return {...result, engine_note:'config.json asks for the AgentCompass CLI, which is not installed: the built-in engine routed this task.'};
   }
-  return await builtin(task, catalog, dir, root);
+  return await builtin(task, catalog, dir, root, conf, extra);
 }
 // One preparation per operation at a time; different operations never wait for each other.
 const busy=new Map();
@@ -240,8 +306,16 @@ async function handle(method, params) {
     // Nothing was created yet: route again with the current configuration, account map and catalog, so a retry after
     // a fix is not stuck on the answer that failed.
     const mappings=accountMappings(conf);
-    const result=await route(conf,params.task,ctx,dir,catalog,root);
-    // self/split/a router-side launch are the router's answer to the parent, not a Cindy task.
+    const result=await route(conf,params.task,ctx,dir,catalog,root,{
+      classifyViaHost:Boolean(params.classifyViaHost),
+      profile:params.profile,
+      classification:params.classification,
+      returnBlocked:Boolean(params.returnBlocked),
+    });
+    if (result.status==='classify') {
+      return {operation, parent:ctx.session_id, state:'classify', engine:result.engine, classifier:result.classifier};
+    }
+    // self/split/blocked/a router-side launch are the router's answer to the parent, not a Cindy task.
     const {bundle,prompt}=result.status==='native' ? contract(result,ctx,params.task) : {bundle:null,prompt:''};
     const record={parent:ctx.session_id, state:'prepared', engine:result.engine, router:result, bundle, prompt,
                   directory:ctx.workdir, mappings, attempts:(old?.attempts || 0)+1};

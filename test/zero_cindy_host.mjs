@@ -48,12 +48,36 @@ const rpc = (method, params) => new Promise(resolve => {
 const host = {
   capabilities: 'full', catalog: 'matching', workingDir: null, staleRevision: false, archiveFails: false, createFault: null, finalRepeat: null,
   connection: null, sendFault: null, saveFault: null, inputOverride: null,
+  classifierProfile: null, classifierProfiles: [], classifierTasks: new Map(), classifierRuns: new Map(), classifierCalls: [],
   tasks: new Map(), runs: new Map(), createKeys: new Map(), sendKeys: new Map(), pages: 1,
   calls: [], prepared: null, nodeCalls: [], sent: [],
 };
 const log = (name, detail) => host.calls.push({ name, ...detail });
-const publicRun = run => { if (!run) return run; const { inputText, ...rest } = run; return rest; };
+const logClf = (name, detail) => host.classifierCalls.push({ name, ...detail });
+const publicRun = run => { if (!run) return run; const { inputText, outputText, ...rest } = run; return rest; };
 const ALL_OPS = ['models', 'create', 'send', 'get', 'getRun', 'listRuns', 'readMessages', 'cancel', 'archive'];
+const DEFAULT_CLASSIFIER_PROFILE = {
+  work_kind: 'general_implementation',
+  interaction_style: 'engineering',
+  reasoning_depth: 2,
+  code_complexity: 2,
+  context_scale: 1,
+  divergence: 1,
+  hallucination_risk: 1,
+  error_cost: 2,
+  needs_visual: false,
+  needs_gui: false,
+  local_only: true,
+  realtime_loop: false,
+  expected_hours: 0.5,
+  hours_confidence: 'medium',
+  urgency: 'normal',
+  multi_task: false,
+  task_count: '1',
+  self: false,
+  wants_fast: false,
+  reason: 'fixture classification from fake Cindy host model',
+};
 
 // The catalog row a correctly configured Cindy shows for the routed account: its connection is the mapped one, else
 // the connection named like the router account.
@@ -99,6 +123,13 @@ const cindy = {
       return { models: [{ route: shown, efforts: [route.effort], supportsFastMode: true }] };
     },
     create: async request => {
+      if (String(request.requestKey || '').endsWith(':classify:create')) {
+        logClf('create', { requestKey: request.requestKey, route: request.route, permissionMode: request.permissionMode });
+        const taskId = 'clf-task-' + (host.classifierTasks.size + 1);
+        const task = { taskId, revision: 1, resolvedConfig: { ...request.route }, permissionMode: request.permissionMode, planModeEnabled: false, workingDir: trusted.workdir };
+        host.classifierTasks.set(taskId, task);
+        return structuredClone(task);
+      }
       log('create', { requestKey: request.requestKey, route: request.route, permissionMode: request.permissionMode });
       if (host.createKeys.has(request.requestKey)) { host.duplicateCreate = (host.duplicateCreate || 0) + 1; return structuredClone(host.tasks.get(host.createKeys.get(request.requestKey))); }
       const taskId = 'task-' + (host.tasks.size + 1);
@@ -109,6 +140,20 @@ const cindy = {
       return structuredClone({ ...task, revision: host.staleRevision ? task.revision - 1 : task.revision });
     },
     send: async request => {
+      if (host.classifierTasks.has(request.taskId)) {
+        const clfTask = host.classifierTasks.get(request.taskId);
+        logClf('send', { taskId: request.taskId, expectedRevision: request.expectedRevision, requestKey: request.requestKey, chars: request.text.length });
+        const runId = 'clf-run-' + (host.classifierRuns.size + 1);
+        const nextOverride = host.classifierProfiles.length ? host.classifierProfiles.shift() : (host.classifierProfile || {});
+        const profile = { ...DEFAULT_CLASSIFIER_PROFILE, ...nextOverride };
+        const clfRun = {
+          runId, taskId: clfTask.taskId, inputMessageId: 'clf-in-' + runId, outputMessageId: 'clf-out-' + runId,
+          status: 'completed', acceptedConfig: { ...clfTask.resolvedConfig }, inputText: request.text, outputText: JSON.stringify(profile),
+        };
+        host.classifierRuns.set(runId, clfRun);
+        clfTask.revision += 1;
+        return structuredClone(publicRun(clfRun));
+      }
       const task = host.tasks.get(request.taskId);
       log('send', { taskId: request.taskId, expectedRevision: request.expectedRevision, requestKey: request.requestKey, chars: request.text.length });
       if (!task) throw Error('TASK_NOT_FOUND');
@@ -125,11 +170,35 @@ const cindy = {
       if (host.sendFault === 'lost-answer') { host.sendFault = null; throw Error('CONNECTION_LOST after the input was accepted'); }
       return structuredClone(publicRun(run));
     },
-    getRun: async request => { log('getRun', { runId: request.runId }); return structuredClone(publicRun(host.runs.get(request.runId))); },
-    listRuns: async request => { log('listRuns', { taskId: request.taskId }); return { items: [...host.runs.values()].filter(r => r.taskId === request.taskId).map(r => structuredClone(publicRun(r))), nextCursor: null }; },
+    getRun: async request => {
+      if (host.classifierRuns.has(request.runId)) {
+        logClf('getRun', { runId: request.runId });
+        return structuredClone(publicRun(host.classifierRuns.get(request.runId)));
+      }
+      log('getRun', { runId: request.runId });
+      return structuredClone(publicRun(host.runs.get(request.runId)));
+    },
+    listRuns: async request => {
+      if (host.classifierTasks.has(request.taskId)) {
+        logClf('listRuns', { taskId: request.taskId });
+        return { items: [...host.classifierRuns.values()].filter(r => r.taskId === request.taskId).map(r => structuredClone(publicRun(r))), nextCursor: null };
+      }
+      log('listRuns', { taskId: request.taskId });
+      return { items: [...host.runs.values()].filter(r => r.taskId === request.taskId).map(r => structuredClone(publicRun(r))), nextCursor: null };
+    },
     // As Cindy 0.1.121 stores them: page 0 opens with the run's input message (`id` = the run's inputMessageId, role
     // user, the sent text), the last page holds the output message.
     readMessages: async request => {
+      if (host.classifierTasks.has(request.taskId)) {
+        logClf('readMessages', { taskId: request.taskId, after: request.after || null });
+        const clfRun = [...host.classifierRuns.values()].find(r => r.taskId === request.taskId);
+        return {
+          items: clfRun
+            ? [{ id: clfRun.inputMessageId, role: 'user', content: clfRun.inputText }, { id: clfRun.outputMessageId, role: 'assistant', content: clfRun.outputText }]
+            : [],
+          nextCursor: null,
+        };
+      }
       log('readMessages', { after: request.after || null });
       const index = request.after ? Number(request.after) : 0;
       const last = index >= host.pages - 1;
@@ -139,10 +208,27 @@ const cindy = {
       if (index === 0 && run) items.unshift({ id: run.inputMessageId, role: 'user', content: run.inputText });
       return { items, nextCursor: last ? null : String(index + 1) };
     },
-    cancel: async request => { log('cancel', { runId: request.runId }); const run = host.runs.get(request.runId); run.status = 'stopping'; return structuredClone(publicRun(run)); },
+    cancel: async request => {
+      if (host.classifierRuns.has(request.runId)) {
+        logClf('cancel', { runId: request.runId });
+        const clfRun = host.classifierRuns.get(request.runId);
+        clfRun.status = 'cancelled';
+        return structuredClone(publicRun(clfRun));
+      }
+      log('cancel', { runId: request.runId });
+      const run = host.runs.get(request.runId);
+      run.status = 'stopping';
+      return structuredClone(publicRun(run));
+    },
     archive: async request => {
+      if (host.classifierTasks.has(request.taskId)) {
+        logClf('archive', { taskId: request.taskId });
+        const clfTask = host.classifierTasks.get(request.taskId);
+        clfTask.archived = true;
+        return structuredClone(clfTask);
+      }
       log('archive', { taskId: request.taskId });
-      if (host.archiveFails) throw Error('ARCHIVE_FAILED');
+      if (host.archiveFails) throw coded('TASK_BUSY', 'ARCHIVE_FAILED');
       host.tasks.get(request.taskId).archived = true; return structuredClone(host.tasks.get(request.taskId));
     },
   },
@@ -177,7 +263,7 @@ try {
     if (step.fixture) {
       const f = step.fixture;
       for (const key of ['capabilities', 'catalog', 'workingDir', 'staleRevision', 'archiveFails', 'pages', 'finalText', 'finalRepeat', 'createFault',
-        'connection', 'sendFault', 'saveFault', 'inputOverride']) if (key in f) host[key] = f[key];
+        'connection', 'sendFault', 'saveFault', 'inputOverride', 'classifierProfile', 'classifierProfiles']) if (key in f) host[key] = structuredClone(f[key]);
       if (f.accountMap) { fs.mkdirSync(stateHome, { recursive: true }); fs.writeFileSync(path.join(stateHome, 'account-map.json'), JSON.stringify(f.accountMap)); }
       if (f.receiptPatch) {
         const op = f.receiptPatch.operation.startsWith('@operation:') ? operations[f.receiptPatch.operation.slice('@operation:'.length)] : f.receiptPatch.operation;
@@ -220,7 +306,8 @@ try {
   }
 }
 fs.writeFileSync(outFile, JSON.stringify({
-  results, calls: host.calls, nodeCalls: host.nodeCalls, sent: host.sent, prepared: host.prepared,
+  results, calls: host.calls, classifierCalls: host.classifierCalls, classifierTasks: [...host.classifierTasks.values()],
+  nodeCalls: host.nodeCalls, sent: host.sent, prepared: host.prepared,
   duplicateCreate: host.duplicateCreate || 0, duplicateSend: host.duplicateSend || 0,
   tasks: [...host.tasks.values()], runs: [...host.runs.values()], workerStderr: Buffer.concat(stderr).toString('utf8').slice(-2000),
 }, null, 1));

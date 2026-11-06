@@ -68,22 +68,107 @@
     }
     return reply;
   }
-  async function writePrepare(msg,task,rawCatalog) {
+  async function writePrepare(msg,task,rawCatalog,extra={}) {
     const catalog={models:(rawCatalog?.models || []).map(row=>({
       route:row.route,
       ...(row.efforts ? {efforts:row.efforts} : {}),
       ...(row.supportsFastMode!==undefined ? {supportsFastMode:row.supportsFastMode} : {}),
     }))};
     const raw=JSON.stringify(catalog);
-    if (utf8Bytes(raw)<=MAX_RPC_BYTES) return await node(msg,'prepare',{task,catalog});
+    if (utf8Bytes(raw)<=MAX_RPC_BYTES) return await node(msg,'prepare',{task,catalog,...extra});
     const parts=splitUtf8(raw,MAX_RPC_BYTES);
     const stream=String(msg.callId || '')+':'+String(++streamSeq)+':'+String(parts.length);
     let reply=null;
     for (let i=0;i<parts.length;i++) {
       const done=i===parts.length-1;
-      reply=await node(msg,'prepare',{...(done ? {task} : {}),stream,index:i,chunk:parts[i],done});
+      reply=await node(msg,'prepare',{...(done ? {task,...extra} : {}),stream,index:i,chunk:parts[i],done});
     }
     return reply;
+  }
+  // One-shot structured classification via Cindy's tasks API on a fast/cheap catalog model; always cleaned up.
+  async function runClassifier(operation,classifier,ctx,canArchive) {
+    const model=classifier.model || classifier.route?.model || null;
+    const timeoutMs=Number.isFinite(classifier.timeoutMs) && classifier.timeoutMs>0 ? classifier.timeoutMs : 15000;
+    const pollMs=Number.isFinite(classifier.pollMs) && classifier.pollMs>0 ? classifier.pollMs : Math.min(100,Math.max(10,Math.floor(timeoutMs/20)));
+    const maxPolls=typeof setTimeout==='function' ? Math.max(20,Math.ceil(timeoutMs/pollMs)+5) : 10;
+    let task=null, run=null;
+    const deadline=Date.now()+timeoutMs;
+    const withTimeout=promise=>{
+      const left=Math.max(1,deadline-Date.now());
+      if (typeof setTimeout!=='function') return promise;
+      return new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(Object.assign(Error('Classifier timed out after '+timeoutMs+'ms'),{code:'CLASSIFIER_TIMEOUT'})),left);
+        promise.then(
+          v=>{if (typeof clearTimeout==='function') clearTimeout(timer);resolve(v);},
+          e=>{if (typeof clearTimeout==='function') clearTimeout(timer);reject(e);}
+        );
+      });
+    };
+    try {
+      task=await withTimeout(cindy.tasks.create({
+        requestKey:operation+':classify:create',
+        title:'AgentCompass classifier '+operation.slice(0,8),
+        route:classifier.route,
+        permissionMode:'bypassPermissions'
+      }));
+      if (!task?.taskId || !sameRoute(task.resolvedConfig,classifier.route) || task.permissionMode!=='bypassPermissions' ||
+          task.planModeEnabled || task.workingDir!==ctx.workdir) {
+        return {ok:false,model,route:classifier.route,reason:'classifier_draft_mismatch',
+          error:'Classifier draft route, permission or workingDir did not match the requested configuration.'};
+      }
+      run=await withTimeout(cindy.tasks.send({
+        taskId:task.taskId,
+        expectedRevision:task.revision,
+        requestKey:operation+':classify:send',
+        text:classifier.prompt
+      }));
+      let polls=0;
+      while (run && !terminal.has(run.status)) {
+        if (Date.now()>=deadline || ++polls>maxPolls) {
+          throw Object.assign(Error('Classifier timed out after '+timeoutMs+'ms'),{code:'CLASSIFIER_TIMEOUT'});
+        }
+        await pause(Math.min(pollMs,Math.max(1,deadline-Date.now())));
+        run=await withTimeout(cindy.tasks.getRun({runId:run.runId}));
+      }
+      if (!run || run.status!=='completed') {
+        return {ok:false,model,route:classifier.route,reason:'classifier_run_'+(run?.status || 'failed'),
+          error:run?.error || ('Classifier run ended with status '+(run?.status || 'unknown'))};
+      }
+      let after=null, rawOutput='';
+      for (let i=0;i<5;i++) {
+        const page=await withTimeout(cindy.tasks.readMessages({taskId:task.taskId,limit:100,...(after ? {after} : {})}));
+        const items=page?.items || [];
+        const exact=run.outputMessageId ? items.find(item=>item.id===run.outputMessageId) : null;
+        if (exact) {rawOutput=text(exact.content);break;}
+        const assistants=items.filter(item=>item.role==='assistant');
+        if (assistants.length) rawOutput=text(assistants[assistants.length-1].content);
+        if (!page?.nextCursor) break;
+        after=page.nextCursor;
+      }
+      if (!rawOutput.trim()) {
+        return {ok:false,model,route:classifier.route,reason:'empty_classifier_output',
+          error:'Classifier task produced no assistant output.'};
+      }
+      return {ok:true,model,route:classifier.route,rawOutput};
+    } catch(error) {
+      const isTimeout=error?.code==='CLASSIFIER_TIMEOUT' || /timed out/i.test(error?.message || '');
+      return {ok:false,model,route:classifier.route,reason:isTimeout ? 'timeout' : 'classifier_error',
+        error:error?.message || String(error)};
+    } finally {
+      if (run?.runId && !terminal.has(run.status)) {
+        try {
+          const cancelled=await cindy.tasks.cancel({runId:run.runId,requestKey:operation+':classify:cancel'});
+          run=cancelled || run;
+          for (let i=0;i<5 && run && !terminal.has(run.status);i++) {
+            await pause(10);
+            run=await cindy.tasks.getRun({runId:run.runId});
+          }
+        } catch {}
+      }
+      if (task?.taskId && canArchive) {
+        try {await cindy.tasks.archive({taskId:task.taskId});} catch {}
+      }
+    }
   }
   const memory = new Map();
   async function persist(msg,operation,record) {
@@ -290,9 +375,15 @@
   async function roll(msg,ctx,canArchive) {
     for (const [op,mem] of memory) if (mem.createRejected) await tryPersist(msg,op,mem);
     // The catalog the built-in engine routes over: exactly what this Cindy can run now.
-    const prepared=await writePrepare(msg,msg.args.task,await cindy.tasks.models());
+    const rawCatalog=await cindy.tasks.models();
+    const initExtra={classifyViaHost:true,...(msg.args.profile!==undefined ? {profile:msg.args.profile} : {})};
+    let prepared=await writePrepare(msg,msg.args.task,rawCatalog,initExtra);
+    if (prepared.state==='classify' && prepared.classifier) {
+      const classification=await runClassifier(prepared.operation,prepared.classifier,ctx,canArchive);
+      prepared=await writePrepare(msg,msg.args.task,rawCatalog,{...initExtra,classification});
+    }
     const operation=prepared.operation;
-    // self, split or a router-side launch: the router's own answer, not a Cindy task.
+    // self, split, blocked or a router-side launch: the router's own answer, not a Cindy task.
     if (prepared.router?.status!=='native' && prepared.state==='prepared') return prepared.router;
     return await exclusive('op\0'+operation,async()=>{
       let record=await loadRecord(msg,operation);
