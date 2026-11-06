@@ -11,7 +11,7 @@ const {spawn,spawnSync} = require('node:child_process');
 const readline = require('node:readline');
 const {pathToFileURL} = require('node:url');
 const HOME_STATE = path.join(os.homedir(), '.agent-compass', 'cindy-plugin');
-const VALID_EFFORTS = new Set(['minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const VALID_EFFORTS = new Set(['none', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 // Configuration, read again on every request so a fix made after a failed roll applies to its retry. First found wins:
 //   router.json next to this file (scripts/build_plugin.py), then ~/.agent-compass/cindy-plugin/router.json:
 //     {"command": [...complete roll command...], "accountMappings": [...], "stateRoot": "..."}  the external CLI
@@ -27,19 +27,20 @@ function validateClassifierConfig(value) {
     out.classifierModel = value.classifierModel.trim();
   }
   if (value.classifierModels !== undefined) {
-    if (!Array.isArray(value.classifierModels) || value.classifierModels.some(m => typeof m !== 'string' || !m.trim()))
-      throw Error('"classifierModels" must be an array of non-empty strings');
+    if (!Array.isArray(value.classifierModels) || !value.classifierModels.length ||
+        value.classifierModels.some(m => typeof m !== 'string' || !m.trim()))
+      throw Error('"classifierModels" must be a non-empty array of non-empty strings');
     out.classifierModels = value.classifierModels.map(m => m.trim());
   }
   if (value.classifierEffort !== undefined) {
     if (typeof value.classifierEffort !== 'string' || !VALID_EFFORTS.has(value.classifierEffort))
-      throw Error('"classifierEffort" must be one of minimal, low, medium, high, xhigh, max');
+      throw Error('"classifierEffort" must be one of none, off, minimal, low, medium, high, xhigh, max, ultra');
     out.classifierEffort = value.classifierEffort;
   }
   if (value.classifierTimeoutMs !== undefined) {
     if (typeof value.classifierTimeoutMs !== 'number' || !Number.isInteger(value.classifierTimeoutMs) ||
-        value.classifierTimeoutMs < 50 || value.classifierTimeoutMs > 120000)
-      throw Error('"classifierTimeoutMs" must be an integer between 50 and 120000');
+        value.classifierTimeoutMs < 100 || value.classifierTimeoutMs > 120000)
+      throw Error('"classifierTimeoutMs" must be an integer between 100 and 120000');
     out.classifierTimeoutMs = value.classifierTimeoutMs;
   }
   if (value.classifierCacheTtlMs !== undefined) {
@@ -183,22 +184,86 @@ function noteCreate(root, before, after, now=Date.now()) {
   atomic(cooldownFile(root), all);
 }
 let engine=null;
-async function builtin(task, catalog, dir, root, conf = {}, extra = {}) {
+const sameRoute = (a, b) => ['agentKind', 'providerId', 'model', 'effort', 'fastMode'].every(k => a?.[k] === b?.[k]);
+async function builtin(input, catalog, dir, root, conf = {}, extra = {}) {
   engine ||= import(pathToFileURL(path.join(__dirname, 'engine', 'route.mjs')).href);
   const mod = await engine;
   const cacheFile = path.join(root, 'score-cache.json');
   const cooling = cooldowns(root);
-  if (extra.classifyViaHost && extra.profile === undefined && !extra.classification) {
-    const req = mod.prepareClassifierRequest(task, catalog, {config: conf, cooling, cacheFile});
+  const pendingFile = path.join(dir, 'pending-classify.json');
+  const readPending = () => {
+    try { return JSON.parse(fs.readFileSync(pendingFile, 'utf8')); }
+    catch { return null; }
+  };
+  if (extra.classification !== undefined && extra.classification !== null) {
+    const pending = readPending();
+    try { fs.rmSync(pendingFile, {force: true}); } catch {}
+    const clf = extra.classification;
+    const taskDigest = digest(mod.taskCacheDescriptor(input));
+    const validHandshake = Boolean(
+      pending &&
+      pending.active === true &&
+      pending.parent === extra.parent &&
+      pending.taskDigest === taskDigest &&
+      (!pending.attemptId || !clf.attemptId || clf.attemptId === pending.attemptId) &&
+      (!clf.model || clf.model === pending.model) &&
+      (!clf.route || sameRoute(clf.route, pending.route))
+    );
+    if (!validHandshake) {
+      const blocked = {
+        status: 'blocked',
+        engine: 'builtin',
+        profile: null,
+        profile_source: 'unavailable',
+        classifier_model: clf?.model || pending?.model || null,
+        decision: {
+          profile: null,
+          profile_source: 'unavailable',
+          classifier_model: clf?.model || pending?.model || null,
+          realtime_loop: null,
+          reason: 'unsolicited_or_mismatched_classification',
+        },
+        error: 'Rejected unsolicited or mismatched classification payload: no matching pending classification for this operation and task.',
+        next_action: 'Call roll without a pre-supplied classification so the plugin can initiate a verified classification handshake.',
+      };
+      writeDiag(path.join(dir, 'router.stdout.json'), JSON.stringify(blocked, null, 2));
+      return blocked;
+    }
+    atomic(pendingFile, {...pending, active: false});
+  } else if (extra.classifyViaHost && extra.profile === undefined) {
+    const req = mod.prepareClassifierRequest(input, catalog, {config: conf, cooling, cacheFile});
     if (req && !req.cached) {
+      const prev = readPending();
+      const attempt = (Number.isInteger(prev?.attempt) ? prev.attempt : 0) + 1;
+      const taskDigest = digest(mod.taskCacheDescriptor(input));
+      const nonce = crypto.randomBytes(4).toString('hex');
+      const attemptId = `${taskDigest.slice(0, 12)}-${attempt}-${nonce}`;
+      atomic(pendingFile, {
+        active: true,
+        parent: extra.parent,
+        taskDigest,
+        attempt,
+        attemptId,
+        model: req.model,
+        route: req.route,
+        createdAt: Date.now(),
+      });
       return {
         status: 'classify',
         engine: 'builtin',
-        classifier: {route: req.route, model: req.model, prompt: req.prompt, timeoutMs: req.timeoutMs},
+        classifier: {
+          attemptId,
+          taskDigest: taskDigest.slice(0, 16),
+          attempt,
+          route: req.route,
+          model: req.model,
+          prompt: req.prompt,
+          timeoutMs: req.timeoutMs,
+        },
       };
     }
   }
-  const result = mod.routeTask(task, catalog, {
+  const result = mod.routeTask(input, catalog, {
     env: process.env,
     cooling,
     config: conf,
@@ -209,7 +274,8 @@ async function builtin(task, catalog, dir, root, conf = {}, extra = {}) {
   writeDiag(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
   if (result.status === 'blocked') {
     if (result.decision?.reason === 'no_runnable_model') throw Error(result.error);
-    if (result.profile_source === 'unavailable' && (extra.classifyViaHost || extra.classification || extra.returnBlocked)) {
+    if (result.decision?.reason === 'no_model_meets_floor' ||
+        (result.profile_source === 'unavailable' && (extra.classifyViaHost || extra.classification || extra.returnBlocked || extra.profile !== undefined))) {
       return result;
     }
     throw Error(result.error);
@@ -307,6 +373,8 @@ async function handle(method, params) {
     // a fix is not stuck on the answer that failed.
     const mappings=accountMappings(conf);
     const result=await route(conf,params.task,ctx,dir,catalog,root,{
+      operation,
+      parent:ctx.session_id,
       classifyViaHost:Boolean(params.classifyViaHost),
       profile:params.profile,
       classification:params.classification,
@@ -315,7 +383,24 @@ async function handle(method, params) {
     if (result.status==='classify') {
       return {operation, parent:ctx.session_id, state:'classify', engine:result.engine, classifier:result.classifier};
     }
-    // self/split/blocked/a router-side launch are the router's answer to the parent, not a Cindy task.
+    if (result.status==='blocked') {
+      if (old?.state === 'prepared') {
+        try { fs.rmSync(file, {force: true}); } catch {}
+      }
+      return {
+        operation,
+        parent:ctx.session_id,
+        state:'blocked',
+        engine:result.engine,
+        router:result,
+        bundle:null,
+        prompt:'',
+        directory:ctx.workdir,
+        mappings,
+        attempts:(old?.attempts || 0)+1,
+      };
+    }
+    // self/split/a router-side launch are the router's answer to the parent, not a Cindy task.
     const {bundle,prompt}=result.status==='native' ? contract(result,ctx,params.task) : {bundle:null,prompt:''};
     const record={parent:ctx.session_id, state:'prepared', engine:result.engine, router:result, bundle, prompt,
                   directory:ctx.workdir, mappings, attempts:(old?.attempts || 0)+1};

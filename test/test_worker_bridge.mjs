@@ -104,8 +104,14 @@ const makeProfile = (overrides = {}) => ({
   reason: 'classified by built-in classifier',
   ...overrides,
 });
-const classified = (overrides = {}, model = 'chatgpt/gpt-5.3-codex-spark') => ({
-  classification: {ok: true, model, rawOutput: JSON.stringify(makeProfile(overrides))},
+const withProfile = (overrides = {}) => ({profile: makeProfile(overrides)});
+const classified = (overrides = {}, model = 'chatgpt/gpt-5.3-codex-spark', attemptId = undefined) => ({
+  classification: {
+    ok: true,
+    model,
+    ...(attemptId ? {attemptId} : {}),
+    rawOutput: JSON.stringify(makeProfile(overrides)),
+  },
 });
 
 const native = bundle => ({status: 'native', parent_id: 'true-session', parent_host: 'native',
@@ -121,8 +127,12 @@ test('zero configuration: the built-in engine routes over the catalog Cindy pass
   assert.equal(askClf.result?.state, 'classify');
   assert.equal(askClf.result?.classifier?.model, 'chatgpt/gpt-5.3-codex-spark');
   assert.equal(askClf.result?.classifier?.route?.effort, 'minimal');
-  // Phase 2: classification result is validated, cached to score-cache.json, and routed.
-  const [reply] = rpc(p, [prepare(p, task, 1, CATALOG, {...classified({realtime_loop: true}), classifyViaHost: true})]);
+  assert.equal(typeof askClf.result?.classifier?.attemptId, 'string');
+  // Phase 2: classification result is validated against the pending attempt, cached to score-cache.json, and routed.
+  const [reply] = rpc(p, [prepare(p, task, 1, CATALOG, {
+    ...classified({realtime_loop: true}, askClf.result.classifier.model, askClf.result.classifier.attemptId),
+    classifyViaHost: true,
+  })]);
   assert.equal(reply.result?.router?.status, 'native', JSON.stringify(reply));
   assert.equal(reply.result.engine, 'builtin');
   assert.equal(reply.result.router.decision.profile_source, 'classifier');
@@ -160,7 +170,8 @@ test('zero configuration: the built-in engine routes over the catalog Cindy pass
 test('a route Cindy refused to create on cools down for the retry; a request refusal does not; a created task clears it', () => {
   const p = plugin(codex, 0, 'none');
   const task = 'Rename the helper foo to bar in util.py and update its two callers.';
-  const [first] = rpc(p, [prepare(p, task, 1, CATALOG, classified())]);
+  const [ask] = rpc(p, [prepare(p, task, 1, CATALOG, {classifyViaHost: true})]);
+  const [first] = rpc(p, [prepare(p, task, 1, CATALOG, classified({}, ask.result.classifier.model, ask.result.classifier.attemptId))]);
   const op = first.result.operation, b = first.result.bundle;
   const {operation, ...prepared} = first.result;
   const save = (id, record) => ({id, method: 'save', params: {operation: op, record, context: ctx(p.root)}});
@@ -190,10 +201,10 @@ test('built-in split, self, Pi for exploration and fast mode with fresh Codex qu
   fs.writeFileSync(path.join(sessions, 'rollout-x.jsonl'), JSON.stringify({type: 'event_msg', payload: {type: 'token_count',
     rate_limits: {primary: {used_percent: 12, window_minutes: 300, resets_at: Math.floor(Date.now() / 1000) + 3600}, secondary: null, plan_type: 'pro'}}}) + '\n');
   const replies = rpc(p, [
-    prepare(p, 'Two independent tasks:\n1. Add a dark theme to the settings page.\n2. Fix the CSV export encoding bug in report.py.', 1, CATALOG, classified({multi_task: true, task_count: '2'})),
-    prepare(p, 'What is the difference between a mutex and a semaphore?', 2, CATALOG, classified({self: true})),
-    prepare(p, 'Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only.', 3, CATALOG, classified({work_kind: 'exploration_analysis', interaction_style: 'exploration', code_complexity: 0})),
-    prepare(p, 'Use fast mode: rename the helper foo to bar in util.py and update its two callers.', 4, CATALOG, classified({work_kind: 'general_implementation', urgency: 'high', wants_fast: true})),
+    prepare(p, 'Two independent tasks:\n1. Add a dark theme to the settings page.\n2. Fix the CSV export encoding bug in report.py.', 1, CATALOG, withProfile({multi_task: true, task_count: '2'})),
+    prepare(p, 'What is the difference between a mutex and a semaphore?', 2, CATALOG, withProfile({self: true})),
+    prepare(p, 'Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only.', 3, CATALOG, withProfile({work_kind: 'exploration_analysis', interaction_style: 'exploration', code_complexity: 0})),
+    prepare(p, 'Use fast mode: rename the helper foo to bar in util.py and update its two callers.', 4, CATALOG, withProfile({work_kind: 'general_implementation', urgency: 'high', wants_fast: true})),
   ]);
   assert.deepEqual([replies[0].result.router.status, replies[0].result.router.task_count, replies[0].result.bundle], ['split', '2', null]);
   assert.deepEqual([replies[1].result.router.status, replies[1].result.bundle], ['self', null]);
@@ -206,7 +217,7 @@ test('the built-in engine is the default even with `agentcompass` on PATH; an em
   const p = plugin(codex, 0, 'none');
   const bin = path.join(p.root, 'bin');
   launcher(p, bin);
-  const replies = rpc(p, [prepare(p, 'Rename foo to bar in util.py.', 1, CATALOG, classified()), prepare(p, 'Rename baz to qux in util.py.', 2, {models: []}, classified()),
+  const replies = rpc(p, [prepare(p, 'Rename foo to bar in util.py.', 1, CATALOG, withProfile()), prepare(p, 'Rename baz to qux in util.py.', 2, {models: []}, withProfile()),
     {id: 3, method: 'load', params: {operation: 'f'.repeat(40), context: ctx(p.root)}}], {PATH: only([bin])});
   assert.equal(replies[0].result.engine, 'builtin');
   assert.equal(p.routerCalls(), 0, 'the CLI is used only when configured');
@@ -297,7 +308,7 @@ test('config.json {"engine":"cli"}: `agentcompass` on PATH, then ~/.local/bin, r
 
 test('config.json {"engine":"cli"} with AgentCompass not installed falls back to the built-in engine, no error', () => {
   const p = plugin(codex, 0, 'cli');
-  const [reply] = rpc(p, [prepare(p, 'Rename foo to bar in util.py.', 1, CATALOG, classified())]);
+  const [reply] = rpc(p, [prepare(p, 'Rename foo to bar in util.py.', 1, CATALOG, withProfile())]);
   assert.equal(reply.result?.engine, 'builtin', JSON.stringify(reply));
   assert.match(reply.result.router.engine_note, /not installed: the built-in engine routed/);
   fs.writeFileSync(path.join(p.stateHome, 'config.json'), '{"engine":"gpt"}');
@@ -374,4 +385,106 @@ test('review 5: a slow route for one session does not hold up another operation 
   assert.equal(replies[1].result.state, 'prepared');
   assert.equal(replies[0].result.router.status, 'native');
   assert.deepEqual(replies.order, [2, 1], 'the load was answered while the route was still running');
+});
+
+test('B1 & M3 regression: two-phase classification handshake verifies pending attempt/task/model and blocked classification never writes prepared receipt.json', () => {
+  const p = plugin(codex, 0, 'none');
+  const task = 'Implement retry backoff in client.ts';
+
+  // 1. Unsolicited classification (without a preceding classifyViaHost phase) is rejected as blocked and writes no receipt.json.
+  const [unsolicited] = rpc(p, [prepare(p, task, 1, CATALOG, classified())]);
+  assert.equal(unsolicited.result?.state, 'blocked');
+  assert.equal(unsolicited.result?.router?.status, 'blocked');
+  assert.equal(unsolicited.result?.router?.decision?.reason, 'unsolicited_or_mismatched_classification');
+  assert.deepEqual(receipts(p), [], 'M3: blocked unsolicited classification writes no receipt.json');
+
+  // 2. Phase 1 mints a unique attemptId; if classification fails (e.g. timeout), state is blocked, no receipt.json is written,
+  // and the next Phase 1 call increments the attempt counter and mints a fresh attemptId (B1).
+  const [ask1] = rpc(p, [prepare(p, task, 2, CATALOG, {classifyViaHost: true})]);
+  assert.equal(ask1.result?.state, 'classify');
+  const attemptId1 = ask1.result.classifier.attemptId;
+  assert.equal(typeof attemptId1, 'string');
+
+  const [failedClf] = rpc(p, [prepare(p, task, 3, CATALOG, {
+    classifyViaHost: true,
+    classification: {
+      ok: false,
+      attemptId: attemptId1,
+      model: ask1.result.classifier.model,
+      route: ask1.result.classifier.route,
+      reason: 'timeout',
+      error: 'Classifier timed out after 15000ms',
+    },
+  })]);
+  assert.equal(failedClf.result?.state, 'blocked');
+  assert.equal(failedClf.result?.router?.status, 'blocked');
+  assert.equal(failedClf.result?.router?.decision?.reason, 'timeout');
+  assert.deepEqual(receipts(p), [], 'M3: failed classification leaves no prepared receipt.json');
+
+  // Replaying a classification for the already-consumed attemptId1 is rejected.
+  const [replayed] = rpc(p, [prepare(p, task, 4, CATALOG, classified({}, ask1.result.classifier.model, attemptId1))]);
+  assert.equal(replayed.result?.state, 'blocked');
+  assert.equal(replayed.result?.router?.decision?.reason, 'unsolicited_or_mismatched_classification');
+  assert.deepEqual(receipts(p), []);
+
+  // 3. Retrying Phase 1 on the same task mints a new attemptId (B1); mismatched model/attemptId is rejected; matching attemptId succeeds.
+  const [ask2] = rpc(p, [prepare(p, task, 5, CATALOG, {classifyViaHost: true})]);
+  assert.equal(ask2.result?.state, 'classify');
+  const attemptId2 = ask2.result.classifier.attemptId;
+  assert.notEqual(attemptId2, attemptId1, 'B1: retry mints a fresh attemptId');
+
+  const [wrongAttempt] = rpc(p, [prepare(p, task, 6, CATALOG, classified({}, ask2.result.classifier.model, attemptId1))]);
+  assert.equal(wrongAttempt.result?.state, 'blocked');
+  assert.equal(wrongAttempt.result?.router?.decision?.reason, 'unsolicited_or_mismatched_classification');
+
+  const [ask3] = rpc(p, [prepare(p, task, 7, CATALOG, {classifyViaHost: true})]);
+  const attemptId3 = ask3.result.classifier.attemptId;
+  const [okReply] = rpc(p, [prepare(p, task, 8, CATALOG, classified({}, ask3.result.classifier.model, attemptId3))]);
+  assert.equal(okReply.result?.state, 'prepared');
+  assert.equal(okReply.result?.router?.status, 'native');
+  assert.equal(receipts(p).length, 1);
+});
+
+test('m2 & m4 regression: config.json validation matches README (efforts none/off/ultra, timeout 100..120000, non-empty classifierModels) and no_model_meets_floor returns structured blocked', () => {
+  const p = plugin(codex, 0, 'none');
+
+  // m2: efforts none, off, ultra are accepted in config.json.
+  for (const effort of ['none', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']) {
+    fs.writeFileSync(path.join(p.stateHome, 'config.json'), JSON.stringify({classifierEffort: effort, classifierTimeoutMs: 5000}));
+    const [ok] = rpc(p, [prepare(p, `Task for effort ${effort}`, 1, CATALOG, withProfile())]);
+    assert.equal(ok.result?.router?.status, 'native', `classifierEffort=${effort} should be accepted`);
+  }
+
+  // m2: classifierTimeoutMs outside 100..120000 is rejected.
+  for (const badTimeout of [0, 50, 99, 120001, -10, '1000']) {
+    fs.writeFileSync(path.join(p.stateHome, 'config.json'), JSON.stringify({classifierTimeoutMs: badTimeout}));
+    const [bad] = rpc(p, [prepare(p, 'Task with bad timeout', 1, CATALOG, withProfile())]);
+    assert.match(bad.error?.message || '', /classifierTimeoutMs.*100.*120000/);
+  }
+
+  // m2: empty classifierModels array is rejected.
+  fs.writeFileSync(path.join(p.stateHome, 'config.json'), JSON.stringify({classifierModels: []}));
+  const [emptyModels] = rpc(p, [prepare(p, 'Task with empty classifierModels', 1, CATALOG, withProfile())]);
+  assert.match(emptyModels.error?.message || '', /classifierModels.*non-empty array/);
+
+  // Reset config.json and verify m4: when no catalog model meets the capability floor, worker.cjs returns structured blocked (not an RPC error).
+  fs.rmSync(path.join(p.stateHome, 'config.json'), {force: true});
+  const minimalOnlyCatalog = {
+    models: [
+      {route: {agentKind: 'pi', providerId: 'openai', model: 'chatgpt/gpt-5.3-codex-spark', effort: 'minimal', fastMode: false}, efforts: ['minimal'], supportsFastMode: false},
+    ],
+  };
+  const [floorBlocked] = rpc(p, [prepare(p, 'Prove formal distributed consensus safety.', 1, minimalOnlyCatalog, withProfile({
+    work_kind: 'direction_reasoning',
+    interaction_style: 'advisory',
+    reasoning_depth: 4,
+    code_complexity: 3,
+    context_scale: 3,
+    hallucination_risk: 3,
+    error_cost: 3,
+  }))]);
+  assert.equal(floorBlocked.error, undefined, 'm4: no_model_meets_floor does not throw an RPC error');
+  assert.equal(floorBlocked.result?.state, 'blocked');
+  assert.equal(floorBlocked.result?.router?.status, 'blocked');
+  assert.equal(floorBlocked.result?.router?.decision?.reason, 'no_model_meets_floor');
 });

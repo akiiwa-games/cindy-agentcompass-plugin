@@ -56,6 +56,13 @@ test('identity, versions and tools meet the official repository rules', () => {
     text(tool.description, `tools.${tool.name}.description`, 1024);
     assert.ok(JSON.stringify(tool.parameters).length <= 16384, `tools.${tool.name}.parameters exceeds 16KB`);
   }
+  // M2 & M5 regressions: agent.hiddenTasks is enabled and roll declares optional profile parameter.
+  assert.equal(manifest.agent?.hiddenTasks, true, 'M2: manifest.agent.hiddenTasks must be true so classifier tasks can be hidden');
+  const rollTool = manifest.tools.find(t => t.name === 'roll');
+  assert.deepEqual(rollTool.parameters.required, ['task'], 'M5: only task is required on roll; profile is optional');
+  const profileProp = rollTool.parameters.properties?.profile;
+  assert.equal(profileProp?.type, 'object', 'M5: roll.parameters.properties.profile must be declared as an object');
+  assert.equal(typeof profileProp?.description, 'string');
 });
 
 test('the icon is a real, non-empty PNG of 128 or 256 px under 512 KB', () => {

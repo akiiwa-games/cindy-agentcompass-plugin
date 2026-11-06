@@ -25,7 +25,7 @@ const PI_FIRST = new Set(['exploration_analysis', 'research_packet', 'web_resear
 const LOCAL_ALIASES = [[/spark/i, 'gpt-6-luna']];
 
 // ---- classifier schema & prompt (aligned with AgentCompass SCORER_PROMPT / TASK_PROFILE_SCHEMA) --------------------
-const WORK_KINDS = Object.keys(KIND_TRAITS).filter(k => k !== 'other_or_mixed');
+export const WORK_KINDS = Object.keys(KIND_TRAITS).filter(k => k !== 'other_or_mixed' && k !== 'dot_execution');
 
 export const REALTIME_LOOP_QUESTION =
   "True ONLY when the worker agent itself must stay inside a running external system's continuous observe-act loop " +
@@ -133,7 +133,7 @@ export const TASK_PROFILE_SCHEMA = {
     expected_hours: {
       type: 'number',
       minimum: 0.05,
-      maximum: 200,
+      maximum: 24,
       description:
         'Active worker-hours this task needs at an ordinary agent pace (a few tool calls = 0.1; one module fix with a ' +
         'test = 0.5; a multi-file feature or investigation = 1-3; a long multi-stage build = 4 or more). Estimate ' +
@@ -190,16 +190,23 @@ How to choose work_kind (specific kinds beat general_implementation):
 - tool_execution: running bounded CLI commands, runbooks, release checklists, or API polling loops where operational execution is the main work.
 - bounded_bulk_work: mechanical, low-ambiguity batch renames, codemods, constant bumps, or uniform rule replacements across files.
 - self_contained_code: standalone algorithm or isolated module/script with all requirements inlined.
-- dot_execution: standalone remote-computable packet with no local machine dependency.
 - general_implementation: writing or refactoring backend/library/CLI features and tests when none of the more specific kinds above fits.
 
-Contrastive calibration examples for realtime_loop:
+Contrastive calibration examples for realtime_loop & work_kind:
 * LIVE GUI loop (realtime_loop: true, work_kind: "computer_use", needs_gui: true, needs_visual: true):
   - "在浏览器里盯住 12:00 整点抢券页面，倒计时归零瞬间立刻点击领取并完成提交"
   - "打开行情软件持续盯盘，一旦盘口出现急跌破位信号立刻点击市价平仓"
   - "实时操作游戏窗口控制角色躲避弹幕并击败当前 Boss"
+  - "打开选课系统页面持续刷新余量，一有退课名额立刻点击选课并确认"
 * LIVE CLI/API loop (realtime_loop: true, work_kind: "tool_execution", needs_gui: false, needs_visual: false):
   - "在命令行中循环调用 curl 轮询票务余票接口，一旦返回余票大于 0 立即发送 POST 请求锁单完成抢票"
+  - "持续订阅交易所 WebSocket 实时盘口流，在每轮回调里盯住价差并在出现套利窗口的同一秒直接调用下单命令成交"
+* NON-LIVE writing/fixing automation, sniping or AFK scripts (realtime_loop: false, needs_gui: false, needs_visual: false):
+  - "写一个 Python 抢票脚本 scripts/ticket_sniper.py，支持配置场次 ID、指数退避重试和下单请求签名，并补齐单元测试" (general_implementation, code_complexity: 2, realtime_loop: false)
+  - "帮我开发一个自动抢购秒杀商品的 Node.js 机器人 bots/flash_buyer.py，把接口封装和并发锁单逻辑写好" (general_implementation, code_complexity: 2, realtime_loop: false)
+  - "写一个游戏日常挂机工具脚本 automation/daily_farm.py，读取配置文件并定义状态机转移逻辑，不在当前会话里运行游戏" (general_implementation, code_complexity: 2, realtime_loop: false)
+  - "排查昨晚游戏挂机脚本的运行日志 logs/afk_2026.log，统计掉线重连次数并找出卡死在结算界面的原因，只输出分析报告" (exploration_analysis, code_complexity: 0, hallucination_risk: 3, realtime_loop: false)
+  - "修复自动刷副本模块 src/auto_battle/loop.ts 里回合切换时偶发跳过技能释放的 bug，并跑通 vitest" (debug_review, code_complexity: 2, realtime_loop: false)
 * NON-LIVE engineering/UI/debug on real-time domain (realtime_loop: false, needs_gui: false, needs_visual: false):
   - "优化抢票页面的首屏加载速度" (frontend_implementation, realtime_loop: false)
   - "给游戏客户端加一个倒计时弹窗" (frontend_implementation, realtime_loop: false)
@@ -212,6 +219,13 @@ Contrastive calibration examples for realtime_loop:
 * NON-LIVE one-off GUI action (realtime_loop: false, work_kind: "computer_use", needs_gui: true, needs_visual: true):
   - "打开浏览器页面立刻点击保存按钮" (realtime_loop: false)
   - "在客户端窗口里马上切换一下夜间模式" (realtime_loop: false)
+* General dimension calibration examples:
+  - Read-only adversarial review of a single module diff (e.g. "Adversarially review origin/main...feature/retry-guard in src/http/retry.ts (140 lines). Do not edit code; write findings to review.md") -> work_kind: "debug_review", reasoning_depth: 2, code_complexity: 0, context_scale: 1, divergence: 1, hallucination_risk: 3, local_only: true, realtime_loop: false, multi_task: false, task_count: "1".
+  - Long runbook for routine CLI/release steps (e.g. build, install, smoke-check version, write receipt) -> work_kind: "tool_execution", reasoning_depth: 1, code_complexity: 0, context_scale: 1, divergence: 1, hallucination_risk: 1, local_only: true, realtime_loop: false.
+  - Self-contained code with local output path (e.g. "Implement a self-contained Python module token_bucket.py with rate, burst, consume(n, now) and unit tests; no existing repo files need to be read") -> work_kind: "self_contained_code", reasoning_depth: 2, code_complexity: 1, context_scale: 1, divergence: 1, hallucination_risk: 1, local_only: false, realtime_loop: false.
+  - Multi-hypothesis diagnosis without editing code (e.g. "Investigate why worker memory grows from 180 MB to 2.4 GB over 6 hours across src/pool/, src/cache/, and src/ipc/. Test candidate causes and report root cause without modifying production code") -> work_kind: "exploration_analysis", reasoning_depth: 3, code_complexity: 0, context_scale: 2, divergence: 2, hallucination_risk: 3, local_only: true, realtime_loop: false.
+  - Creative ideation with local output path (e.g. "Brainstorm 6 distinct visual and cultural motif directions for a winter coastal festival event and save to docs/winter_motifs.md; no local files need to be read") -> work_kind: "direction_reasoning", reasoning_depth: 2, code_complexity: 0, context_scale: 1, divergence: 3, hallucination_risk: 2, local_only: false, realtime_loop: false.
+  - Bundled independent tasks (e.g. "1) collect 20 reference screenshots into refs/; 2) benchmark SQLite vs DuckDB; 3) draft localization glossary") -> multi_task: true, task_count: "3".
 
 Gate flags:
 - multi_task & task_count: ${MULTI_TASK_QUESTION} ${TASK_COUNT_QUESTION}
@@ -237,19 +251,25 @@ const ALLOWED_PROFILE_KEYS = new Set([...REQUIRED_CORE_KEYS, 'self', 'wants_fast
 
 export const DEFAULT_CLASSIFIER_MODELS = [
   'gpt-5.3-codex-spark',
+  'gpt-5.4-mini',
   'gpt-6-luna',
   'claude-haiku-5-5',
+  'claude-haiku-4-5',
+  'gemini-3.8-flash-high',
   'gemini-3-flash',
+  'deepseek-v4.1-flash-free',
+  'grok-4-fast',
+  'grok-4.7',
   'gpt-6.1-terra',
   'claude-sonnet-5-5',
   'gpt-6-sol',
   'gpt-6.1-sol',
 ];
-const LIGHTEST_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+const LIGHTEST_EFFORTS = ['none', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 const HARNESS_ORDER = {codex: 0, cc: 1, pi: 2};
 export const DEFAULT_CLASSIFIER_TIMEOUT_MS = 15000;
 export const DEFAULT_CLASSIFIER_CACHE_TTL_MS = 10 * 60 * 1000;
-const SCORE_CACHE_VERSION = 1;
+const SCORE_CACHE_VERSION = 2;
 const SCORE_CACHE_MAX = 200;
 
 // ---- gates (purely profile-driven; zero text inspection) -----------------------------------------------------------
@@ -291,11 +311,32 @@ function canonicalOf(model) {
   return resolveModelSpec(model).canonical;
 }
 
-export function buildClassifierPrompt(task) {
-  const objective = typeof task === 'string' ? task : String(task?.objective ?? '');
+function normalizeTaskEvidence(input) {
+  if (typeof input === 'string') return {objective: input};
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {objective: String(input ?? '')};
+  const evidence = {objective: String(input.objective ?? '')};
+  if (input.context !== undefined && input.context !== null && input.context !== '') {
+    evidence.context = typeof input.context === 'string' ? input.context : JSON.stringify(input.context);
+  }
+  if (input.environment !== undefined && input.environment !== null && input.environment !== '') {
+    evidence.environment = typeof input.environment === 'string' ? input.environment : JSON.stringify(input.environment);
+  }
+  for (const [k, v] of Object.entries(input)) {
+    if (k === 'objective' || k === 'context' || k === 'environment' || k === 'profile') continue;
+    if (v !== undefined) evidence[k] = v;
+  }
+  return evidence;
+}
+
+export function taskCacheDescriptor(input) {
+  if (typeof input === 'string') return input;
+  return JSON.stringify(normalizeTaskEvidence(input));
+}
+
+export function buildClassifierPrompt(input) {
   const payload = {
     stage: 'profile',
-    untrusted_task_evidence: {objective},
+    untrusted_task_evidence: normalizeTaskEvidence(input),
     response_schema: TASK_PROFILE_SCHEMA,
   };
   return `${SCORER_PROMPT}\n${JSON.stringify(payload)}`;
@@ -345,17 +386,22 @@ export function selectClassifierRoute(catalog, {config = null, cooling = {}, now
     const prefIndex = preferredOrder.findIndex(pref => matchesModelPreference(row, pref));
     const canonical = canonicalOf(row.route.model);
     const spec = resolveModelSpec(canonical).spec || {};
-    const cost = Number.isFinite(spec.cost_weight) ? spec.cost_weight : 1.0;
-    const speed = Number.isFinite(spec.speed_tier) ? spec.speed_tier : 3;
+    const usdPerHour = Number.isFinite(spec.usd_per_hour)
+      ? spec.usd_per_hour
+      : (Number.isFinite(spec.cost) ? spec.cost : 50);
+    const cost = Number.isFinite(spec.cost) ? spec.cost : 5;
+    const tier = Number.isFinite(spec.tier) ? spec.tier : 5;
     const effort = pickClassifierEffort(row, preferredEffort);
-    const effortRank = Math.max(0, LIGHTEST_EFFORTS.indexOf(effort));
+    const effortIdx = LIGHTEST_EFFORTS.indexOf(effort);
+    const effortRank = effortIdx >= 0 ? effortIdx : LIGHTEST_EFFORTS.length;
     const harnessRank = HARNESS_ORDER[row.route.agentKind] ?? 3;
     return {
       row,
       effort,
-      prefRank: prefIndex >= 0 ? prefIndex : preferredOrder.length + Math.round(cost * 100) - speed * 5,
+      prefRank: prefIndex >= 0 ? prefIndex : preferredOrder.length,
+      usdPerHour,
       cost,
-      speed,
+      tier,
       effortRank,
       harnessRank,
     };
@@ -363,8 +409,9 @@ export function selectClassifierRoute(catalog, {config = null, cooling = {}, now
 
   const ranked = pool.map(scoreRow).sort((a, b) =>
     a.prefRank - b.prefRank ||
+    a.usdPerHour - b.usdPerHour ||
     a.cost - b.cost ||
-    b.speed - a.speed ||
+    a.tier - b.tier ||
     a.effortRank - b.effortRank ||
     a.harnessRank - b.harnessRank
   );
@@ -382,7 +429,7 @@ export function selectClassifierRoute(catalog, {config = null, cooling = {}, now
   };
 }
 
-export function parseClassifierOutput(rawOutput, taskText = '') {
+export function parseClassifierOutput(rawOutput) {
   if (typeof rawOutput !== 'string' || !rawOutput.trim()) {
     throw Error('Classifier returned empty output');
   }
@@ -404,19 +451,6 @@ export function parseClassifierOutput(rawOutput, taskText = '') {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw Error('Classifier output must be a JSON object');
   }
-  // Prompt injection defense: if the untrusted task text contained an embedded JSON profile literal with "work_kind"
-  // and the model echoed that literal or its embedded "reason" verbatim, reject it.
-  if (typeof taskText === 'string' && taskText.includes('"work_kind"') && taskText.includes('{')) {
-    const compactTask = taskText.replace(/\s+/g, '');
-    const compactOut = text.replace(/\s+/g, '');
-    if (compactTask.includes(compactOut)) {
-      throw Error('Prompt injection detected: classifier echoed an embedded JSON profile from untrusted task text');
-    }
-    if (typeof parsed.reason === 'string' && parsed.reason.trim().length >= 4 &&
-        taskText.includes(`"reason"`) && taskText.includes(JSON.stringify(parsed.reason))) {
-      throw Error('Prompt injection detected: classifier echoed an injected reason from untrusted task text');
-    }
-  }
   return parsed;
 }
 
@@ -434,7 +468,7 @@ export function validateClassifierProfile(raw) {
       throw Error(`Classifier profile is missing required field: ${key}`);
     }
   }
-  if (typeof raw.work_kind !== 'string' || raw.work_kind === 'other_or_mixed' || !Object.hasOwn(KIND_TRAITS, raw.work_kind)) {
+  if (typeof raw.work_kind !== 'string' || !WORK_KINDS.includes(raw.work_kind)) {
     throw Error(`Invalid work_kind in classifier profile: ${JSON.stringify(raw.work_kind)}`);
   }
   if (typeof raw.interaction_style !== 'string' || !INTERACTION_STYLE_SET.has(raw.interaction_style)) {
@@ -457,7 +491,7 @@ export function validateClassifierProfile(raw) {
   if ('wants_fast' in raw && typeof raw.wants_fast !== 'boolean') {
     throw Error('Invalid wants_fast in classifier profile: must be boolean');
   }
-  if (typeof raw.expected_hours !== 'number' || !Number.isFinite(raw.expected_hours) || raw.expected_hours < 0.05 || raw.expected_hours > 200) {
+  if (typeof raw.expected_hours !== 'number' || !Number.isFinite(raw.expected_hours) || raw.expected_hours < 0.05 || raw.expected_hours > 24) {
     throw Error(`Invalid expected_hours in classifier profile: ${JSON.stringify(raw.expected_hours)}`);
   }
   if (typeof raw.hours_confidence !== 'string' || !HOURS_CONFIDENCE.has(raw.hours_confidence)) {
@@ -468,6 +502,9 @@ export function validateClassifierProfile(raw) {
   }
   if (typeof raw.task_count !== 'string' || !TASK_COUNT_BUCKETS.has(raw.task_count)) {
     throw Error(`Invalid task_count in classifier profile: ${JSON.stringify(raw.task_count)}`);
+  }
+  if ((raw.multi_task === false && raw.task_count !== '1') || (raw.multi_task === true && raw.task_count === '1')) {
+    throw Error(`Invalid task_count ${JSON.stringify(raw.task_count)} for multi_task=${raw.multi_task}: must be "1" iff multi_task is false`);
   }
   if (typeof raw.reason !== 'string' || !raw.reason.trim() || raw.reason.length > 240) {
     throw Error('Invalid reason in classifier profile: must be 1..240 non-empty string');
@@ -488,7 +525,7 @@ export function validateCallerProfile(raw) {
       throw Error(`Caller profile contains unknown field: ${key}`);
     }
   }
-  if ('work_kind' in raw && (typeof raw.work_kind !== 'string' || raw.work_kind === 'other_or_mixed' || !Object.hasOwn(KIND_TRAITS, raw.work_kind))) {
+  if ('work_kind' in raw && (typeof raw.work_kind !== 'string' || !WORK_KINDS.includes(raw.work_kind))) {
     throw Error(`Invalid work_kind in caller profile: ${JSON.stringify(raw.work_kind)}`);
   }
   if ('interaction_style' in raw && (typeof raw.interaction_style !== 'string' || !INTERACTION_STYLE_SET.has(raw.interaction_style))) {
@@ -507,7 +544,7 @@ export function validateCallerProfile(raw) {
       throw Error(`Invalid ${flag} in caller profile: must be boolean`);
     }
   }
-  if ('expected_hours' in raw && (typeof raw.expected_hours !== 'number' || !Number.isFinite(raw.expected_hours) || raw.expected_hours < 0.05 || raw.expected_hours > 200)) {
+  if ('expected_hours' in raw && (typeof raw.expected_hours !== 'number' || !Number.isFinite(raw.expected_hours) || raw.expected_hours < 0.05 || raw.expected_hours > 24)) {
     throw Error(`Invalid expected_hours in caller profile: ${JSON.stringify(raw.expected_hours)}`);
   }
   if ('hours_confidence' in raw && (typeof raw.hours_confidence !== 'string' || !HOURS_CONFIDENCE.has(raw.hours_confidence))) {
@@ -518,6 +555,11 @@ export function validateCallerProfile(raw) {
   }
   if ('task_count' in raw && (typeof raw.task_count !== 'string' || !TASK_COUNT_BUCKETS.has(raw.task_count))) {
     throw Error(`Invalid task_count in caller profile: ${JSON.stringify(raw.task_count)}`);
+  }
+  if ('multi_task' in raw && 'task_count' in raw) {
+    if ((raw.multi_task === false && raw.task_count !== '1') || (raw.multi_task === true && raw.task_count === '1')) {
+      throw Error(`Invalid task_count ${JSON.stringify(raw.task_count)} for multi_task=${raw.multi_task}: must be "1" iff multi_task is false`);
+    }
   }
   if ('reason' in raw && (typeof raw.reason !== 'string' || !raw.reason.trim() || raw.reason.length > 240)) {
     throw Error('Invalid reason in caller profile: must be 1..240 non-empty string');
@@ -534,6 +576,8 @@ export function validateCallerProfile(raw) {
     hallucination_risk: defaultRisk,
     error_cost: defaultCost,
     interaction_style: defaultStyle,
+    ...(raw.multi_task === true && !('task_count' in raw) ? {task_count: '2'} : {}),
+    ...(raw.task_count && raw.task_count !== '1' && !('multi_task' in raw) ? {multi_task: true} : {}),
     ...raw,
   });
   normalized.realtime_loop = typeof raw.realtime_loop === 'boolean' ? raw.realtime_loop : false;
@@ -554,6 +598,8 @@ function fnv1a64(text) {
   return h1.toString(16).padStart(16, '0');
 }
 
+export const PROMPT_SCHEMA_DIGEST = fnv1a64(`${SCORER_PROMPT}\0${JSON.stringify(TASK_PROFILE_SCHEMA)}`);
+
 const memoryScoreCache = new Map();
 
 export function clearClassifierCache(cacheFile = null) {
@@ -563,14 +609,15 @@ export function clearClassifierCache(cacheFile = null) {
   }
 }
 
-function scoreCacheKey(objective, config = null) {
+export function scoreCacheKey(input, config = null) {
+  const desc = taskCacheDescriptor(input);
   const modelPrefs = [
     ...(Array.isArray(config?.classifierModels) ? config.classifierModels : []),
     ...(typeof config?.classifierModel === 'string' ? [config.classifierModel] : []),
     ...(typeof config?.classifierEffort === 'string' ? [`effort:${config.classifierEffort}`] : []),
   ].join(',');
-  const material = `${SCORE_CACHE_VERSION}\0${modelPrefs}\0${objective}`;
-  return `${fnv1a64(material)}:${objective.length}`;
+  const material = `${SCORE_CACHE_VERSION}\0${PROMPT_SCHEMA_DIGEST}\0${modelPrefs}\0${desc}`;
+  return `${fnv1a64(material)}:${desc.length}`;
 }
 
 function readDiskScoreCache(cacheFile) {
@@ -593,16 +640,17 @@ function writeDiskScoreCache(cacheFile, entries) {
   } catch {}
 }
 
-function getCachedScore(objective, {config = null, cacheFile = null, now = Date.now()} = {}) {
+function getCachedScore(input, {config = null, cacheFile = null, now = Date.now()} = {}) {
   const ttlMs = Number.isFinite(config?.classifierCacheTtlMs) && config.classifierCacheTtlMs >= 0
     ? config.classifierCacheTtlMs
     : DEFAULT_CLASSIFIER_CACHE_TTL_MS;
   if (ttlMs === 0) return null;
-  const key = scoreCacheKey(objective, config);
+  const desc = taskCacheDescriptor(input);
+  const key = scoreCacheKey(input, config);
   const memScope = `${cacheFile || 'memory'}\0${key}`;
   const checkEntry = entry => {
     if (!entry || typeof entry !== 'object') return null;
-    if (entry.version !== SCORE_CACHE_VERSION || entry.task !== objective) return null;
+    if (entry.version !== SCORE_CACHE_VERSION || entry.prompt_digest !== PROMPT_SCHEMA_DIGEST || entry.task !== desc) return null;
     if (typeof entry.saved_at !== 'number' || now - entry.saved_at < 0 || now - entry.saved_at > ttlMs) return null;
     try {
       const profile = validateClassifierProfile(entry.profile);
@@ -623,14 +671,23 @@ function getCachedScore(objective, {config = null, cacheFile = null, now = Date.
   return null;
 }
 
-function putCachedScore(objective, profile, {model = null, route = null, config = null, cacheFile = null, now = Date.now()} = {}) {
+function putCachedScore(input, profile, {model = null, route = null, config = null, cacheFile = null, now = Date.now()} = {}) {
   const ttlMs = Number.isFinite(config?.classifierCacheTtlMs) && config.classifierCacheTtlMs >= 0
     ? config.classifierCacheTtlMs
     : DEFAULT_CLASSIFIER_CACHE_TTL_MS;
   if (ttlMs === 0) return;
-  const key = scoreCacheKey(objective, config);
+  const desc = taskCacheDescriptor(input);
+  const key = scoreCacheKey(input, config);
   const memScope = `${cacheFile || 'memory'}\0${key}`;
-  const entry = {version: SCORE_CACHE_VERSION, saved_at: now, task: objective, profile, model, route};
+  const entry = {
+    version: SCORE_CACHE_VERSION,
+    prompt_digest: PROMPT_SCHEMA_DIGEST,
+    saved_at: now,
+    task: desc,
+    profile,
+    model,
+    route,
+  };
   memoryScoreCache.set(memScope, entry);
   if (memoryScoreCache.size > SCORE_CACHE_MAX) {
     const oldestKey = memoryScoreCache.keys().next().value;
@@ -652,10 +709,9 @@ function putCachedScore(objective, profile, {model = null, route = null, config 
   writeDiskScoreCache(cacheFile, fresh);
 }
 
-export function prepareClassifierRequest(task, catalog, {config = null, cooling = {}, cacheFile = null, now = Date.now(), useCache = true} = {}) {
-  const objective = typeof task === 'string' ? task : String(task?.objective ?? '');
+export function prepareClassifierRequest(input, catalog, {config = null, cooling = {}, cacheFile = null, now = Date.now(), useCache = true} = {}) {
   if (useCache) {
-    const hit = getCachedScore(objective, {config, cacheFile, now});
+    const hit = getCachedScore(input, {config, cacheFile, now});
     if (hit) return {cached: true, profile: hit.profile, model: hit.model, route: hit.route};
   }
   const selected = selectClassifierRoute(catalog, {config, cooling, now});
@@ -668,7 +724,7 @@ export function prepareClassifierRequest(task, catalog, {config = null, cooling 
     route: selected.route,
     model: selected.model,
     canonicalModel: selected.canonicalModel,
-    prompt: buildClassifierPrompt(objective),
+    prompt: buildClassifierPrompt(input),
     timeoutMs,
   };
 }
@@ -791,7 +847,6 @@ export function routeTask(task, catalog, {
   cacheFile = null,
   useCache = true,
 } = {}) {
-  const objective = typeof task === 'string' ? task : String(task?.objective ?? '');
   const explicitProfile = callerProfile ?? (task && typeof task === 'object' ? task.profile : null);
 
   const runnable = (catalog?.models || []).filter(row => HARNESS[row?.route?.agentKind] && row.route.providerId && row.route.model);
@@ -811,7 +866,7 @@ export function routeTask(task, catalog, {
     }
   } else {
     if (useCache && !classification) {
-      const hit = getCachedScore(objective, {config, cacheFile, now});
+      const hit = getCachedScore(task, {config, cacheFile, now});
       if (hit) {
         profile = hit.profile;
         profileSource = 'classifier';
@@ -822,7 +877,7 @@ export function routeTask(task, catalog, {
     if (!profile) {
       let clfOutcome = classification;
       if (!clfOutcome && typeof classifier === 'function') {
-        const req = prepareClassifierRequest(objective, catalog, {config, cooling, cacheFile, now, useCache: false});
+        const req = prepareClassifierRequest(task, catalog, {config, cooling, cacheFile, now, useCache: false});
         if (!req) {
           return {
             status: 'blocked',
@@ -879,17 +934,16 @@ export function routeTask(task, catalog, {
       try {
         const rawObj = clfOutcome.profile && typeof clfOutcome.profile === 'object' && !clfOutcome.rawOutput
           ? clfOutcome.profile
-          : parseClassifierOutput(clfOutcome.rawOutput, objective);
+          : parseClassifierOutput(clfOutcome.rawOutput);
         profile = validateClassifierProfile(rawObj);
         profileSource = 'classifier';
         classifierCached = Boolean(clfOutcome.cached);
         if (useCache && !classifierCached) {
-          putCachedScore(objective, profile, {model: classifierModel, route: clfOutcome.route || null, config, cacheFile, now});
+          putCachedScore(task, profile, {model: classifierModel, route: clfOutcome.route || null, config, cacheFile, now});
         }
       } catch (error) {
-        const isInjection = /Prompt injection detected/i.test(error.message || '');
         return unavailableRoute(
-          isInjection ? 'prompt_injection_detected' : 'invalid_classifier_output',
+          'invalid_classifier_output',
           `Task classifier returned invalid profile (${error.message}); refusing to fall back to keyword profiling.`,
           classifierModel
         );
@@ -949,6 +1003,7 @@ export function routeTask(task, catalog, {
       classifier_model: classifierModel,
       realtime_loop: profile.realtime_loop,
       decision: {
+        reason: 'no_runnable_model',
         profile,
         profile_source: profileSource,
         classifier_model: classifierModel,
@@ -991,7 +1046,7 @@ export function routeTask(task, catalog, {
     row._efforts.forEach(e => entry.add(e));
     pool.set(canonical, entry);
   }
-  const ranked = rankCandidates(profile, {objective, candidateModels: [...pool].map(([model, efforts]) => ({model, efforts: [...efforts]}))});
+  const ranked = rankCandidates(profile, {candidateModels: [...pool].map(([model, efforts]) => ({model, efforts: [...efforts]}))});
   const scores = new Map();
   for (const r of ranked.ranking) {
     scores.set(`${r.model}:${r.effort}`, r);
@@ -1031,6 +1086,7 @@ export function routeTask(task, catalog, {
     realtime_loop: profile.realtime_loop,
     work_kind: kind,
     decision: {
+      reason: 'no_model_meets_floor',
       work_kind: kind,
       difficulty: ranked.task.difficulty,
       required_ability: ranked.task.required_ability,
