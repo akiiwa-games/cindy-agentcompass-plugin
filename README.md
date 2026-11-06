@@ -194,8 +194,8 @@ review cases 1, 2, 5, 6 and 7 end to end (all seven are unit-tested). Set `AGENT
 Windows and Linux runs are in [docs/sandbox-e2e-report.json](docs/sandbox-e2e-report.json), with every scenario's input and host record
 under `docs/sandbox-artifacts/`; machine paths are replaced by `<sandbox>`, `<repo>`, `<home>` and similar names.
 
-The real Cindy 0.1.121 run of this version, with every tool call and answer, is in
-[docs/real-cindy-0.1.121/](docs/real-cindy-0.1.121/acceptance.json).
+The real Cindy 0.1.121 run in [docs/real-cindy-0.1.121/](docs/real-cindy-0.1.121/acceptance.json), with every tool call and answer, predates the
+quick-text classifier. Its acceptance on real Cindy is tracked in [docs/sandbox-real-e2e/](docs/sandbox-real-e2e/README.md).
 
 ## How AgentCompass fits with the other hosts
 
