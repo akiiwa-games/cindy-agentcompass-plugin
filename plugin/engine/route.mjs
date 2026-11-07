@@ -533,7 +533,7 @@ function readDiskScoreCache(cacheFile) {
   if (!cacheFile) return {};
   try {
     const data = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-    return data && typeof data.entries === 'object' && !Array.isArray(data.entries) ? data.entries : {};
+    return data && data.entries && typeof data.entries === 'object' && !Array.isArray(data.entries) ? data.entries : {};
   } catch {
     return {};
   }
@@ -655,7 +655,8 @@ const QUOTA_TAIL_BYTES = 256 * 1024;
 let quotaCache = {key: '', limits: null};
 
 function newestSession(home) {
-  let newest = null, days = 0;
+  let days = 0;
+  const sessions = [];
   try {
     // sessions/YYYY/MM/DD/rollout-*.jsonl: compare mtimes across date directories so sessions crossing midnight win.
     const desc = dir => fs.readdirSync(dir).filter(n => /^\d+$/.test(n)).sort().reverse().map(n => path.join(dir, n));
@@ -663,12 +664,13 @@ function newestSession(home) {
       const files = fs.readdirSync(day).filter(n => n.endsWith('.jsonl'));
       for (const name of files) {
         const file = path.join(day, name), stat = fs.statSync(file);
-        if (!newest || stat.mtimeMs > newest.mtime) newest = {file, mtime: stat.mtimeMs, size: stat.size, home};
+        sessions.push({file, mtime: stat.mtimeMs, size: stat.size, home});
       }
       if (files.length && ++days >= 30) break outer;
     }
   } catch {}
-  return newest;
+  sessions.sort((a, b) => b.mtime - a.mtime);
+  return sessions[0] ? {...sessions[0], recent: sessions} : null;
 }
 
 function readTail(file, size, maxBytes = QUOTA_TAIL_BYTES) {
@@ -725,40 +727,51 @@ export function codexQuota(env = process.env, now = Date.now(), homes = codexHom
   const newest = cindySessions[0] || homes.map(newestSession).filter(Boolean).sort((a, b) => b.mtime - a.mtime)[0];
   if (!newest) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'no Codex session log'};
   const stateFile = resolveQuotaStateFile(env, homes, options);
+  let chosen = newest;
   const failQuota = reason => {
-    const failingSinceMs = recordQuotaFailure(stateFile, newest.home, reason, newest.file, now);
+    const failingSinceMs = recordQuotaFailure(stateFile, chosen.home, reason, chosen.file, now);
     const dispatchable = now - failingSinceMs < DEFAULT_USAGE_MAX_AGE_HOURS * 3600000;
     return {source: 'codex-cli-sessions', status: 'unknown', state: ACCOUNT_STATES.USAGE_FAILING, dispatchable,
-      failing_since: new Date(failingSinceMs).toISOString(), error: reason, reason, file: newest.file};
+      failing_since: new Date(failingSinceMs).toISOString(), error: reason, reason, file: chosen.file};
   };
-  const cacheKey = `${newest.file}:${newest.mtime}:${newest.size}`;
-  let limits = quotaCache.key === cacheKey ? quotaCache.limits : undefined;
-  if (limits === undefined) {
-    let text = '';
-    try {
-      text = readTail(newest.file, newest.size);
-    } catch {
-      return failQuota('unreadable Codex session log');
-    }
-    limits = null;
-    let sawRateLimits = false;
-    for (let from = Infinity, at; (at = text.lastIndexOf('"rate_limits"', from)) >= 0;) {
-      sawRateLimits = true;
-      const lineStart = text.lastIndexOf('\n', at) + 1;
-      const line = text.slice(lineStart, (text.indexOf('\n', at) + 1 || text.length + 1) - 1);
+  let limits = null;
+  for (let i = 0; i < 20 && newest.recent[i]; i++) {
+    const session = newest.recent[i];
+    const cacheKey = `${session.file}:${session.mtime}:${session.size}`;
+    let cur = quotaCache.key === cacheKey ? quotaCache.limits : undefined;
+    if (cur === undefined) {
+      let text = '';
       try {
-        const row = JSON.parse(line);
-        const candidate = row.payload?.rate_limits || row.rate_limits || row.msg?.rate_limits || null;
-        if (candidate && typeof candidate === 'object') {
-          limits = candidate;
-          break;
-        }
-      } catch {}
-      if (lineStart <= 1) break;
-      from = lineStart - 2;
+        text = readTail(session.file, session.size);
+      } catch {
+        chosen = session;
+        return failQuota('unreadable Codex session log');
+      }
+      cur = null;
+      let sawRateLimits = false;
+      for (let from = Infinity, at; (at = text.lastIndexOf('"rate_limits"', from)) >= 0;) {
+        sawRateLimits = true;
+        const lineStart = text.lastIndexOf('\n', at) + 1;
+        const line = text.slice(lineStart, (text.indexOf('\n', at) + 1 || text.length + 1) - 1);
+        try {
+          const row = JSON.parse(line);
+          const candidate = row.payload?.rate_limits || row.rate_limits || row.msg?.rate_limits || null;
+          if (candidate && typeof candidate === 'object') {
+            cur = candidate;
+            break;
+          }
+        } catch {}
+        if (lineStart <= 1) break;
+        from = lineStart - 2;
+      }
+      if (!cur && sawRateLimits) cur = {corrupt: true};
+      quotaCache = {key: cacheKey, limits: cur};
     }
-    if (!limits && sawRateLimits) limits = {corrupt: true};
-    quotaCache = {key: cacheKey, limits};
+    if (cur) {
+      chosen = session;
+      limits = cur;
+      break;
+    }
   }
   if (!limits) {
     clearQuotaFailure(stateFile, newest.home);
@@ -767,25 +780,25 @@ export function codexQuota(env = process.env, now = Date.now(), homes = codexHom
   if (limits.corrupt) {
     return failQuota('corrupt rate-limit snapshot in Codex session log');
   }
-  clearQuotaFailure(stateFile, newest.home);
+  clearQuotaFailure(stateFile, chosen.home);
   const plan = normalizePlan('codex', limits.plan_type);
   if (plan.inactive) {
-    const ageMs = Math.max(0, now - newest.mtime);
+    const ageMs = Math.max(0, now - chosen.mtime);
     const staleInactive = ageMs > DEFAULT_USAGE_MAX_AGE_HOURS * 3600000;
     const reason = staleInactive
       ? `subscription is not active (${plan.raw}) in session log from ${(ageMs / 3600000).toFixed(1)}h ago; dispatching to refresh telemetry`
       : `subscription is not active (${plan.raw})`;
     return {source: 'codex-cli-sessions', status: staleInactive ? 'unknown' : ACCOUNT_STATES.PLAN_INACTIVE,
       state: ACCOUNT_STATES.PLAN_INACTIVE, dispatchable: staleInactive, stale_plan_inactive: staleInactive,
-      reason, plan: plan.raw, plan_key: plan.key, observed_at: new Date(newest.mtime).toISOString(), file: newest.file};
+      reason, plan: plan.raw, plan_key: plan.key, observed_at: new Date(chosen.mtime).toISOString(), file: chosen.file};
   }
   const windows = ['primary', 'secondary'].map(k => limits?.[k]).filter(w => w && Number.isFinite(w.used_percent))
     // A window that has already reset says nothing about now.
     .filter(w => !w.resets_at || w.resets_at * 1000 > now);
-  if (!windows.length) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'snapshot windows have reset', plan: plan.raw, plan_key: plan.key, file: newest.file};
+  if (!windows.length) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'snapshot windows have reset', plan: plan.raw, plan_key: plan.key, file: chosen.file};
   const used = Math.max(...windows.map(w => w.used_percent));
   return {source: 'codex-cli-sessions', status: used >= 95 ? 'exhausted' : used >= 80 ? 'high' : 'ok', state: ACCOUNT_STATES.READY, dispatchable: true,
-    used_percent: used, observed_at: new Date(newest.mtime).toISOString(), plan: plan.raw, plan_key: plan.key, file: newest.file};
+    used_percent: used, observed_at: new Date(chosen.mtime).toISOString(), plan: plan.raw, plan_key: plan.key, file: chosen.file};
 }
 
 // ---- routing -------------------------------------------------------------------------------------------------------
@@ -1126,7 +1139,7 @@ export function routeTask(task, catalog, {
         excluded: reasons,
       },
       error: `All candidate accounts are unavailable (${reasons.join('; ')}); refusing to dispatch to an inactive or failing account. Nothing was started.`,
-      next_action: 'Fix the account subscription, sign-in, or usage telemetry in Cindy, then roll again. Nothing was started.',
+      next_action: 'Fix the account subscription, sign-in, or usage telemetry in Cindy (it recovers automatically after the next healthy Codex session log in Cindy, or by removing its entry in quota-state.json), then roll again. Nothing was started.',
     };
   }
   const usage = row => matchesCodex(row.route.providerId) && codex.status !== 'unknown' ? codex : null;

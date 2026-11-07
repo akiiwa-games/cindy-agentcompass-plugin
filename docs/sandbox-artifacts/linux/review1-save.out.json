@@ -16,7 +16,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "21707341226998fb6cba72cb9c72c5d92ca1a2bd",
+      "operation": "769cb9de824c47a234a8eda4ad2d8480e32ec7a4",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -28,7 +28,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "21707341226998fb6cba72cb9c72c5d92ca1a2bd"
+        "operation": "769cb9de824c47a234a8eda4ad2d8480e32ec7a4"
        }
       },
       "receipt_saved": false,
@@ -46,7 +46,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "21707341226998fb6cba72cb9c72c5d92ca1a2bd",
+      "operation": "769cb9de824c47a234a8eda4ad2d8480e32ec7a4",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -61,7 +61,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "21707341226998fb6cba72cb9c72c5d92ca1a2bd"
+        "operation": "769cb9de824c47a234a8eda4ad2d8480e32ec7a4"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -82,7 +82,7 @@
   },
   {
    "name": "create",
-   "requestKey": "21707341226998fb6cba72cb9c72c5d92ca1a2bd:create",
+   "requestKey": "769cb9de824c47a234a8eda4ad2d8480e32ec7a4:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
@@ -96,12 +96,12 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "21707341226998fb6cba72cb9c72c5d92ca1a2bd:send",
+   "requestKey": "769cb9de824c47a234a8eda4ad2d8480e32ec7a4:send",
    "chars": 433
   },
   {
    "name": "saveFault",
-   "operation": "21707341226998fb6cba72cb9c72c5d92ca1a2bd"
+   "operation": "769cb9de824c47a234a8eda4ad2d8480e32ec7a4"
   },
   {
    "name": "capabilities"
@@ -134,12 +134,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>/report/cindy/cindy-sent-run-1.txt",
-   "sha256": "9bb684632c3149d919282fea4dd87ef51bdbc057c4137a586f29a62217cbd33f",
+   "sha256": "8d5f05c8a878d4afb92aa7f7cf6eaeac30b34b1b5f9ebdf58ac5b79214ded995",
    "chars": 433
   }
  ],
  "prepared": {
-  "operation": "21707341226998fb6cba72cb9c72c5d92ca1a2bd",
+  "operation": "769cb9de824c47a234a8eda4ad2d8480e32ec7a4",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -284,7 +284,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [b723ddb2]\nFIXTURE-SCENARIO: ok review1-save\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [657de331]\nFIXTURE-SCENARIO: ok review1-save\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>/work dir",
   "mappings": [],
   "attempts": 1
@@ -320,7 +320,7 @@
     "effort": "high",
     "fastMode": false
    },
-   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [b723ddb2]\nFIXTURE-SCENARIO: ok review1-save\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
+   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [657de331]\nFIXTURE-SCENARIO: ok review1-save\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
   }
  ],
  "workerStderr": ""

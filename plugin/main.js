@@ -254,7 +254,8 @@
   }
   function accountNotice(record) {
     const src=record?.router?.decision || record?.router;
-    const warnings=Array.isArray(src?.warnings) ? src.warnings : [];
+    const list=Array.isArray(src?.warnings) ? src.warnings : [];
+    const warnings=src?.warning ? [...list,src.warning] : list;
     const accounts=Array.isArray(src?.accounts) ? src.accounts.map(a=>({
       key:a.key,provider:a.provider,account:a.account,plan:a.plan,state:a.state,dispatchable:a.dispatchable,
       ...(a.reason ? {reason:a.reason} : {}),

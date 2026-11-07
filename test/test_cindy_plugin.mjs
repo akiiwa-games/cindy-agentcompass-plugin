@@ -909,6 +909,13 @@ test('M1 regression: native roll and status returns surface warnings and compact
     assert.ok(Array.isArray(roll2.warnings) && roll2.warnings.some(w=>/codex\/openai: usage_failing, excluded from dispatch/.test(w)),JSON.stringify(roll2));
     assert.equal(roll2.accounts?.[0]?.state,'usage_failing');
     assert.equal(roll2.accounts?.[0]?.dispatchable,false);
+
+    // 3. When every runnable route is short of quota (decision.warning), roll surfaces that warning in warnings as well.
+    clearClassifierCache();
+    const f3=classifierFixture({routeOptions:{quota:{source:'test',status:'exhausted',used_percent:97}}});
+    const roll3=(await f3.send('roll',{task:'Fix bug in m1-short-quota.py'})).result;
+    assert.equal(roll3.status,'running');
+    assert.ok(Array.isArray(roll3.warnings) && roll3.warnings.some(w=>/every runnable route is short of quota/.test(w)),JSON.stringify(roll3));
   } finally {
     fs.rmSync(dir,{recursive:true,force:true});
   }

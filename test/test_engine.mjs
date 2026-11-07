@@ -1988,6 +1988,7 @@ test('Step 3 regression: plan normalization matches full name before stripping t
     assert.equal(blockedCorrupt.decision.accounts[0].state, 'usage_failing');
     assert.equal(blockedCorrupt.decision.accounts[0].dispatchable, false);
     assert.ok(blockedCorrupt.decision.warnings.some(w => /usage_failing, excluded from dispatch/.test(w)), JSON.stringify(blockedCorrupt.decision.warnings));
+    assert.match(blockedCorrupt.next_action, /quota-state\.json/);
 
     const fallbackToClaude = routeTask('Fix util.py', WITH_CLAUDE, {env: {CODEX_HOME: corruptHome}, stateFile, now: sixHourNow, profile: makeProfile()});
     assert.deepEqual([fallbackToClaude.status, fallbackToClaude.route.bundle.harness], ['native', 'claude']);
@@ -2063,6 +2064,50 @@ test('Step 3 regression: plan normalization matches full name before stripping t
     const allExcluded = routeTask('Fix util.py', WITH_CLAUDE, {accounts: accountsSnapshot, now: NOW, profile: makeProfile()});
     assert.deepEqual([allExcluded.status, allExcluded.decision.reason], ['blocked', 'account_unavailable']);
     assert.equal(allExcluded.decision.warnings.length, 2);
+
+    // 7. M2 regression: malformed quota-state.json / score-cache.json shapes (e.g. {"entries":null}, null, []) are treated as empty state and never throw.
+    for (const badJson of ['{"entries":null}', 'null', '[]', '{"entries":[]}']) {
+      fs.writeFileSync(stateFile, badJson, 'utf8');
+      const healthyAfterNull = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: corruptHome}, stateFile, now: healthyNow, profile: makeProfile()});
+      assert.equal(healthyAfterNull.status, 'native', `healthy log with ${badJson}`);
+      fs.writeFileSync(stateFile, badJson, 'utf8');
+      const brokenHome = path.join(dir, 'm2-broken');
+      const brokenDay = path.join(brokenHome, 'sessions', '2026', '11', '07');
+      fs.mkdirSync(brokenDay, {recursive: true});
+      fs.writeFileSync(path.join(brokenDay, 'rollout-1.jsonl'), '{"payload":{"rate_limits":BROKEN\n');
+      const brokenAfterNull = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: brokenHome}, stateFile, now: NOW, profile: makeProfile()});
+      assert.equal(brokenAfterNull.status, 'native', `corrupt log with ${badJson}`);
+      assert.equal(brokenAfterNull.decision.accounts[0].state, 'usage_failing');
+    }
+
+    // 8. M3 regression: when the newest session log has no rate_limits line, codexQuota scans back through recent sessions to find the most recent rate_limits snapshot.
+    const fallbackHome = path.join(dir, 'm3-fallback');
+    const fallbackDay = path.join(fallbackHome, 'sessions', '2026', '11', '07');
+    fs.mkdirSync(fallbackDay, {recursive: true});
+    const earlierFreeFile = path.join(fallbackDay, 'rollout-1.jsonl');
+    const earlierFreeDate = new Date(NOW - 8 * 3600 * 1000);
+    fs.writeFileSync(
+      earlierFreeFile,
+      `${JSON.stringify({timestamp: earlierFreeDate.toISOString(), payload: {rate_limits: {plan_type: 'free', secondary: {used_percent: 10, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
+    );
+    fs.utimesSync(earlierFreeFile, earlierFreeDate, earlierFreeDate);
+    const newerNoLimitsFile = path.join(fallbackDay, 'rollout-2.jsonl');
+    const newerDate = new Date(NOW - 60000);
+    fs.writeFileSync(newerNoLimitsFile, '{"type":"session_meta","payload":{"id":"abc"}}\n{"type":"error","message":"failed before rate_limits"}\n');
+    fs.utimesSync(newerNoLimitsFile, newerDate, newerDate);
+    const m3StaleFree = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: fallbackHome}, stateFile, now: NOW, profile: makeProfile()});
+    assert.equal(m3StaleFree.status, 'native', 'earlier >6h free log behind a no-rate_limits log still dispatches with warning');
+    assert.equal(m3StaleFree.decision.accounts[0].state, 'plan_inactive');
+    assert.equal(m3StaleFree.decision.accounts[0].dispatchable, true);
+    assert.ok(m3StaleFree.decision.warnings?.some(w => /codex\/openai: plan_inactive: .*8\.0h ago/.test(w)), JSON.stringify(m3StaleFree.decision.warnings));
+
+    // When the earlier free log is fresh (<6h), a newer log with no rate_limits line does not bypass the plan_inactive exclusion.
+    const freshFreeDate = new Date(NOW - 3600 * 1000);
+    fs.utimesSync(earlierFreeFile, freshFreeDate, freshFreeDate);
+    const m3FreshFree = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: fallbackHome}, stateFile, now: NOW, profile: makeProfile()});
+    assert.deepEqual([m3FreshFree.status, m3FreshFree.decision.reason], ['blocked', 'account_unavailable']);
+    assert.equal(m3FreshFree.decision.accounts[0].state, 'plan_inactive');
+    assert.equal(m3FreshFree.decision.accounts[0].dispatchable, false);
   } finally {
     fs.rmSync(dir, {recursive: true, force: true});
   }

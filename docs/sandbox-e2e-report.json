@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-07T20:34:26.725Z",
+   "started_at": "2026-11-07T20:53:27.224Z",
    "operations": [
     {
      "name": "isolation",
@@ -648,7 +648,7 @@
     "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:46313/v1"
+    "scorer": "http://127.0.0.1:40865/v1"
    },
    "unit_tests": {
     "node": {
@@ -674,7 +674,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-07T20:34:58.002Z",
+   "finished_at": "2026-11-07T20:53:57.547Z",
    "summary": {
     "operations": 28,
     "checks": 116,
@@ -686,7 +686,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-07T20:32:17.092Z",
+   "started_at": "2026-11-07T20:55:57.371Z",
    "operations": [
     {
      "name": "isolation",
@@ -1330,7 +1330,7 @@
     "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:1347/v1"
+    "scorer": "http://127.0.0.1:12358/v1"
    },
    "unit_tests": {
     "node": {
@@ -1356,7 +1356,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-07T20:33:35.948Z",
+   "finished_at": "2026-11-07T20:57:10.439Z",
    "summary": {
     "operations": 28,
     "checks": 116,
