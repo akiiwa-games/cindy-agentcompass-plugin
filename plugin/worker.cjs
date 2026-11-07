@@ -271,6 +271,7 @@ async function builtin(input, catalog, dir, root, conf = {}, extra = {}) {
     cooling: cooldowns(root),
     config: conf,
     cacheFile,
+    stateFile: path.join(root, 'quota-state.json'),
     profile: extra.profile ?? null,
     classification,
   });

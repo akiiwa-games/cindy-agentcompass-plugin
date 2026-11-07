@@ -15,7 +15,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "07b4d7905fe6a0608437215d4664d94d08bceee9",
+      "operation": "2741bc04d0f48e41906f0f2fcea8b3556d9ae4e7",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -27,7 +27,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "07b4d7905fe6a0608437215d4664d94d08bceee9"
+        "operation": "2741bc04d0f48e41906f0f2fcea8b3556d9ae4e7"
        }
       }
      }
@@ -47,7 +47,7 @@
   },
   {
    "name": "create",
-   "requestKey": "07b4d7905fe6a0608437215d4664d94d08bceee9:create",
+   "requestKey": "2741bc04d0f48e41906f0f2fcea8b3556d9ae4e7:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
@@ -61,7 +61,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "07b4d7905fe6a0608437215d4664d94d08bceee9:send",
+   "requestKey": "2741bc04d0f48e41906f0f2fcea8b3556d9ae4e7:send",
    "chars": 433
   }
  ],
@@ -85,12 +85,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "3ee0bf8a5f8ee178a877d24effb3be4bdbc2c1bb99a5d83e9b8836c9ffa368a6",
+   "sha256": "2de066e6ec9ea763e5b86767dc2d5e6316ffa17094514731d0447af4cc1344f0",
    "chars": 433
   }
  ],
  "prepared": {
-  "operation": "07b4d7905fe6a0608437215d4664d94d08bceee9",
+  "operation": "2741bc04d0f48e41906f0f2fcea8b3556d9ae4e7",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -236,7 +236,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [bf47ac39]\nFIXTURE-SCENARIO: ok cli-fallback\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [e09293b1]\nFIXTURE-SCENARIO: ok cli-fallback\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1
@@ -272,7 +272,7 @@
     "effort": "high",
     "fastMode": false
    },
-   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [bf47ac39]\nFIXTURE-SCENARIO: ok cli-fallback\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
+   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [e09293b1]\nFIXTURE-SCENARIO: ok cli-fallback\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
   }
  ],
  "workerStderr": ""

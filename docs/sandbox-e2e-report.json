@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-07T08:19:34.052Z",
+   "started_at": "2026-11-07T20:34:26.725Z",
    "operations": [
     {
      "name": "isolation",
@@ -33,7 +33,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 126 passed, 0 failed",
+       "name": "node --test: 130 passed, 0 failed",
        "ok": true
       },
       {
@@ -443,7 +443,7 @@
      "intent": "codex for an edit, Pi for read-and-report exploration, Claude (cc) for a review; each an exact catalog row with bypassPermissions, through to cleanup",
      "checks": [
       {
-       "name": "codex: the built-in engine chose codex (gpt-6.1-sol/low) with launcher mode full-access",
+       "name": "codex: the built-in engine chose codex (gpt-6-luna/high) with launcher mode full-access",
        "ok": true
       },
       {
@@ -648,11 +648,11 @@
     "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:43303/v1"
+    "scorer": "http://127.0.0.1:46313/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 126,
+     "pass": 130,
      "fail": 0
     },
     "python": {
@@ -674,7 +674,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-07T08:20:07.778Z",
+   "finished_at": "2026-11-07T20:34:58.002Z",
    "summary": {
     "operations": 28,
     "checks": 116,
@@ -686,7 +686,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-07T19:52:05.245Z",
+   "started_at": "2026-11-07T20:32:17.092Z",
    "operations": [
     {
      "name": "isolation",
@@ -715,7 +715,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 129 passed, 0 failed",
+       "name": "node --test: 130 passed, 0 failed",
        "ok": true
       },
       {
@@ -1330,11 +1330,11 @@
     "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:6289/v1"
+    "scorer": "http://127.0.0.1:1347/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 129,
+     "pass": 130,
      "fail": 0
     },
     "python": {
@@ -1356,7 +1356,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-07T19:53:05.520Z",
+   "finished_at": "2026-11-07T20:33:35.948Z",
    "summary": {
     "operations": 28,
     "checks": 116,

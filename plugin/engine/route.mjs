@@ -674,6 +674,7 @@ function newestSession(home) {
 function readTail(file, size, maxBytes = QUOTA_TAIL_BYTES) {
   const fd = fs.openSync(file, 'r');
   try {
+    if (!fs.fstatSync(fd).isFile()) throw Error('not a regular file');
     const length = Math.min(size, maxBytes);
     const offset = Math.max(0, size - length);
     const buf = Buffer.allocUnsafe(length);
@@ -685,11 +686,51 @@ function readTail(file, size, maxBytes = QUOTA_TAIL_BYTES) {
   }
 }
 
-export function codexQuota(env = process.env, now = Date.now(), homes = codexHomes(env)) {
+function resolveQuotaStateFile(env, homes, {stateFile = null, cacheFile = null, config = null} = {}) {
+  if (stateFile) return stateFile;
+  if (cacheFile) return path.join(path.dirname(cacheFile), 'quota-state.json');
+  if (config?.stateRoot) return path.join(config.stateRoot, 'quota-state.json');
+  if (env?.CODEX_HOME) return path.join(env.CODEX_HOME, '.cindy-quota-state.json');
+  const userHome = env?.HOME || env?.USERPROFILE;
+  if (userHome) return path.join(userHome, '.agent-compass', 'cindy-plugin', 'quota-state.json');
+  return homes?.[0] ? path.join(homes[0], '.cindy-quota-state.json') : null;
+}
+
+function recordQuotaFailure(stateFile, home, reason, file, now) {
+  if (!stateFile || !home) return now;
+  const key = path.resolve(home);
+  const entries = readDiskScoreCache(stateFile);
+  const existing = entries[key];
+  if (existing && typeof existing.failing_since === 'number' && existing.failing_since <= now) {
+    return existing.failing_since;
+  }
+  entries[key] = {failing_since: now, reason, file};
+  writeDiskScoreCache(stateFile, entries);
+  return now;
+}
+
+function clearQuotaFailure(stateFile, home) {
+  if (!stateFile || !home) return;
+  const key = path.resolve(home);
+  const entries = readDiskScoreCache(stateFile);
+  if (key in entries) {
+    delete entries[key];
+    writeDiskScoreCache(stateFile, entries);
+  }
+}
+
+export function codexQuota(env = process.env, now = Date.now(), homes = codexHomes(env), options = {}) {
   // Prefer Cindy's managed codex-home when it has session logs so a standalone ~/.codex login does not override it.
   const cindySessions = homes.length > 1 ? homes.slice(1).map(newestSession).filter(Boolean).sort((a, b) => b.mtime - a.mtime) : [];
   const newest = cindySessions[0] || homes.map(newestSession).filter(Boolean).sort((a, b) => b.mtime - a.mtime)[0];
   if (!newest) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'no Codex session log'};
+  const stateFile = resolveQuotaStateFile(env, homes, options);
+  const failQuota = reason => {
+    const failingSinceMs = recordQuotaFailure(stateFile, newest.home, reason, newest.file, now);
+    const dispatchable = now - failingSinceMs < DEFAULT_USAGE_MAX_AGE_HOURS * 3600000;
+    return {source: 'codex-cli-sessions', status: 'unknown', state: ACCOUNT_STATES.USAGE_FAILING, dispatchable,
+      failing_since: new Date(failingSinceMs).toISOString(), error: reason, reason, file: newest.file};
+  };
   const cacheKey = `${newest.file}:${newest.mtime}:${newest.size}`;
   let limits = quotaCache.key === cacheKey ? quotaCache.limits : undefined;
   if (limits === undefined) {
@@ -697,45 +738,54 @@ export function codexQuota(env = process.env, now = Date.now(), homes = codexHom
     try {
       text = readTail(newest.file, newest.size);
     } catch {
-      return {source: 'codex-cli-sessions', status: 'unknown', state: ACCOUNT_STATES.USAGE_FAILING, dispatchable: false,
-        error: 'unreadable Codex session log', reason: 'unreadable Codex session log', file: newest.file};
+      return failQuota('unreadable Codex session log');
     }
-    const at = text.lastIndexOf('"rate_limits"');
     limits = null;
-    if (at >= 0) {
-      const line = text.slice(text.lastIndexOf('\n', at) + 1, (text.indexOf('\n', at) + 1 || text.length + 1) - 1);
+    let sawRateLimits = false;
+    for (let from = Infinity, at; (at = text.lastIndexOf('"rate_limits"', from)) >= 0;) {
+      sawRateLimits = true;
+      const lineStart = text.lastIndexOf('\n', at) + 1;
+      const line = text.slice(lineStart, (text.indexOf('\n', at) + 1 || text.length + 1) - 1);
       try {
         const row = JSON.parse(line);
-        limits = row.payload?.rate_limits || row.rate_limits || row.msg?.rate_limits || null;
-      } catch {
-        limits = {corrupt: true};
-      }
+        const candidate = row.payload?.rate_limits || row.rate_limits || row.msg?.rate_limits || null;
+        if (candidate && typeof candidate === 'object') {
+          limits = candidate;
+          break;
+        }
+      } catch {}
+      if (lineStart <= 1) break;
+      from = lineStart - 2;
     }
+    if (!limits && sawRateLimits) limits = {corrupt: true};
     quotaCache = {key: cacheKey, limits};
   }
-  if (!limits) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'no rate-limit snapshot in the newest session'};
-  if (limits.corrupt) {
-    return {source: 'codex-cli-sessions', status: 'unknown', state: ACCOUNT_STATES.USAGE_FAILING, dispatchable: false,
-      error: 'corrupt rate-limit snapshot in Codex session log', reason: 'corrupt rate-limit snapshot in Codex session log', file: newest.file};
+  if (!limits) {
+    clearQuotaFailure(stateFile, newest.home);
+    return {source: 'codex-cli-sessions', status: 'unknown', reason: 'no rate-limit snapshot in the newest session'};
   }
+  if (limits.corrupt) {
+    return failQuota('corrupt rate-limit snapshot in Codex session log');
+  }
+  clearQuotaFailure(stateFile, newest.home);
   const plan = normalizePlan('codex', limits.plan_type);
   if (plan.inactive) {
-    return {source: 'codex-cli-sessions', status: ACCOUNT_STATES.PLAN_INACTIVE, state: ACCOUNT_STATES.PLAN_INACTIVE, dispatchable: false,
-      reason: `subscription is not active (${plan.raw})`, plan: plan.raw, plan_key: plan.key, observed_at: new Date(newest.mtime).toISOString(), file: newest.file};
+    const ageMs = Math.max(0, now - newest.mtime);
+    const staleInactive = ageMs > DEFAULT_USAGE_MAX_AGE_HOURS * 3600000;
+    const reason = staleInactive
+      ? `subscription is not active (${plan.raw}) in session log from ${(ageMs / 3600000).toFixed(1)}h ago; dispatching to refresh telemetry`
+      : `subscription is not active (${plan.raw})`;
+    return {source: 'codex-cli-sessions', status: staleInactive ? 'unknown' : ACCOUNT_STATES.PLAN_INACTIVE,
+      state: ACCOUNT_STATES.PLAN_INACTIVE, dispatchable: staleInactive, stale_plan_inactive: staleInactive,
+      reason, plan: plan.raw, plan_key: plan.key, observed_at: new Date(newest.mtime).toISOString(), file: newest.file};
   }
   const windows = ['primary', 'secondary'].map(k => limits?.[k]).filter(w => w && Number.isFinite(w.used_percent))
     // A window that has already reset says nothing about now.
     .filter(w => !w.resets_at || w.resets_at * 1000 > now);
   if (!windows.length) return {source: 'codex-cli-sessions', status: 'unknown', reason: 'snapshot windows have reset', plan: plan.raw, plan_key: plan.key, file: newest.file};
   const used = Math.max(...windows.map(w => w.used_percent));
-  const ageMs = now - newest.mtime;
-  const stale = ageMs > DEFAULT_USAGE_FRESH_HOURS * 3600000;
-  const state = stale ? ACCOUNT_STATES.USAGE_FAILING : ACCOUNT_STATES.READY;
-  const dispatchable = !stale || ageMs < DEFAULT_USAGE_MAX_AGE_HOURS * 3600000;
-  const observedAt = new Date(newest.mtime).toISOString();
-  return {source: 'codex-cli-sessions', status: used >= 95 ? 'exhausted' : used >= 80 ? 'high' : 'ok', state, dispatchable,
-    ...(stale ? {reason: `usage reading failing: no successful reading for ${(ageMs / 3600000).toFixed(1)}h`} : {}),
-    used_percent: used, observed_at: observedAt, last_success_at: observedAt, plan: plan.raw, plan_key: plan.key, file: newest.file};
+  return {source: 'codex-cli-sessions', status: used >= 95 ? 'exhausted' : used >= 80 ? 'high' : 'ok', state: ACCOUNT_STATES.READY, dispatchable: true,
+    used_percent: used, observed_at: new Date(newest.mtime).toISOString(), plan: plan.raw, plan_key: plan.key, file: newest.file};
 }
 
 // ---- routing -------------------------------------------------------------------------------------------------------
@@ -824,6 +874,7 @@ export function routeTask(task, catalog, {
   classification = null,
   config = null,
   cacheFile = null,
+  stateFile = null,
   useCache = true,
   constraintModel = null,
   pinnedModel = null,
@@ -996,7 +1047,7 @@ export function routeTask(task, catalog, {
   const rows = allCooling ? runnable : runnable.filter(row => !coolingOf(row));
   // Connections the Codex CLI's telemetry describes: only an explicitly matched providerId, or the sole Codex connection.
   const codexProviders = new Set(rows.filter(r => r.route.agentKind === 'codex').map(r => r.route.providerId));
-  const codex = quota || (codexProviders.size === 1 ? codexQuota(env, now)
+  const codex = quota || (codexProviders.size === 1 ? codexQuota(env, now, codexHomes(env), {stateFile, cacheFile, config})
     : {source: 'codex-cli-sessions', status: 'unknown', reason: codexProviders.size ? 'multiple Codex connections' : 'no Codex connection in catalog'});
   const matchesCodex = providerId => codexProviders.has(providerId) &&
     (codex.providerId ? providerId === codex.providerId : codexProviders.size === 1);
@@ -1007,16 +1058,25 @@ export function routeTask(task, catalog, {
     hasCodexUsage || codex.state || codex.error || codex.http_status || codex.error_code || codex.disabled ||
     codexPlan.inactive || (codex.status && codex.status !== 'unknown')
   );
-  const codexAccounts = boundCodex && hasCodexState ? listQuotaAccounts({[`codex/${boundCodex}`]: {
+  const rawCodexAccounts = boundCodex && hasCodexState ? listQuotaAccounts({[`codex/${boundCodex}`]: {
     ...codex,
     provider: 'codex',
     account: boundCodex,
     plan: codex.plan ?? codex.plan_type ?? (hasCodexUsage ? 'pro' : null),
     status: codex.state || (hasCodexUsage && !codex.error && !codex.http_status && !codex.error_code && !codex.stale ? ACCOUNT_STATES.READY : codex.status),
+    error: codex.error ?? (codex.state === ACCOUNT_STATES.USAGE_FAILING || codex.status === ACCOUNT_STATES.USAGE_FAILING ? (codex.reason || 'reading failed') : null),
     used: codex.used_percent ?? codex.used,
-    fetched_at: codex.observed_at ?? codex.fetched_at ?? null,
-    last_success_at: codex.last_success_at ?? codex.observed_at ?? null,
+    fetched_at: codex.fetched_at ?? null,
+    last_success_at: codex.last_success_at ?? null,
   }}, now) : [];
+  const codexAccounts = codex.stale_plan_inactive
+    ? rawCodexAccounts.map(a => ({
+        ...a,
+        dispatchable: true,
+        reason: codex.reason,
+        warnings: [`${a.key}: ${ACCOUNT_STATES.PLAN_INACTIVE}: ${codex.reason}`],
+      }))
+    : rawCodexAccounts;
   const quotaAccounts = callerAccounts ? listQuotaAccounts(callerAccounts, now) : codexAccounts;
   const accountWarnings = quotaAccounts.flatMap(a => a.warnings);
   const accountOf = row => quotaAccounts.find(a =>

@@ -252,12 +252,27 @@
         : 'No input was accepted. Cleanup archives or hands back the draft.'
     };
   }
+  function accountNotice(record) {
+    const src=record?.router?.decision || record?.router;
+    const warnings=Array.isArray(src?.warnings) ? src.warnings : [];
+    const accounts=Array.isArray(src?.accounts) ? src.accounts.map(a=>({
+      key:a.key,provider:a.provider,account:a.account,plan:a.plan,state:a.state,dispatchable:a.dispatchable,
+      ...(a.reason ? {reason:a.reason} : {}),
+      ...(a.failing_since ? {failing_since:a.failing_since} : {}),
+    })) : [];
+    return {
+      ...(warnings[0] ? {warnings} : {}),
+      ...(accounts[0] ? {accounts} : {}),
+    };
+  }
   function unconfirmed(record,operation) {
     const why={unknown_create:'Cindy may have created the draft, but its answer never arrived. Inspect the Cindy task list; nothing is created again.',
       unknown_send:'Delivery to task '+record.taskId+' is unconfirmed. Status keeps checking its durable runs; the input is never resent.',
       sending:'The send of task '+record.taskId+' is in progress or unconfirmed.',
       creating:'The draft is being created.'}[record.state];
-    return {status:record.state,operation,taskId:record.taskId || null,error:record.error || null,next_tool:next('status',operation),
+    return {status:record.state,operation,taskId:record.taskId || null,error:record.error || null,
+      ...accountNotice(record),
+      next_tool:next('status',operation),
       next_action:why};
   }
   async function collect(msg,operation,record) {
@@ -265,13 +280,14 @@
     if (!record.runId) {
       if (record.createRejected || record.state==='create_rejected') return {status:'create_rejected',operation,
         taskId:null,task_id:null,error:record.error || null,error_code:record.errorCode || null,executed:false,
+        ...accountNotice(record),
         next_tool:{ghost_id:'agentcompass',tool:'roll',args:{task:record.task || ''}},
         next_action:'No Cindy task was created because tasks.create was refused. Fix the reported issue and call roll again to retry.'};
       if (UNCONFIRMED.has(record.state)) return unconfirmed(record,operation);
       if (['blocked','send_rejected'].includes(record.state)) return {status:record.state,operation,taskId:record.taskId || null,
-        task_id:record.taskId || null,executed:false,error:record.error || null,...draftOutcome(record,operation)};
+        task_id:record.taskId || null,executed:false,error:record.error || null,...accountNotice(record),...draftOutcome(record,operation)};
       if (record.state==='prepared' && ['self','split','launched','blocked'].includes(record.router?.status)) return {operation,...record.router};
-      return {status:record.state,operation,next_tool:next('status',operation),
+      return {status:record.state,operation,...accountNotice(record),next_tool:next('status',operation),
         cause:'No Cindy task was started for this operation yet.'};
     }
     const run=await cindy.tasks.getRun({runId:record.runId});
@@ -304,6 +320,7 @@
       message_pages_read:(record.artifacts || []).length,
       final_result_summary:output.slice(0,4000),summary_shortened:shortened,
       full_result_artifacts:record.artifacts || [],
+      ...accountNotice(record),
       ...(saveError ? {receipt_saved:false,receipt_error:saveError} : {}),
       next_tool:next(done ? 'cleanup' : 'status',operation),
       next_action:done ? 'Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy.' :
@@ -402,6 +419,7 @@
       return {status:record.state,operation,taskId:record.taskId,runId:record.runId || null,
         task_id:record.taskId,run_id:record.runId || null,
         error:record.error || null,error_code:record.errorCode || null,automatic_callback:false,
+        ...accountNotice(record),
         ...(record.state==='send_rejected' ? {executed:false,...draftOutcome(record,operation)} : {next_tool:next('status',operation)}),
         ...(saveError ? {receipt_saved:false,receipt_error:saveError} : {})};
     });

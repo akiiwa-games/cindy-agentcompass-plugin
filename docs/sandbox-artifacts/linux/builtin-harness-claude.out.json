@@ -22,7 +22,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "e2644565a739ce9c358c762ea3e233e173687c37",
+      "operation": "919a5b1a978d45f43a519ec67f68068722f4f923",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -34,7 +34,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "e2644565a739ce9c358c762ea3e233e173687c37"
+        "operation": "919a5b1a978d45f43a519ec67f68068722f4f923"
        }
       }
      }
@@ -50,7 +50,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "e2644565a739ce9c358c762ea3e233e173687c37",
+      "operation": "919a5b1a978d45f43a519ec67f68068722f4f923",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -65,7 +65,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "e2644565a739ce9c358c762ea3e233e173687c37"
+        "operation": "919a5b1a978d45f43a519ec67f68068722f4f923"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -91,7 +91,7 @@
      "ok": true,
      "result": {
       "status": "completed",
-      "operation": "e2644565a739ce9c358c762ea3e233e173687c37",
+      "operation": "919a5b1a978d45f43a519ec67f68068722f4f923",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -102,14 +102,14 @@
       "final_result_summary": "[Worker final report] harness-claude",
       "summary_shortened": false,
       "full_result_artifacts": [
-       "<sandbox>/home/.agent-compass/cindy-plugin/e2644565a739ce9c358c762ea3e233e173687c37/messages-ce2b08588615fb26.json",
-       "<sandbox>/home/.agent-compass/cindy-plugin/e2644565a739ce9c358c762ea3e233e173687c37/messages-280a29d6f762999b.json"
+       "<sandbox>/home/.agent-compass/cindy-plugin/919a5b1a978d45f43a519ec67f68068722f4f923/messages-6273f929afad6aab.json",
+       "<sandbox>/home/.agent-compass/cindy-plugin/919a5b1a978d45f43a519ec67f68068722f4f923/messages-280a29d6f762999b.json"
       ],
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "cleanup",
        "args": {
-        "operation": "e2644565a739ce9c358c762ea3e233e173687c37"
+        "operation": "919a5b1a978d45f43a519ec67f68068722f4f923"
        }
       },
       "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
@@ -126,7 +126,7 @@
      "ok": true,
      "result": {
       "status": "cleaned",
-      "operation": "e2644565a739ce9c358c762ea3e233e173687c37",
+      "operation": "919a5b1a978d45f43a519ec67f68068722f4f923",
       "taskId": "task-1",
       "task_id": "task-1"
      }
@@ -146,7 +146,7 @@
   },
   {
    "name": "create",
-   "requestKey": "e2644565a739ce9c358c762ea3e233e173687c37:create",
+   "requestKey": "919a5b1a978d45f43a519ec67f68068722f4f923:create",
    "route": {
     "agentKind": "cc",
     "providerId": "anthropic",
@@ -160,7 +160,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "e2644565a739ce9c358c762ea3e233e173687c37:send",
+   "requestKey": "919a5b1a978d45f43a519ec67f68068722f4f923:send",
    "chars": 431
   },
   {
@@ -204,7 +204,7 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 28420,
+   "chars": 28418,
    "expectJson": true,
    "callId": "call-1"
   }
@@ -231,12 +231,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>/report/cindy/cindy-sent-run-1.txt",
-   "sha256": "9ede849c0def0d17970e1ca9399e2e460df465e1016234348a3c4ce39b09254a",
+   "sha256": "932c2c062f0a05ae56b1860d061cfae926e614d7af03eef57ef44cb1a198ddef",
    "chars": 431
   }
  ],
  "prepared": {
-  "operation": "e2644565a739ce9c358c762ea3e233e173687c37",
+  "operation": "919a5b1a978d45f43a519ec67f68068722f4f923",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -279,17 +279,19 @@
      "multi_task": false,
      "task_count": "1",
      "self": false,
-     "wants_fast": false
+     "wants_fast": false,
+     "read_only_review": false
     },
     "profile_source": "classifier",
     "classifier_model": "fixture-quick-text",
     "realtime_loop": false,
+    "read_only_review": false,
     "classifier_calibration_cases": {
-     "included": 47,
-     "total": 47
+     "included": 53,
+     "total": 53
     },
     "canonical_model": "claude-opus-5-5",
-    "score": 0.3738,
+    "score": 0.3739,
     "components": {
      "fit": 0.913,
      "route_fit": 0.57,
@@ -307,7 +309,8 @@
      "opportunity_cost": 0,
      "effort_penalty": 0,
      "overqualification": 0,
-     "shortfall": 0
+     "shortfall": 0,
+     "harness_factor": 1
     },
     "wants_fast": false,
     "not_routed": [
@@ -335,7 +338,7 @@
       "model": "gpt-6-astra",
       "effort": "high",
       "fast": false,
-      "score": 0.3495,
+      "score": 0.3496,
       "notes": []
      },
      {
@@ -344,7 +347,7 @@
       "model": "chatgpt/gpt-6-astra",
       "effort": "high",
       "fast": false,
-      "score": 0.3495,
+      "score": 0.3496,
       "notes": []
      },
      {
@@ -353,7 +356,7 @@
       "model": "gpt-6-astra",
       "effort": "xhigh",
       "fast": false,
-      "score": 0.3463,
+      "score": 0.3464,
       "notes": []
      },
      {
@@ -362,7 +365,7 @@
       "model": "chatgpt/gpt-6-astra",
       "effort": "xhigh",
       "fast": false,
-      "score": 0.3463,
+      "score": 0.3464,
       "notes": []
      }
     ]
@@ -378,7 +381,7 @@
    "fast": false,
    "modeId": "bypassPermissions"
   },
-  "prompt": "Review the diff in src/auth for security regressions and subtle bugs (read-only review). [claude-1794039603714]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Review the diff in src/auth for security regressions and subtle bugs (read-only review). [claude-1794083694375]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>/work dir",
   "mappings": [],
   "attempts": 1
@@ -415,7 +418,7 @@
     "effort": "high",
     "fastMode": false
    },
-   "inputText": "Review the diff in src/auth for security regressions and subtle bugs (read-only review). [claude-1794039603714]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "inputText": "Review the diff in src/auth for security regressions and subtle bugs (read-only review). [claude-1794083694375]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
    "outputMessageId": "out-final"
   }
  ],

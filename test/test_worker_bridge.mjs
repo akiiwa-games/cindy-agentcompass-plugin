@@ -827,7 +827,7 @@ test('M1, fifth review: through the worker, an unquoted count splits with its co
   }
 });
 
-test('Step 2 & 3 regression: read_only_review with nonzero code_complexity and inactive Codex plan return structured blocked receipts through worker.cjs', () => {
+test('Step 2 & 3 regression: read_only_review with nonzero code_complexity, inactive Codex plan, and quota-state.json first-seen persistence through worker.cjs', () => {
   const p = plugin(codex, 0, 'none');
   const badReview = classifyWith(p, 'Review PR #42.', id => classified({read_only_review: true, code_complexity: 1}, id));
   assert.deepEqual(stateOf(badReview), ['blocked', 'invalid_classifier_output']);
@@ -846,4 +846,24 @@ test('Step 2 & 3 regression: read_only_review with nonzero code_complexity and i
   assert.equal(blockedAccount.result.router.decision.accounts[0].state, 'plan_inactive');
   assert.equal(blockedAccount.result.router.decision.accounts[0].dispatchable, false);
   assert.equal(receipts(p).length, 0, 'a blocked account check writes no prepared receipt');
+
+  // Corrupt session log: first sight persists failing_since in <stateHome>/quota-state.json and still dispatches; after 6h in quota-state.json, excludes and blocks.
+  fs.writeFileSync(sessionFile, '{"payload":{"rate_limits":BROKEN_JSON\n');
+  const [firstCorrupt] = rpc(p, [prepare(p, 'Fix corrupt-first.py', 2, CATALOG, withProfile())]);
+  assert.equal(firstCorrupt.result.state, 'prepared', 'first-seen corrupt log still dispatches');
+  assert.equal(firstCorrupt.result.router.status, 'native');
+  assert.equal(firstCorrupt.result.router.decision.accounts[0].state, 'usage_failing');
+  assert.equal(firstCorrupt.result.router.decision.accounts[0].dispatchable, true);
+  assert.ok(firstCorrupt.result.router.decision.warnings.some(w => /usage_failing.*corrupt rate-limit snapshot/.test(w)));
+  const quotaStatePath = path.join(p.stateHome, 'quota-state.json');
+  assert.ok(fs.existsSync(quotaStatePath), 'worker.cjs persists quota-state.json in stateHome');
+
+  const persisted = JSON.parse(fs.readFileSync(quotaStatePath, 'utf8'));
+  for (const key of Object.keys(persisted.entries)) {
+    persisted.entries[key].failing_since = Date.now() - 6 * 3600 * 1000 - 1000;
+  }
+  fs.writeFileSync(quotaStatePath, JSON.stringify(persisted, null, 2));
+  const [expiredCorrupt] = rpc(p, [prepare(p, 'Fix corrupt-6h.py', 3, CATALOG, withProfile())]);
+  assert.deepEqual(stateOf(expiredCorrupt), ['blocked', 'account_unavailable']);
+  assert.equal(expiredCorrupt.result.router.decision.accounts[0].dispatchable, false);
 });

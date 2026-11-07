@@ -2,6 +2,8 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import vm from 'node:vm';
 import test from 'node:test';
 import {clearClassifierCache, prepareClassifierRequest, routeTask} from '../plugin/engine/route.mjs';
@@ -635,7 +637,7 @@ function classifierFixture(options={}) {
             classifier:{attemptId:'attempt-'+operation.slice(0,8),prompt:req.prompt,timeoutMs:options.timeoutMs ?? req.timeoutMs}}};
         }
         const routed=routeTask(params.task,params.catalog,{
-          quota:{source:'test',status:'ok',used_percent:15},
+          ...(options.routeOptions || {quota:{source:'test',status:'ok',used_percent:15}}),
           profile:params.profile ?? null,
           classification:params.classification ?? null,
         });
@@ -654,7 +656,7 @@ function classifierFixture(options={}) {
     }},
     tasks:{
       capabilities:async()=>({operations:['models','create','send','get','getRun','listRuns','readMessages','cancel','archive'],exactRoute:true,createPermissionMode:true}),
-      models:async()=>structuredClone(realCatalog),
+      models:async()=>structuredClone(options.catalog || realCatalog),
       create:async request=>{
         calls.push(['create',structuredClone(request)]);
         return {taskId:'worker-task-'+(++workerCreates),revision:1,resolvedConfig:{...request.route},permissionMode:request.permissionMode,planModeEnabled:false,workingDir:ctx.workdir};
@@ -866,4 +868,48 @@ test('m3: through the logic page, the same answer starts the same route for ever
   const expected=await decide(BASE_TASK);
   assert.equal(expected.status,'running');
   for (const text of KEYWORD_CORPUS) assert.deepEqual(await decide(text),expected,text.slice(0,60));
+});
+
+test('M1 regression: native roll and status returns surface warnings and compact accounts when a log is corrupt or Codex is excluded and rerouted to Claude',async()=>{
+  clearClassifierCache();
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cindy-m1-'));
+  try {
+    const stateFile=path.join(dir,'quota-state.json');
+    const corruptHome=path.join(dir,'corrupt');
+    const day=path.join(corruptHome,'sessions','2026','11','07');
+    fs.mkdirSync(day,{recursive:true});
+    const corruptFile=path.join(day,'rollout-1.jsonl');
+    const now=Date.parse('2026-11-07T00:00:00Z');
+    fs.writeFileSync(corruptFile,'{"payload":{"rate_limits":BROKEN_JSON\n');
+    fs.utimesSync(corruptFile,new Date(now-60000),new Date(now-60000));
+
+    // 1. First-seen corrupt log on realCatalog: dispatches natively and surfaces warnings + accounts on roll and status.
+    const f1=classifierFixture({routeOptions:{env:{CODEX_HOME:corruptHome},stateFile,now}});
+    const roll1=(await f1.send('roll',{task:'Fix bug in m1-first.py'})).result;
+    assert.equal(roll1.status,'running');
+    assert.ok(Array.isArray(roll1.warnings) && roll1.warnings.some(w=>/codex\/openai: usage_failing.*corrupt rate-limit snapshot/.test(w)),JSON.stringify(roll1));
+    assert.equal(roll1.accounts?.[0]?.key,'codex/openai');
+    assert.equal(roll1.accounts?.[0]?.state,'usage_failing');
+    assert.equal(roll1.accounts?.[0]?.dispatchable,true);
+    assert.equal(roll1.accounts?.[0]?.failing_since,new Date(now).toISOString());
+
+    const status1=(await f1.send('status',{operation:roll1.operation})).result;
+    assert.equal(status1.status,'running');
+    assert.deepEqual(status1.warnings,roll1.warnings);
+    assert.deepEqual(status1.accounts,roll1.accounts);
+
+    // 2. After 6h of continuous failure with Claude signed in: Codex is excluded, rerouted to Claude, and roll still surfaces the Codex warning and accounts.
+    clearClassifierCache();
+    const withClaude={models:[...realCatalog.models,
+      {route:{agentKind:'cc',providerId:'anthropic',model:'claude-sonnet-5-5',effort:'high',fastMode:false},efforts:['low','medium','high','max'],supportsFastMode:false}]};
+    const f2=classifierFixture({catalog:withClaude,routeOptions:{env:{CODEX_HOME:corruptHome},stateFile,now:now+6*3600*1000}});
+    const roll2=(await f2.send('roll',{task:'Fix bug in m1-reroute.py'})).result;
+    assert.equal(roll2.status,'running');
+    assert.equal(f2.named('create')[0]?.route?.agentKind,'cc');
+    assert.ok(Array.isArray(roll2.warnings) && roll2.warnings.some(w=>/codex\/openai: usage_failing, excluded from dispatch/.test(w)),JSON.stringify(roll2));
+    assert.equal(roll2.accounts?.[0]?.state,'usage_failing');
+    assert.equal(roll2.accounts?.[0]?.dispatchable,false);
+  } finally {
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
 });

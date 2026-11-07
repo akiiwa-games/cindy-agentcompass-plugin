@@ -131,17 +131,24 @@ keyword, regex or length heuristics on the task text:
 - **native**: otherwise the allocator (`rankCandidates`) scores every Claude, Codex and Pi row with each effort the row offers against the
   profile. The best one is started. Where one model at one effort is offered by both Pi and its native CLI at the same score, Pi wins for
   read-and-report work and the native CLI otherwise, as in AgentCompass; this order is no part of a score and moves no other model. `realtime_loop` is preserved on both `profile` and `decision`.
-- **quota**: the newest rate-limit snapshot the Codex CLI wrote to its session logs (`$CODEX_HOME`, else `~/.codex` and Cindy's own
-  `<app data>/CindyGlobal/codex-home`) lowers the score of routes on that connection when it is high or exhausted. The decision lists
-  `quota_penalized_routes` and warns when the chosen route itself is short of quota.
-- **fast mode**: a task whose profile sets `wants_fast: true` (or `urgency: "high"`) gets Codex fast mode when the row supports it and the
-  quota snapshot shows less than 60% used. Unknown quota never turns fast mode on.
+- **quota and account state**: the newest rate-limit snapshot the Codex CLI wrote to its session logs (`$CODEX_HOME`, else `~/.codex` and
+  Cindy's own `<app data>/CindyGlobal/codex-home`) lowers the score of routes on that connection when it is high or exhausted. The decision
+  lists `quota_penalized_routes` and warns when the chosen route itself is short of quota. Accounts are tracked as `ready`, `plan_inactive`,
+  `usage_failing` or `auth_failed`, and `roll` / `status` surface `warnings` and compact `accounts`. Because Codex writes session logs only
+  while running, session log `mtime` is never treated as a reading failure: snapshots whose windows have reset are treated as unknown quota
+  (dispatchable, no penalty, no fast mode, no warning). True read failures (unreadable file or corrupt `rate_limits` JSON with no valid
+  earlier snapshot in the file) persist their first-seen time in `quota-state.json` in the state directory, warn immediately while still
+  dispatching, exclude the account after 6 h of continuous failure, and clear when a healthy log is read. A `plan_inactive` reading (such
+  as `free`) within 6 h excludes the account; one older than 6 h warns and dispatches so the run refreshes telemetry.
+- **fast mode**: a task whose profile sets `wants_fast: true` gets Codex fast mode when the row supports it and the quota snapshot shows
+  less than 60% used (`urgency: "high"` is informational and never turns fast mode on by itself). Unknown quota never turns fast mode on.
 - **refused routes cool down**: when Cindy refuses `tasks.create` because of the route itself (`ROUTE_UNAVAILABLE`,
   `UNSUPPORTED_CAPABILITY`, `PERMISSION_DENIED`), that route is skipped for 15 min, doubling with each consecutive refusal up to 2 h,
   so the retry goes elsewhere (`route-cooldowns.json` in the state directory; the decision lists `cooling_down`). A task created on
   the route clears it. When every runnable route is cooling down, the roll still routes and warns (`cooldown_warning`).
-- **blocked**: a catalog with no Claude, Codex or Pi model, an unavailable/failed classifier without a caller profile, or no route that
-  meets the task's floor, is refused (`status: "blocked"`); nothing is guessed.
+- **blocked**: a catalog with no Claude, Codex or Pi model (`no_runnable_model`), an unavailable/failed classifier without a caller profile,
+  every candidate account excluded (`account_unavailable`), or no route that meets the task's floor (`no_model_meets_floor`), is refused
+  (`status: "blocked"`); nothing is guessed.
 
 Every decision is saved with the receipt (`router.stdout.json`): `profile_source` (`"classifier"`, `"caller"` or `"unavailable"`),
 `classifier_model`, `realtime_loop`, `profile`, chosen route, score components, alternatives and quota.

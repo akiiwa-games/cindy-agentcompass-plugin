@@ -17,7 +17,7 @@
      "ok": true,
      "result": {
       "status": "unknown_send",
-      "operation": "f0e0db03aec073c82540eb4f04ec68cea8bda0b7",
+      "operation": "1142112cc2e8908bf399f24d5b7ccc63fcd65b54",
       "taskId": "task-1",
       "runId": null,
       "task_id": "task-1",
@@ -29,7 +29,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "f0e0db03aec073c82540eb4f04ec68cea8bda0b7"
+        "operation": "1142112cc2e8908bf399f24d5b7ccc63fcd65b54"
        }
       }
      }
@@ -45,14 +45,14 @@
      "ok": true,
      "result": {
       "status": "unknown_send",
-      "operation": "f0e0db03aec073c82540eb4f04ec68cea8bda0b7",
+      "operation": "1142112cc2e8908bf399f24d5b7ccc63fcd65b54",
       "taskId": "task-1",
       "error": "CONNECTION_LOST after the input was accepted",
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "f0e0db03aec073c82540eb4f04ec68cea8bda0b7"
+        "operation": "1142112cc2e8908bf399f24d5b7ccc63fcd65b54"
        }
       },
       "next_action": "Delivery to task task-1 is unconfirmed. Status keeps checking its durable runs; the input is never resent."
@@ -69,7 +69,7 @@
      "ok": true,
      "result": {
       "status": "cleanup_refused",
-      "operation": "f0e0db03aec073c82540eb4f04ec68cea8bda0b7",
+      "operation": "1142112cc2e8908bf399f24d5b7ccc63fcd65b54",
       "taskId": "task-1",
       "state": "unknown_send",
       "archived": false,
@@ -78,7 +78,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "f0e0db03aec073c82540eb4f04ec68cea8bda0b7"
+        "operation": "1142112cc2e8908bf399f24d5b7ccc63fcd65b54"
        }
       }
      }
@@ -98,7 +98,7 @@
   },
   {
    "name": "create",
-   "requestKey": "f0e0db03aec073c82540eb4f04ec68cea8bda0b7:create",
+   "requestKey": "1142112cc2e8908bf399f24d5b7ccc63fcd65b54:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
@@ -112,7 +112,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "f0e0db03aec073c82540eb4f04ec68cea8bda0b7:send",
+   "requestKey": "1142112cc2e8908bf399f24d5b7ccc63fcd65b54:send",
    "chars": 436
   },
   {
@@ -160,12 +160,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "1138e1ecd56cb702e542e286380e53984453f67d7aac835c83ea3e92a0d526d9",
+   "sha256": "520fbddb1106158ef9b5b3388ce274a35369eeaa903ad5841b989ba516cc2e35",
    "chars": 436
   }
  ],
  "prepared": {
-  "operation": "f0e0db03aec073c82540eb4f04ec68cea8bda0b7",
+  "operation": "1142112cc2e8908bf399f24d5b7ccc63fcd65b54",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -310,7 +310,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [630ca504]\nFIXTURE-SCENARIO: ok review2-foreign\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [8cfe71ac]\nFIXTURE-SCENARIO: ok review2-foreign\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1

@@ -928,7 +928,7 @@ const TEXT_CALL_EXCEPTIONS = {
     ],
     'the Codex session logs and their directories: quota': [
       '/^\\d+$/.test(n)', "n.endsWith('.jsonl')", 'files.length', "text.slice(text.indexOf('\\n')+1)", "text.indexOf('\\n')", 'homes.length',
-      'homes.slice(1)', `text.lastIndexOf('"rate_limits"')`, "text.slice(text.lastIndexOf('\\n',at)+1,(text.indexOf('\\n',at)+1||text.length+1)-1)",
+      'homes.slice(1)', `text.lastIndexOf('"rate_limits"',from)`, "text.slice(lineStart,(text.indexOf('\\n',at)+1||text.length+1)-1)",
       "text.lastIndexOf('\\n',at)", "text.indexOf('\\n',at)", 'windows.length', "for(constyearofdesc(path.join(home,'sessions')))",
       'for(constmonthofdesc(year))', 'for(constdayofdesc(month))', 'for(constnameoffiles)',
     ],
@@ -1861,7 +1861,7 @@ test('Step 2 regression: read_only_review requires code_complexity 0 and is surf
 });
 
 test('Step 3 regression: plan normalization matches full name before stripping trailing multiplier, and account states surface warnings and block broken accounts', () => {
-  // Q4: full-name-first plan matching before stripping trailing ×N / xN ('Max ×20' -> max20, not stripped to 'Max' -> max5).
+  // Q4: full-name-first plan matching before stripping trailing ×N ('Max ×20' -> max20, not stripped to 'Max' -> max5).
   assert.deepEqual(normalizePlan('claude', 'Max ×20'), {key: 'max20', raw: 'Max ×20', known: true, inactive: false});
   assert.deepEqual(normalizePlan('claude', 'Max ×5'), {key: 'max5', raw: 'Max ×5', known: true, inactive: false});
   assert.deepEqual(normalizePlan('codex', 'Pro × 5'), {key: 'pro', raw: 'Pro × 5', known: true, inactive: false});
@@ -1877,66 +1877,138 @@ test('Step 3 regression: plan normalization matches full name before stripping t
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-acct-'));
   try {
-    // 1. Corrupt Codex session log -> usage_failing (never had a valid reading -> dispatchable: false), surfaced in warnings.
+    const stateFile = path.join(dir, 'quota-state.json');
+
+    // 1. New user (no sessions directory, empty sessions directory, or empty day directory) -> dispatches on REAL with no warning.
+    const newHome = path.join(dir, 'new-user');
+    fs.mkdirSync(newHome, {recursive: true});
+    const newRoute = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: newHome}, stateFile, now: NOW, profile: makeProfile()});
+    assert.equal(newRoute.status, 'native');
+    assert.equal(newRoute.decision.warnings, undefined);
+
+    // 2. Idle 3h, 7h, and 30h session logs (with un-reset window) -> session log mtime is NOT a reading failure: dispatches on REAL with state 'ready' and no usage_failing warning.
+    for (const idleHours of [3, 7, 30]) {
+      const idleHome = path.join(dir, `idle-${idleHours}h`);
+      const idleDay = path.join(idleHome, 'sessions', '2026', '11', '07');
+      fs.mkdirSync(idleDay, {recursive: true});
+      const idleDate = new Date(NOW - idleHours * 3600 * 1000);
+      const idleFile = path.join(idleDay, 'rollout-1.jsonl');
+      fs.writeFileSync(
+        idleFile,
+        `${JSON.stringify({timestamp: idleDate.toISOString(), payload: {rate_limits: {plan_type: 'pro', secondary: {used_percent: 20, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
+      );
+      fs.utimesSync(idleFile, idleDate, idleDate);
+      const idleRoute = routeTask('Fix util.py', REAL, {
+        env: {CODEX_HOME: idleHome},
+        stateFile,
+        now: NOW,
+        profile: makeProfile(),
+      });
+      assert.equal(idleRoute.status, 'native', `idle ${idleHours}h should dispatch on REAL`);
+      assert.equal(idleRoute.decision.accounts[0].state, 'ready', `idle ${idleHours}h state`);
+      assert.equal(idleRoute.decision.accounts[0].dispatchable, true, `idle ${idleHours}h dispatchable`);
+      assert.equal(idleRoute.decision.warnings, undefined, `idle ${idleHours}h must not warn usage_failing`);
+    }
+
+    // Old snapshot whose windows have reset -> treated as unknown quota: dispatchable, no penalty, no fast mode, no usage_failing warning.
+    const resetHome = path.join(dir, 'reset-window');
+    const resetDay = path.join(resetHome, 'sessions', '2026', '11', '05');
+    fs.mkdirSync(resetDay, {recursive: true});
+    const resetDate = new Date(NOW - 30 * 3600 * 1000);
+    const resetFile = path.join(resetDay, 'rollout-1.jsonl');
+    fs.writeFileSync(
+      resetFile,
+      `${JSON.stringify({timestamp: resetDate.toISOString(), payload: {rate_limits: {plan_type: 'pro', primary: {used_percent: 96, resets_at: Math.floor((NOW - 3600000) / 1000)}}}})}\n`,
+    );
+    fs.utimesSync(resetFile, resetDate, resetDate);
+    const resetRoute = routeTask('Fix util.py', REAL, {
+      env: {CODEX_HOME: resetHome},
+      stateFile,
+      now: NOW,
+      profile: makeProfile({wants_fast: true, urgency: 'high'}),
+    });
+    assert.equal(resetRoute.status, 'native');
+    assert.equal(resetRoute.route.bundle.fast, false, 'unknown quota after window reset does not turn fast mode on');
+    assert.equal(resetRoute.decision.quota.status, 'unknown');
+    assert.equal(resetRoute.decision.quota_penalized_routes, 0);
+    assert.equal(resetRoute.decision.warnings, undefined);
+
+    // Partial last line (mid-write) with an earlier valid rate_limits snapshot in the same file -> uses the earlier valid snapshot, not usage_failing.
+    const partialHome = path.join(dir, 'partial');
+    const partialDay = path.join(partialHome, 'sessions', '2026', '11', '07');
+    fs.mkdirSync(partialDay, {recursive: true});
+    const partialFile = path.join(partialDay, 'rollout-1.jsonl');
+    fs.writeFileSync(
+      partialFile,
+      `${JSON.stringify({timestamp: new Date(NOW - 60000).toISOString(), payload: {rate_limits: {plan_type: 'pro', primary: {used_percent: 25, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n` +
+      '{"payload":{"rate_limits":{"plan_type":"pro","primary":{"used_per',
+    );
+    const qPartial = codexQuota({CODEX_HOME: partialHome}, NOW, codexHomes({CODEX_HOME: partialHome}), {stateFile});
+    assert.equal(qPartial.state, 'ready');
+    assert.equal(qPartial.used_percent, 25);
+
+    // 3. Corrupt Codex session log -> first sight records failing_since in quota-state.json, warns and dispatches; at 6h excludes; reading a healthy log clears the failure record.
     const corruptHome = path.join(dir, 'corrupt');
     const corruptDay = path.join(corruptHome, 'sessions', '2026', '11', '07');
     fs.mkdirSync(corruptDay, {recursive: true});
     const corruptFile = path.join(corruptDay, 'rollout-1.jsonl');
     fs.writeFileSync(corruptFile, '{"payload":{"rate_limits":BROKEN_JSON\n');
     fs.utimesSync(corruptFile, new Date(NOW - 60000), new Date(NOW - 60000));
-    const qCorrupt = codexQuota({CODEX_HOME: corruptHome}, NOW);
-    assert.equal(qCorrupt.state, 'usage_failing');
-    assert.match(qCorrupt.error, /corrupt rate-limit snapshot/);
-    const blockedCorrupt = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: corruptHome}, now: NOW, profile: makeProfile()});
-    assert.deepEqual([blockedCorrupt.status, blockedCorrupt.decision.reason], ['blocked', 'account_unavailable']);
-    assert.equal(blockedCorrupt.decision.accounts[0].state, 'usage_failing');
-    assert.equal(blockedCorrupt.decision.accounts[0].dispatchable, false);
-    assert.ok(blockedCorrupt.decision.warnings.some(w => /usage_failing/.test(w)), JSON.stringify(blockedCorrupt.decision.warnings));
 
-    // When a healthy Claude connection is available alongside the failing Codex connection, routing excludes Codex and dispatches to Claude while surfacing the Codex warning.
-    const fallbackToClaude = routeTask('Fix util.py', WITH_CLAUDE, {env: {CODEX_HOME: corruptHome}, now: NOW, profile: makeProfile()});
-    assert.deepEqual([fallbackToClaude.status, fallbackToClaude.route.bundle.harness], ['native', 'claude']);
-    assert.ok(fallbackToClaude.decision.warnings.some(w => /codex\/openai: usage_failing/.test(w)));
-
-    // 2. Stale reading (3h old: >2h fresh threshold, <6h max age) -> state: usage_failing, dispatchable: true, warning surfaced, fast mode off.
-    const staleHome = path.join(dir, 'stale');
-    const staleDay = path.join(staleHome, 'sessions', '2026', '11', '07');
-    fs.mkdirSync(staleDay, {recursive: true});
-    const staleDate = new Date(NOW - 3 * 3600 * 1000);
-    const staleFile = path.join(staleDay, 'rollout-1.jsonl');
-    fs.writeFileSync(
-      staleFile,
-      `${JSON.stringify({timestamp: staleDate.toISOString(), payload: {rate_limits: {plan_type: 'pro', secondary: {used_percent: 20, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
-    );
-    fs.utimesSync(staleFile, staleDate, staleDate);
-    const staleRoute = routeTask('Fix util.py', REAL, {
-      env: {CODEX_HOME: staleHome},
+    // First seen at NOW: warns and still dispatches on REAL.
+    const firstSeenCorrupt = routeTask('Fix util.py', REAL, {
+      env: {CODEX_HOME: corruptHome},
+      stateFile,
       now: NOW,
       profile: makeProfile({wants_fast: true, urgency: 'high'}),
     });
-    assert.equal(staleRoute.status, 'native');
-    assert.equal(staleRoute.route.bundle.fast, false, 'fast mode is disabled when usage telemetry is failing/stale');
-    assert.equal(staleRoute.decision.accounts[0].state, 'usage_failing');
-    assert.equal(staleRoute.decision.accounts[0].dispatchable, true);
-    assert.ok(staleRoute.decision.warnings.some(w => /usage_failing/.test(w)));
+    assert.equal(firstSeenCorrupt.status, 'native', 'first-seen corrupt log dispatches so a new run can write a fresh log');
+    assert.equal(firstSeenCorrupt.route.bundle.fast, false, 'fast mode off when usage reading is failing');
+    assert.equal(firstSeenCorrupt.decision.accounts[0].state, 'usage_failing');
+    assert.equal(firstSeenCorrupt.decision.accounts[0].dispatchable, true);
+    assert.equal(firstSeenCorrupt.decision.accounts[0].failing_since, new Date(NOW).toISOString());
+    assert.ok(firstSeenCorrupt.decision.warnings.some(w => /usage_failing.*corrupt rate-limit snapshot.*excluded after 6\.0h/.test(w)), JSON.stringify(firstSeenCorrupt.decision.warnings));
+    assert.ok(fs.existsSync(stateFile), 'first-seen failure is persisted to quota-state.json');
 
-    // 3. Expired reading (7h old: >6h max age) -> state: usage_failing, dispatchable: false -> blocked on REAL.
-    const expiredHome = path.join(dir, 'expired');
-    const expiredDay = path.join(expiredHome, 'sessions', '2026', '11', '07');
-    fs.mkdirSync(expiredDay, {recursive: true});
-    const expiredDate = new Date(NOW - 7 * 3600 * 1000);
-    const expiredFile = path.join(expiredDay, 'rollout-1.jsonl');
+    // At NOW + 3h: still within 6h grace window, keeps original failing_since, warns and dispatches.
+    const midCorrupt = routeTask('Fix util.py', REAL, {
+      env: {CODEX_HOME: corruptHome},
+      stateFile,
+      now: NOW + 3 * 3600 * 1000,
+      profile: makeProfile(),
+    });
+    assert.equal(midCorrupt.status, 'native');
+    assert.equal(midCorrupt.decision.accounts[0].dispatchable, true);
+    assert.equal(midCorrupt.decision.accounts[0].failing_since, new Date(NOW).toISOString());
+
+    // At NOW + 6h: 6h elapsed since first seen -> dispatchable: false -> blocked on REAL, rerouted to Claude on WITH_CLAUDE.
+    const sixHourNow = NOW + 6 * 3600 * 1000;
+    const blockedCorrupt = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: corruptHome}, stateFile, now: sixHourNow, profile: makeProfile()});
+    assert.deepEqual([blockedCorrupt.status, blockedCorrupt.decision.reason], ['blocked', 'account_unavailable']);
+    assert.equal(blockedCorrupt.decision.accounts[0].state, 'usage_failing');
+    assert.equal(blockedCorrupt.decision.accounts[0].dispatchable, false);
+    assert.ok(blockedCorrupt.decision.warnings.some(w => /usage_failing, excluded from dispatch/.test(w)), JSON.stringify(blockedCorrupt.decision.warnings));
+
+    const fallbackToClaude = routeTask('Fix util.py', WITH_CLAUDE, {env: {CODEX_HOME: corruptHome}, stateFile, now: sixHourNow, profile: makeProfile()});
+    assert.deepEqual([fallbackToClaude.status, fallbackToClaude.route.bundle.harness], ['native', 'claude']);
+    assert.ok(fallbackToClaude.decision.warnings.some(w => /codex\/openai: usage_failing, excluded from dispatch/.test(w)));
+
+    // Healthy log written at NOW + 7h clears the persisted failure record in quota-state.json.
+    const healthyNow = NOW + 7 * 3600 * 1000;
     fs.writeFileSync(
-      expiredFile,
-      `${JSON.stringify({timestamp: expiredDate.toISOString(), payload: {rate_limits: {plan_type: 'pro', secondary: {used_percent: 20, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
+      corruptFile,
+      `${JSON.stringify({timestamp: new Date(healthyNow).toISOString(), payload: {rate_limits: {plan_type: 'pro', primary: {used_percent: 15, resets_at: Math.floor((healthyNow + 86400000) / 1000)}}}})}\n`,
     );
-    fs.utimesSync(expiredFile, expiredDate, expiredDate);
-    const expiredRoute = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: expiredHome}, now: NOW, profile: makeProfile()});
-    assert.deepEqual([expiredRoute.status, expiredRoute.decision.reason], ['blocked', 'account_unavailable']);
-    assert.equal(expiredRoute.decision.accounts[0].state, 'usage_failing');
-    assert.equal(expiredRoute.decision.accounts[0].dispatchable, false);
+    fs.utimesSync(corruptFile, new Date(healthyNow), new Date(healthyNow));
+    const recovered = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: corruptHome}, stateFile, now: healthyNow, profile: makeProfile()});
+    assert.equal(recovered.status, 'native');
+    assert.equal(recovered.decision.accounts[0].state, 'ready');
+    assert.equal(recovered.decision.accounts[0].dispatchable, true);
+    assert.equal(recovered.decision.warnings, undefined);
+    const savedAfterRecovery = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+    assert.equal(savedAfterRecovery.entries[path.resolve(corruptHome)], undefined, 'healthy log clears persisted failure entry');
 
-    // 4. Inactive plan (free) -> state: plan_inactive, dispatchable: false -> blocked on REAL.
+    // 4. Inactive plan (free): fresh (<6h) excludes; old (>6h) warns and dispatches so the run can refresh telemetry.
     const freeHome = path.join(dir, 'free');
     const freeDay = path.join(freeHome, 'sessions', '2026', '11', '07');
     fs.mkdirSync(freeDay, {recursive: true});
@@ -1947,12 +2019,36 @@ test('Step 3 regression: plan normalization matches full name before stripping t
       `${JSON.stringify({timestamp: freshDate.toISOString(), payload: {rate_limits: {plan_type: 'Free × 3', secondary: {used_percent: 10, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
     );
     fs.utimesSync(freeFile, freshDate, freshDate);
-    const freeRoute = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: freeHome}, now: NOW, profile: makeProfile()});
+    const freeRoute = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: freeHome}, stateFile, now: NOW, profile: makeProfile()});
     assert.deepEqual([freeRoute.status, freeRoute.decision.reason], ['blocked', 'account_unavailable']);
     assert.equal(freeRoute.decision.accounts[0].state, 'plan_inactive');
     assert.equal(freeRoute.decision.accounts[0].dispatchable, false);
 
-    // 5. Caller-supplied accounts snapshot with auth_failed and plan_inactive -> formatQuotaAccountList and quotaAccountWarnings surface both, and routeTask blocks when all accounts are excluded.
+    const oldFreeDate = new Date(NOW - 8 * 3600 * 1000);
+    fs.utimesSync(freeFile, oldFreeDate, oldFreeDate);
+    const oldFreeRoute = routeTask('Fix util.py', REAL, {
+      env: {CODEX_HOME: freeHome},
+      stateFile,
+      now: NOW,
+      profile: makeProfile({wants_fast: true, urgency: 'high'}),
+    });
+    assert.equal(oldFreeRoute.status, 'native', 'old (>6h) free session log dispatches with warning to refresh telemetry');
+    assert.equal(oldFreeRoute.route.bundle.fast, false);
+    assert.equal(oldFreeRoute.decision.accounts[0].state, 'plan_inactive');
+    assert.equal(oldFreeRoute.decision.accounts[0].dispatchable, true);
+    assert.ok(oldFreeRoute.decision.warnings.some(w => /codex\/openai: plan_inactive: .*8\.0h ago/.test(w)), JSON.stringify(oldFreeRoute.decision.warnings));
+
+    // 5. Preserve custom reason on usage_failing quota without overwriting it with 'usage_failing' (TODO 1).
+    const customReasonRoute = routeTask('Fix util.py', REAL, {
+      quota: {source: 'test', state: 'usage_failing', reason: 'no successful reading for 3.0h', failing_since: new Date(NOW - 3 * 3600 * 1000).toISOString()},
+      now: NOW,
+      profile: makeProfile(),
+    });
+    assert.equal(customReasonRoute.status, 'native');
+    assert.match(customReasonRoute.decision.accounts[0].reason, /no successful reading for 3\.0h/);
+    assert.doesNotMatch(customReasonRoute.decision.accounts[0].reason, /usage reading failing: usage_failing/);
+
+    // 6. Caller-supplied accounts snapshot with auth_failed and plan_inactive -> formatQuotaAccountList and quotaAccountWarnings surface both, and routeTask blocks when all accounts are excluded.
     const accountsSnapshot = {
       'codex/openai': {provider: 'codex', account: 'openai', plan: 'free', status: 'plan_inactive'},
       'claude/anthropic': {provider: 'claude', account: 'anthropic', plan: 'Max ×20', http_status: 401, error: 'HTTP 401 unauthorized'},

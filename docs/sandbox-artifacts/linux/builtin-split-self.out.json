@@ -58,11 +58,13 @@
        "multi_task": true,
        "task_count": "2",
        "self": false,
-       "wants_fast": false
+       "wants_fast": false,
+       "read_only_review": false
       },
       "profile_source": "classifier",
       "classifier_model": "fixture-quick-text",
       "realtime_loop": false,
+      "read_only_review": false,
       "decision": {
        "profile": {
         "work_kind": "general_implementation",
@@ -84,14 +86,16 @@
         "multi_task": true,
         "task_count": "2",
         "self": false,
-        "wants_fast": false
+        "wants_fast": false,
+        "read_only_review": false
        },
        "profile_source": "classifier",
        "classifier_model": "fixture-quick-text",
        "realtime_loop": false,
+       "read_only_review": false,
        "classifier_calibration_cases": {
-        "included": 47,
-        "total": 47
+        "included": 53,
+        "total": 53
        }
       },
       "next_action": "This assignment holds several independent deliverables. Split it and roll each task separately; nothing was started."
@@ -131,11 +135,13 @@
        "multi_task": true,
        "task_count": "3",
        "self": false,
-       "wants_fast": false
+       "wants_fast": false,
+       "read_only_review": false
       },
       "profile_source": "classifier",
       "classifier_model": "fixture-quick-text",
       "realtime_loop": false,
+      "read_only_review": false,
       "decision": {
        "profile": {
         "work_kind": "general_implementation",
@@ -157,14 +163,16 @@
         "multi_task": true,
         "task_count": "3",
         "self": false,
-        "wants_fast": false
+        "wants_fast": false,
+        "read_only_review": false
        },
        "profile_source": "classifier",
        "classifier_model": "fixture-quick-text",
        "realtime_loop": false,
+       "read_only_review": false,
        "classifier_calibration_cases": {
-        "included": 47,
-        "total": 47
+        "included": 53,
+        "total": 53
        }
       },
       "next_action": "This assignment holds several independent deliverables. Split it and roll each task separately; nothing was started."
@@ -203,11 +211,13 @@
        "multi_task": false,
        "task_count": "1",
        "self": true,
-       "wants_fast": false
+       "wants_fast": false,
+       "read_only_review": false
       },
       "profile_source": "classifier",
       "classifier_model": "fixture-quick-text",
       "realtime_loop": false,
+      "read_only_review": false,
       "decision": {
        "profile": {
         "work_kind": "general_implementation",
@@ -229,14 +239,16 @@
         "multi_task": false,
         "task_count": "1",
         "self": true,
-        "wants_fast": false
+        "wants_fast": false,
+        "read_only_review": false
        },
        "profile_source": "classifier",
        "classifier_model": "fixture-quick-text",
        "realtime_loop": false,
+       "read_only_review": false,
        "classifier_calibration_cases": {
-        "included": 47,
-        "total": 47
+        "included": 53,
+        "total": 53
        }
       },
       "next_action": "Do this in the current session; no Cindy task was started."
@@ -275,11 +287,13 @@
        "multi_task": false,
        "task_count": "1",
        "self": true,
-       "wants_fast": false
+       "wants_fast": false,
+       "read_only_review": false
       },
       "profile_source": "classifier",
       "classifier_model": "fixture-quick-text",
       "realtime_loop": false,
+      "read_only_review": false,
       "decision": {
        "profile": {
         "work_kind": "general_implementation",
@@ -301,14 +315,16 @@
         "multi_task": false,
         "task_count": "1",
         "self": true,
-        "wants_fast": false
+        "wants_fast": false,
+        "read_only_review": false
        },
        "profile_source": "classifier",
        "classifier_model": "fixture-quick-text",
        "realtime_loop": false,
+       "read_only_review": false,
        "classifier_calibration_cases": {
-        "included": 47,
-        "total": 47
+        "included": 53,
+        "total": 53
        }
       },
       "next_action": "Do this in the current session; no Cindy task was started."
@@ -346,25 +362,25 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 28424,
+   "chars": 28422,
    "expectJson": true,
    "callId": "call-1"
   },
   {
    "kind": "oneshot_text",
-   "chars": 28374,
+   "chars": 28372,
    "expectJson": true,
    "callId": "call-2"
   },
   {
    "kind": "oneshot_text",
-   "chars": 28364,
+   "chars": 28362,
    "expectJson": true,
    "callId": "call-3"
   },
   {
    "kind": "oneshot_text",
-   "chars": 28331,
+   "chars": 28329,
    "expectJson": true,
    "callId": "call-4"
   }

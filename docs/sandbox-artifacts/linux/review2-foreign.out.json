@@ -17,7 +17,7 @@
      "ok": true,
      "result": {
       "status": "unknown_send",
-      "operation": "bb2a70528150fe192b4896a2915205c1fcbf1dec",
+      "operation": "bfdf83ae85601f9a126c907a174080a6cc7bbade",
       "taskId": "task-1",
       "runId": null,
       "task_id": "task-1",
@@ -29,7 +29,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "bb2a70528150fe192b4896a2915205c1fcbf1dec"
+        "operation": "bfdf83ae85601f9a126c907a174080a6cc7bbade"
        }
       }
      }
@@ -45,14 +45,14 @@
      "ok": true,
      "result": {
       "status": "unknown_send",
-      "operation": "bb2a70528150fe192b4896a2915205c1fcbf1dec",
+      "operation": "bfdf83ae85601f9a126c907a174080a6cc7bbade",
       "taskId": "task-1",
       "error": "CONNECTION_LOST after the input was accepted",
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "bb2a70528150fe192b4896a2915205c1fcbf1dec"
+        "operation": "bfdf83ae85601f9a126c907a174080a6cc7bbade"
        }
       },
       "next_action": "Delivery to task task-1 is unconfirmed. Status keeps checking its durable runs; the input is never resent."
@@ -69,7 +69,7 @@
      "ok": true,
      "result": {
       "status": "cleanup_refused",
-      "operation": "bb2a70528150fe192b4896a2915205c1fcbf1dec",
+      "operation": "bfdf83ae85601f9a126c907a174080a6cc7bbade",
       "taskId": "task-1",
       "state": "unknown_send",
       "archived": false,
@@ -78,7 +78,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "bb2a70528150fe192b4896a2915205c1fcbf1dec"
+        "operation": "bfdf83ae85601f9a126c907a174080a6cc7bbade"
        }
       }
      }
@@ -98,7 +98,7 @@
   },
   {
    "name": "create",
-   "requestKey": "bb2a70528150fe192b4896a2915205c1fcbf1dec:create",
+   "requestKey": "bfdf83ae85601f9a126c907a174080a6cc7bbade:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
@@ -112,7 +112,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "bb2a70528150fe192b4896a2915205c1fcbf1dec:send",
+   "requestKey": "bfdf83ae85601f9a126c907a174080a6cc7bbade:send",
    "chars": 436
   },
   {
@@ -141,7 +141,7 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 28427,
+   "chars": 28425,
    "expectJson": true,
    "callId": "call-1"
   }
@@ -160,12 +160,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>/report/cindy/cindy-sent-run-1.txt",
-   "sha256": "c2a642ce9701a9386488e9963fb39240fd9b93e03e45c309f29a732b5e753d83",
+   "sha256": "b8f3d9b1bc9f85d37f1115ef66bf910017c8cd0a954a48bfc668c94518dc84a4",
    "chars": 436
   }
  ],
  "prepared": {
-  "operation": "bb2a70528150fe192b4896a2915205c1fcbf1dec",
+  "operation": "bfdf83ae85601f9a126c907a174080a6cc7bbade",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -208,17 +208,19 @@
      "multi_task": false,
      "task_count": "1",
      "self": false,
-     "wants_fast": false
+     "wants_fast": false,
+     "read_only_review": false
     },
     "profile_source": "classifier",
     "classifier_model": "fixture-quick-text",
     "realtime_loop": false,
+    "read_only_review": false,
     "classifier_calibration_cases": {
-     "included": 47,
-     "total": 47
+     "included": 53,
+     "total": 53
     },
     "canonical_model": "gpt-6.1-sol",
-    "score": 0.3647,
+    "score": 0.3646,
     "components": {
      "fit": 0.897,
      "route_fit": 0.54,
@@ -236,7 +238,8 @@
      "opportunity_cost": 0,
      "effort_penalty": 0,
      "overqualification": 0.0045,
-     "shortfall": 0
+     "shortfall": 0,
+     "harness_factor": 1
     },
     "wants_fast": false,
     "not_routed": [
@@ -255,7 +258,7 @@
       "model": "chatgpt/gpt-6.1-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3647,
+      "score": 0.3646,
       "notes": []
      },
      {
@@ -264,7 +267,7 @@
       "model": "gpt-6-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3566,
+      "score": 0.3574,
       "notes": []
      },
      {
@@ -273,7 +276,7 @@
       "model": "chatgpt/gpt-6-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3566,
+      "score": 0.3574,
       "notes": []
      },
      {
@@ -282,7 +285,7 @@
       "model": "gpt-6.1-sol",
       "effort": "medium",
       "fast": false,
-      "score": 0.3548,
+      "score": 0.3546,
       "notes": []
      },
      {
@@ -291,7 +294,7 @@
       "model": "chatgpt/gpt-6.1-sol",
       "effort": "medium",
       "fast": false,
-      "score": 0.3548,
+      "score": 0.3546,
       "notes": []
      }
     ]
@@ -307,7 +310,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [9b1ab90b]\nFIXTURE-SCENARIO: ok review2-foreign\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [ba56f19b]\nFIXTURE-SCENARIO: ok review2-foreign\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>/work dir",
   "mappings": [],
   "attempts": 1
