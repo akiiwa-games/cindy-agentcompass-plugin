@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 import {clearClassifierCache, prepareClassifierRequest, routeTask} from '../plugin/engine/route.mjs';
+import {BASE_TASK, KEYWORD_CORPUS} from './task_text_corpus.mjs';
 const source=fs.readFileSync(new URL('../plugin/main.js',import.meta.url),'utf8');
 const realCatalog=JSON.parse(fs.readFileSync(new URL('./fixtures/cindy-0.1.121-catalog.json',import.meta.url),'utf8'));
 const ctx={session_id:'true-parent',workdir:'E:/project',workdir_is_local:true,workdir_is_read_only:false};
@@ -831,4 +832,17 @@ test('a1: roll with profile:null classifies the task like a roll with no profile
   assert.equal(f.oneshots().length,1,JSON.stringify(res));
   assert.equal(res.status,'running',JSON.stringify(res.decision));
   assert.equal(f.records.get(res.operation).router.decision.profile_source,'classifier');
+});
+
+test('m3: through the logic page, the same answer starts the same route for every text in the corpus',async()=>{
+  const decide=async text=>{
+    clearClassifierCache();
+    const f=classifierFixture();
+    const {result}=await f.send('roll',{task:text});
+    const {classifier_calibration_cases,...decision}=f.records.get(result.operation).router.decision;
+    return {status:result.status,oneshots:f.oneshots().length,decision,route:f.named('create')[0]?.route};
+  };
+  const expected=await decide(BASE_TASK);
+  assert.equal(expected.status,'running');
+  for (const text of KEYWORD_CORPUS) assert.deepEqual(await decide(text),expected,text.slice(0,60));
 });

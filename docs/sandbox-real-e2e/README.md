@@ -12,7 +12,7 @@ Not covered on real Cindy, in any sign-in configuration:
 
 - the default route returning valid JSON with `profile_source: "classifier"`, and which model Cindy actually used;
 - the realtime-loop task and the "write a ticket-grabbing script" counterexample;
-- a task over 15,000 characters being classified, and one over about 19,700 being refused;
+- a task over 15,000 characters being classified, and one over about 17,900 being refused;
 - `blocked` when the classifier is unavailable, including `NO_CANDIDATE`, and the cooldown record and hint after a failure;
 - no leftovers in the task list;
 - the `split` and `self` gates deciding from the profile, and a caller `profile` running through;
@@ -20,9 +20,9 @@ Not covered on real Cindy, in any sign-in configuration:
 
 What covers these instead, with a fake host and not real Cindy:
 
-- `npm run test:sandbox` on Windows, 115/115, rerun on 2026-11-07 after the third-review fixes;
-- `npm run test:sandbox:linux`, 115/115, last run on 2026-11-07 before the third-review fixes, not rerun since;
-- `npm test`: 97/97 Node tests and 8 Python tests, none skipped; it compares the case file with `test/fixtures/agentcompass/` by itself.
+- `npm run test:sandbox` on Windows, 115/115, rerun on 2026-11-07 after the fourth-review fixes;
+- `npm run test:sandbox:linux`, 115/115, last run on 2026-11-07 before the third- and fourth-review fixes, not rerun since;
+- `npm test`: 107/107 Node tests and 8 Python tests, none skipped; it compares the case file with `test/fixtures/agentcompass/` by itself.
 
 They show the plugin's logic against the host contract as read from Cindy's source. They do not show that real Cindy behaves that way.
 

@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
+import {BASE_TASK, KEYWORD_CORPUS} from './task_text_corpus.mjs';
 import * as engine from '../plugin/engine/route.mjs';
 import {
   CALLER_REQUIRED_KEYS,
@@ -657,7 +658,7 @@ test('m4 regression: cache key incorporates prompt/schema digest and structured 
 const TASK_NAMES = ['task', 'taskText', 'rawTask', 'objective', 'goal', 'input', 'evidence', 'desc', 'text', 'prompt'];
 const LEGACY_CONSTANT = /\b(?:const|let|var)\s+(?:RE_)?(?:WORK|SELF|QUESTION|INDEPENDENT|HEADING|STEP_LINE|CROSS_DEP|SEQUENTIAL|FAST|NO_FAST|NEGATED_FAST|URGENT)(?:_RE)?\s*=\s*(?:\/|new\s+RegExp)/;
 function findTaskTextHeuristics(src) {
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const {code} = tokens(src);
   const hits = [];
   if (/\binferTaskProfile\b/.test(code)) hits.push('inferTaskProfile reference');
   const legacy = LEGACY_CONSTANT.exec(code);
@@ -702,16 +703,100 @@ const NOT_TASK_CLASSIFICATION = {
   'plugin/worker.cjs': {'params.task.trim': 1}, // "Task is empty", before anything else
 };
 
-// The second pass goes by the call, not the name: every call in own code that can look into a string, on whatever it is called, is
-// claimed here by its exact expression, a count and the reason it is not a look at the task. Anything else fails the test, so a check
-// on task text has to be written down here and argued for. This cannot see `.length`, for-of, `===`, destructuring, `.codePointAt` or
-// `.localeCompare`; the name pass above covers the first under the usual names, and the behaviour tests (opposite profiles decide on the
-// same text) are the guard for the rest.
-const TEXT_CALLS = 'test|exec|match|matchAll|includes|search|indexOf|lastIndexOf|startsWith|endsWith';
-const TEXT_CALL = new RegExp(`\\.\\s*(?:${TEXT_CALLS})\\s*(?:\\.\\s*(?:call|apply)\\s*)?\\(|\\[\\s*['"\`](?:${TEXT_CALLS})['"\`]\\s*\\]\\s*(?:\\.\\s*(?:call|apply)\\s*)?\\(|\\bRegExp\\s*\\(`, 'g');
+// What guards the highest rule, and what each guard does not see:
+// - The name pass above knows the usual names of task text and their direct aliases.
+// - The second pass goes by the expression, not the name: every read that can look into a string, on whatever it is called, is claimed in
+//   TEXT_CALL_EXCEPTIONS by its exact text and the reason it is not a look at the task, so a new one fails until it is written down and
+//   argued for. It sees methods and held references to them, computed calls, a method's name as a string, String.prototype, Reflect, the
+//   RegExp symbols, new Set, Array.from, Object.keys/values/entries, `.length`, `{length}=`, for-of, and comparison with a string literal.
+//   It does not see a comparison of two variables, `[...x].some(...)`, or a helper that hides any of the above in a vendored file.
+// - The corpus tests are the guard for what no scan sees, and for a rule that did pass review: the same answer from the model must route
+//   every text in test/task_text_corpus.mjs alike, in the engine, the worker and the logic page. They find a rule only if the corpus has
+//   a text it reacts to.
+const TEXT_METHODS = 'test|exec|match|matchAll|includes|search|indexOf|lastIndexOf|startsWith|endsWith|split|replace|replaceAll|slice|substring|substr|' +
+  'at|charAt|charCodeAt|codePointAt|localeCompare|normalize|trim|trimStart|trimEnd|toLowerCase|toUpperCase|toLocaleLowerCase|toLocaleUpperCase|length';
+const MEMBER_READ = new RegExp(`\\.\\s*(?:${TEXT_METHODS})\\b`, 'g');
+const CALL_READ = /\]\s*(?:\?\.\s*)?\(|\bRegExp\s*\(|\bnew\s+Set\s*\(|\bArray\s*\.\s*from\s*\(|\bObject\s*\.\s*(?:values|keys|entries)\s*\(/g;
+const HELD_READ = /\b(?:String|RegExp)\s*\.\s*prototype\b|\bReflect\s*\.\s*\w+|\bSymbol\s*\.\s*(?:match|matchAll|replace|search|split)\b|\{[^{}]*\blength\b[^{}]*\}\s*=(?![=>])/g;
+const FOR_OF_READ = /\bfor\s*(?:await\s*)?\(\s*(?:const|let|var)\s[^;)]*?\sof\s/g;
+const NAME_AS_STRING = new RegExp(`(['"\`])(?:${TEXT_METHODS})\\1`, 'g');
+const LITERAL_ON_RIGHT = /(?:===|!==|==|!=)\s*['"`]/g;
+const LITERAL_ON_LEFT = /['"`]\s*(?:===|!==|==|!=)/g;
 const QUOTES = '\'"`';
-// The whole call around a match, receiver and arguments, without whitespace: walks back over names, brackets, strings and regex literals.
-function callExpression(code, start, end) {
+const REGEX_MAY_FOLLOW = new Set([...'(,=:[!&|?{};+-*%<>~^}']);
+// Comments out; then `masked`, the same length as `code`, has the inside of strings and regex literals blanked so that prose is not read
+// as code. `${...}` stays code. A string holding "/*" does not start a comment here.
+function tokens(src) {
+  let code = '', masked = '', at = 0, last = '';
+  const keep = (from, to, blank = false) => {
+    const text = src.slice(from, to);
+    code += text;
+    masked += blank ? text.replace(/[^\n]/g, ' ') : text;
+  };
+  const quoted = quote => {
+    keep(at, at + 1);
+    at++;
+    while (at < src.length && src[at] !== quote) {
+      if (quote === '`' && src[at] === '$' && src[at + 1] === '{') {
+        keep(at, at + 2);
+        at += 2;
+        script('}');
+        keep(at, at + 1);
+        at++;
+        continue;
+      }
+      const step = src[at] === '\\' ? 2 : 1;
+      keep(at, at + step, true);
+      at += step;
+    }
+    keep(at, at + 1);
+    at++;
+  };
+  const regexLiteral = () => {
+    keep(at, at + 1);
+    at++;
+    for (let inClass = false; at < src.length && (inClass || src[at] !== '/') && src[at] !== '\n'; at++) {
+      if (src[at] === '\\') {
+        keep(at, at + 2, true);
+        at++;
+        continue;
+      }
+      if (src[at] === '[') inClass = true;
+      else if (src[at] === ']') inClass = false;
+      keep(at, at + 1, true);
+    }
+    keep(at, at + 1);
+    at++;
+  };
+  const script = until => {
+    for (let depth = 0; at < src.length;) {
+      const ch = src[at];
+      if (until && depth === 0 && ch === until) return;
+      if (ch === '/' && src[at + 1] === '/') {
+        while (at < src.length && src[at] !== '\n') at++;
+      } else if (ch === '/' && src[at + 1] === '*') {
+        const end = src.indexOf('*/', at + 2);
+        at = end < 0 ? src.length : end + 2;
+      } else if (QUOTES.includes(ch)) {
+        quoted(ch);
+        last = ch;
+      } else if (ch === '/' && (!last || REGEX_MAY_FOLLOW.has(last) || /\b(?:return|typeof|case|of|in)$/.test(code.trimEnd()))) {
+        regexLiteral();
+        last = '/';
+      } else {
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+        keep(at, at + 1);
+        at++;
+        if (!/\s/.test(ch)) last = ch;
+      }
+    }
+  };
+  script(null);
+  return {code, masked};
+}
+// Where the receiver before `start` begins: back over names, brackets, strings and regex literals.
+function receiverStart(code, start) {
   let from = start;
   for (let ch = code[from - 1]; from > 0; ch = code[from - 1]) {
     if (/[\w$.?]/.test(ch)) from--;
@@ -729,7 +814,10 @@ function callExpression(code, start, end) {
       from--;
     } else break;
   }
-  let to = end;
+  return from;
+}
+function closingParen(code, open) {
+  let to = open;
   for (let depth = 1; depth && to < code.length; to++) {
     const ch = code[to];
     if (QUOTES.includes(ch)) {
@@ -737,48 +825,166 @@ function callExpression(code, start, end) {
     } else if (ch === '(') depth++;
     else if (ch === ')') depth--;
   }
-  return code.slice(from, to).replace(/\s+/g, '');
+  return to;
 }
 function findTextCalls(src) {
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  return [...code.matchAll(TEXT_CALL)].map(match => callExpression(code, match.index, match.index + match[0].length));
+  const {code, masked} = tokens(src);
+  const found = [];
+  const add = (from, to) => found.push(code.slice(from, to).replace(/\s+/g, ''));
+  for (const match of masked.matchAll(MEMBER_READ)) {
+    const end = match.index + match[0].length;
+    const call = /^\s*(?:\?\.\s*)?(?:\.\s*(?:call|apply|bind)\s*)?(?:\?\.\s*)?\(/.exec(code.slice(end, end + 40));
+    add(receiverStart(code, match.index), call ? closingParen(code, end + call[0].length) : end);
+  }
+  for (const match of masked.matchAll(CALL_READ)) add(receiverStart(code, match.index), closingParen(code, match.index + match[0].length));
+  for (const match of masked.matchAll(HELD_READ)) add(match.index, match.index + match[0].length);
+  for (const match of masked.matchAll(FOR_OF_READ)) add(match.index, closingParen(code, match.index + match[0].indexOf('(') + 1));
+  for (const match of code.matchAll(NAME_AS_STRING)) add(match.index, match.index + match[0].length);
+  for (const match of masked.matchAll(LITERAL_ON_RIGHT)) {
+    const open = match.index + match[0].length - 1;
+    let close = open + 1;
+    while (close < code.length && !(code[close] === code[open] && code[close - 1] !== '\\')) close++;
+    const left = match.index - (code.slice(0, match.index).length - code.slice(0, match.index).trimEnd().length);
+    const from = receiverStart(code, left);
+    if (!/\btypeof\s+$/.test(code.slice(Math.max(0, from - 12), from))) add(from, close + 1);
+  }
+  for (const match of masked.matchAll(LITERAL_ON_LEFT)) {
+    const after = /^\s*[\w$.?]*/.exec(code.slice(match.index + match[0].length));
+    add(receiverStart(code, match.index + 1), match.index + match[0].length + after[0].length);
+  }
+  return found;
 }
 const TEXT_CALL_EXCEPTIONS = {
-  'plugin/engine/route.mjs': [
-    ["cases[index].id.startsWith('non_realtime_')", 1, 'calibrationCaseOrder: an id in the case file, its name for the realtime_loop counterexamples'],
-    ['rarest.includes(depthOf(index))', 1, 'calibrationCaseOrder: reasoning_depth numbers of the case file'],
-    ["text.startsWith('```')", 1, "parseClassifierOutput: the model's answer"],
-    ['/^```(?:json)?\\s*\\r?\\n([\\s\\S]*?)\\r?\\n```\\s*$/i.exec(text)', 1, "parseClassifierOutput: unwrapping a fenced answer from the model"],
-    ["text.startsWith('{')", 1, "parseClassifierOutput: the model's answer"],
-    ["text.endsWith('}')", 1, "parseClassifierOutput: the model's answer"],
-    ['WORK_KINDS.includes(raw.work_kind)', 1, 'checkProfileFields: an enum check on a profile field'],
-    ['/^\\d+$/.test(n)', 1, 'newestSession: a date directory name of the Codex session logs'],
-    ["n.endsWith('.jsonl')", 1, 'newestSession: a file name of the Codex session logs'],
-    ["text.indexOf('\\n')", 1, 'codexQuota: the Codex session log'],
-    ['text.lastIndexOf(\'"rate_limits"\')', 1, 'codexQuota: the Codex session log'],
-    ["text.lastIndexOf('\\n',at)", 1, 'codexQuota: the Codex session log'],
-    ["text.indexOf('\\n',at)", 1, 'codexQuota: the Codex session log'],
-    ["(spec.efforts||[]).includes('high')", 1, 'a catalog row: the efforts a model takes'],
-  ],
-  'plugin/main.js': [
-    ["['blocked','send_rejected','unknown_create','unknown_send'].includes(mem.state)", 1, 'a record state'],
-    ['caps.operations?.includes(op)', 1, "the host's capability list"],
-    ['row.efforts?.includes(effort)', 1, 'a catalog row: the efforts a model takes'],
-    ['text(input.content).includes(record.prompt)', 1, 'a host message holds the whole prompt we sent: did this run take it, not what the task says'],
-    ["['sending','unknown_send'].includes(record.state)", 1, 'a record state'],
-    ["['blocked','send_rejected'].includes(record.state)", 1, 'a record state'],
-    ["['self','split','launched','blocked'].includes(record.router?.status)", 1, 'a router status'],
-    ["caps.operations.includes('archive')", 1, "the host's capability list"],
-    ["['status','stop','cleanup'].includes(msg.tool)", 1, 'a tool name'],
-  ],
-  'plugin/worker.cjs': [
-    ["['builtin','cli'].includes(engine)", 1, 'a configuration value'],
-    ["['cc','codex','pi'].includes(row.agentKind)", 1, 'a configured harness name'],
-    ['/^[a-f0-9]{40}$/.test(operation)', 1, 'an operation id'],
-    ['/^(PASEO_|HC_|ORCA_|T3_|ROUTER_PARENT_|ROUTER_CINDY_CONTEXT)/.test(key)', 1, 'environment variable names kept from the CLI'],
-    ["['self','split'].includes(result.status)", 1, 'a router status'],
-    ["['prepared','create_rejected'].includes(old.state)", 1, 'a record state'],
-  ],
+  'plugin/engine/route.mjs': {
+    "calibrationCaseOrder: the case file's fields and array sizes, loaded once, never the task": [
+      'JSON.stringify([cases[index].task,profileOf(index)]).length', 'order.length', 'groups.flat().length', 'members.length', 'a.length', 'b.length',
+      "cases[index].id.startsWith('non_realtime_')", 'live.slice(0,counter.length)', 'counter.length',
+      'indexes.filter(index=>depthOf(index)===a).length', 'indexes.filter(index=>depthOf(index)===b).length', 'depths.slice(0,2)',
+      'rarest.includes(depthOf(index))', 'newSet(pairs.flat())', '...newSet(indexes.map(depthOf))', 'for(constindexofmembers)',
+      'for(constmembersofgroups)', 'for(constdepthofdepths)', 'COMPACT_CASES[index].length', 'COMPACT_CASES.length',
+      '...newSet(CLASSIFIER_CASES.calibration_cases.flatMap(row=>Object.keys(row.expected_profile)))', 'Object.keys(row.expected_profile)',
+      'for(constunitofCASE_ORDER)',
+    ],
+    "the prompt's fixed text and the schema, built once": [
+      "JSON.stringify({route_definitions:CLASSIFIER_CASES.route_definitions,dimension_rubric:CLASSIFIER_CASES.dimension_rubric,calibration_columns:['id','task',CASE_COLUMNS],}).slice(0,-1)",
+      'PROMPT_OPEN.length', 'PROMPT_CLOSE.length', 'Object.entries(TASK_PROFILE_SCHEMA.properties)', "field==='work_kind'", "spec.type==='string'",
+    ],
+    'sets and tables of fixed values, built once': [
+      "newSet(['low','medium','high'])", "newSet(['unknown','low','normal','high'])", "newSet(['1','2','3','>3'])", 'newSet(INTERACTION_STYLES)',
+      'Object.entries(PROFILE_INTEGERS)', "newSet(['exploration_analysis','research_packet','web_research','text_in_text_out'])",
+      'Object.keys(KIND_TRAITS)', "newSet(['context_scale','divergence','local_only','realtime_loop'])", 'newSet(CLASSIFIER_REQUIRED_KEYS)',
+      "newSet([...ALLOWED_PROFILE_KEYS,'delegate'])", "k!=='other_or_mixed'", "k!=='dot_execution'", "key!=='reason'",
+      'for(const[field,[min,max]]ofPROFILE_INTEGER_ENTRIES)',
+      "for(constflagof['needs_visual','needs_gui','local_only','realtime_loop','multi_task','self','wants_fast','delegate'])",
+    ],
+    "the size of the whole task against Cindy's prompt limit, or a cache key suffix: never what it says": [
+      'evidence.length', 'desc.length',
+    ],
+    'a hash loop over the whole text, or the Codex session log it also reads': [
+      ['text.length', 2], 'text.charCodeAt(i)',
+    ],
+    'normalizeTaskEvidence: which fields a structured task has and whether one is empty, never what they say': [
+      "input.context!==''", "input.environment!==''", "k==='objective'", "k==='context'", "k==='environment'", "k==='profile'",
+      'Object.entries(input)', 'for(const[k,v]ofObject.entries(input))',
+    ],
+    "the model's answer: parseClassifierOutput": [
+      ['rawOutput.trim()', 2], "text.startsWith('```')", '/^```(?:json)?\\s*\\r?\\n([\\s\\S]*?)\\r?\\n```\\s*$/i.exec(text)', 'fenced[1].trim()',
+      "text.startsWith('{')", "text.endsWith('}')",
+    ],
+    'a profile field or its fallback reason, from the model or a caller: checkProfileFields, the gates': [
+      ['profile.reason.trim()', 4], 'missing.length', 'WORK_KINDS.includes(raw.work_kind)', 'raw.reason.trim()', 'raw.reason.length',
+      'Object.keys(raw)', 'for(constkeyofObject.keys(raw))', "rawCount!=='1'", "profile.urgency==='high'", "raw.task_count!=='1'",
+      "raw.task_count==='1'", "normalized.urgency==='high'",
+    ],
+    'the score cache file': [
+      'Math.random().toString(16).slice(2,10)', 'sortedKeys.slice(0,Math.max(0,sortedKeys.length-SCORE_CACHE_MAX))', 'sortedKeys.length',
+      'Object.entries(entries)', 'Object.keys(fresh)', 'for(const[k,v]ofObject.entries(entries))',
+      'for(conststaleofsortedKeys.slice(0,Math.max(0,sortedKeys.length-SCORE_CACHE_MAX)))',
+    ],
+    'the Codex session logs and their directories: quota': [
+      '/^\\d+$/.test(n)', "n.endsWith('.jsonl')", 'files.length', "text.slice(text.indexOf('\\n')+1)", "text.indexOf('\\n')", 'homes.length',
+      'homes.slice(1)', `text.lastIndexOf('"rate_limits"')`, "text.slice(text.lastIndexOf('\\n',at)+1,(text.indexOf('\\n',at)+1||text.length+1)-1)",
+      "text.lastIndexOf('\\n',at)", "text.indexOf('\\n',at)", 'windows.length', "for(constyearofdesc(path.join(home,'sessions')))",
+      'for(constmonthofdesc(year))', 'for(constdayofdesc(month))', 'for(constnameoffiles)',
+    ],
+    "the catalog and the allocator's ranking": [
+      ['runnable.length', 2], ['skipped.length', 2], 'row.efforts?.length', "(spec.efforts||[]).includes('high')", ['offered.length', 2],
+      'c.notes.length', 'candidates.filter(c=>c.notes.length).length', 'best.notes.length', 'candidates.slice(1,6)', ['newSet()', 3],
+      "newSet(rows.filter(r=>r.route.agentKind==='codex').map(r=>r.route.providerId))", ['for(constrowofrows)', 2], 'for(constrofranked.ranking)',
+      'for(consteffortofrow._efforts)', "r.route.agentKind==='codex'", "codex.status!=='unknown'", "q?.status==='exhausted'", "q?.status==='high'",
+      "harness==='pi'", "harness==='codex'",
+    ],
+    'a router status, the platform, or a Cindy failure code': [
+      "'split'", "process.platform==='win32'", "process.platform==='darwin'", "reason==='classifier_rate_limited'",
+    ],
+  },
+  'plugin/main.js': {
+    'cutting a string into bridge-sized chunks, whatever it says': [
+      ['str.length', 3], ['str.charCodeAt(i)', 2], 'str.slice(start,i)', 'chunks.length', 'str.slice(start)', ['parts.length', 6],
+    ],
+    "the whole prompt against Cindy's send limit, or it arriving whole: did this run take it, not what it says": [
+      'record.prompt.length', 'text(input.content).includes(record.prompt)',
+    ],
+    'a Cindy failure code, or an empty answer from the model': [
+      "String(code||'error').toLowerCase()", 'reply.text.trim()',
+    ],
+    "the worker's final message, shortened for the status reply": [
+      'full.slice(0,4000)', 'full.length', 'output.length', 'output.slice(0,4000)',
+    ],
+    "a record's state, its artifacts or an operation id": [
+      'mem.artifacts?.length', 'disk.artifacts?.length', "['blocked','send_rejected','unknown_create','unknown_send'].includes(mem.state)",
+      "['sending','unknown_send'].includes(record.state)", "['blocked','send_rejected'].includes(record.state)", '(record.artifacts||[]).length',
+      'operation.slice(0,12)', 'for(const[op,mem]ofmemory)', "newSet(['creating','unknown_create','sending','unknown_send'])",
+      "disk.state==='prepared'", "mem.state==='cleaned'", "mem.state==='stopping'", "disk.state==='running'", "record.state==='creating'",
+      "record.state==='sending'", ["record.draft_cleanup==='unknown_archive'", 2], ["record.draft_cleanup==='archived'", 2],
+      ["record.state==='cleaned'", 2], "record.state==='create_rejected'", "record.state==='prepared'", "record.state!=='prepared'",
+      "record.state==='send_rejected'", "record.state==='unknown_create'",
+    ],
+    "the worker's answer: a state or a router status": [
+      "['self','split','launched','blocked'].includes(record.router?.status)", "'split'", "prepared.state==='classify'",
+      "prepared.router?.status!=='native'", "prepared.state==='prepared'", "prepared.state==='blocked'",
+    ],
+    "what the host reports: capabilities, the catalog, runs, messages' roles, error codes": [
+      'caps.operations?.includes(op)', 'binding.length', 'row.efforts?.includes(effort)', 'matches.length', '(awaitallRuns(task.taskId)).length',
+      'active.length', "caps.operations.includes('archive')", "newSet(['completed','failed','cancelled','interrupted'])",
+      "newSet(['REVISION_CONFLICT','TASK_BUSY','INVALID_REQUEST','INVALID_ATTACHMENTS','PERMISSION_DENIED','ROUTE_UNAVAILABLE','NOT_FOUND','TASK_NOT_FOUND','UNSUPPORTED_CAPABILITY','INVALID_INVOCATION'])",
+      "for(constopof['models','create','send','get','getRun','listRuns','readMessages','cancel'])", 'for(constrowofcatalog.models||[])',
+      'for(construnofruns)', "item.role==='user'", "input.role==='user'", "task.permissionMode!=='bypassPermissions'",
+    ],
+    'which tool or message this is': [
+      "['status','stop','cleanup'].includes(msg.tool)", "msg.tool==='roll'", "msg.tool==='stop'", "msg.tool==='cleanup'", "msg.type!=='tool-call'",
+    ],
+  },
+  'plugin/worker.cjs': {
+    'the task: empty or not, and the operation id hashed from all of it': [
+      'params.task.trim()', "digest(ctx.session_id+'\\0'+params.task).slice(0,40)",
+    ],
+    'configuration files and the environment': [
+      'value.stateRoot.trim()', "['builtin','cli'].includes(engine)", "...(process.env.PATH||'').split(path.delimiter)",
+      "['cc','codex','pi'].includes(row.agentKind)", 'row[key].trim()', 'Object.keys(row)',
+      '/^(PASEO_|HC_|ORCA_|T3_|ROUTER_PARENT_|ROUTER_CINDY_CONTEXT)/.test(key)', 'command.length', '...command.slice(1)',
+      'Object.entries(process.env)', "for(constfileof[path.join(__dirname,'router.json'),path.join(HOME_STATE,'router.json')])",
+      'for(constdirofdirs.filter(d=>d&&path.isAbsolute(d)))', ["process.platform==='win32'", 2], ["process.platform!=='win32'", 2],
+      ["conf.engine==='cli'", 2], "conf.engine!=='cli'",
+    ],
+    "the host's session context and operation ids": [
+      'value.session_id.trim()', '/^[a-f0-9]{40}$/.test(operation)', 'digest(raw).slice(0,16)', 'digest(JSON.stringify(params.page)).slice(0,16)',
+    ],
+    "the router's answer: a status, a source or a decision reason": [
+      "['self','split'].includes(result.status)", "'split'", "result.engine==='builtin'", "result.profile_source!=='unavailable'",
+      ["result.status==='blocked'", 2], "result.decision?.reason==='no_runnable_model'", "result.decision?.reason==='no_model_meets_floor'",
+      "result.profile_source==='unavailable'", ["result.status==='classify'", 2], "result.status==='native'",
+    ],
+    'receipts, cooldown records and child processes': [
+      "['prepared','create_rejected'].includes(old.state)", 'newSet()', "newSet(['ROUTE_UNAVAILABLE','UNSUPPORTED_CAPABILITY','PERMISSION_DENIED'])",
+      "newSet(['classifier_no_candidate','classifier_permission_denied'])", "newSet(['classifier_rate_limited'])", ['Object.entries(all)', 2],
+      ['for(constchildofchildren)', 3], 'for(const[key,entry]ofObject.entries(all))', 'for(const[other,entry]ofObject.entries(all))',
+    ],
+    "Cindy's prefs file and which RPC method this is": [
+      'for(constappofmod.cindyAppDirs(process.env,os.homedir()))', 'for(constownerofowners)', "method==='prepare'", "method==='load'",
+      "method==='save'", "method==='output'",
+    ],
+  },
 };
 function scanOwnFile(rel, src) {
   const problems = [];
@@ -791,7 +997,8 @@ function scanOwnFile(rel, src) {
     }
   };
   check('reads task text', findTaskTextHeuristics(src).map(hit => hit.replace(/\s+/g, '')), NOT_TASK_CLASSIFICATION[rel] || {});
-  check('unclaimed text call', findTextCalls(src), Object.fromEntries((TEXT_CALL_EXCEPTIONS[rel] || []).map(([call, count]) => [call, count])));
+  const claimed = Object.values(TEXT_CALL_EXCEPTIONS[rel] || {}).flat().map(entry => (Array.isArray(entry) ? entry : [entry, 1]));
+  check('unclaimed text call', findTextCalls(src), Object.fromEntries(claimed));
   return problems;
 }
 
@@ -911,7 +1118,7 @@ const isCodingCounterexample = row => row.id.startsWith('non_realtime_') && row.
 const isLive = row => row.expected_profile.realtime_loop === true;
 
 test('A2: a long task keeps the rare signals first: multi_task, every reasoning_depth, a live case with a write-or-fix-a-bot counterexample', () => {
-  for (const size of [4000, 6000, 8000, 10000, 12000, 15000, 16000, 17000]) {
+  for (const size of [4000, 6000, 8000, 10000, 12000, 15000, 16000, 16500]) {
     const rows = keptCases(size);
     const label = `${size}: ${rows.map(row => row.id).join(' ')}`;
     assert.ok(rows.some(row => row.expected_profile.multi_task === true), `multi_task at ${label}`);
@@ -943,8 +1150,8 @@ test('A2: the order comes from the fields of the case file: no case is named in 
   assert.deepEqual(engine.calibrationCaseOrder(moved)[0], [plain]);
 });
 
-test('the fixed cost of the prompt is cut, not its meaning: a 19,500-character task classifies with every rule, route definition and schema field complete', () => {
-  const built = buildClassifierPrompt('x'.repeat(19500));
+test('the fixed cost of the prompt is cut, not its meaning: a 17,900-character task classifies with every rule, route definition and schema field complete', () => {
+  const built = buildClassifierPrompt('x'.repeat(17900));
   assert.ok(built.prompt, `over by ${built.overLimitBy}`);
   const {properties, required} = TASK_PROFILE_SCHEMA;
   assert.deepEqual(Object.keys(properties).sort(), [...required].sort(), '"all fields required" is what the schema says');
@@ -961,9 +1168,193 @@ test('the fixed cost of the prompt is cut, not its meaning: a 19,500-character t
       if (field !== 'work_kind') for (const value of spec.enum || []) assert.ok(schema[field].includes(value), `${field} ${value}`);
       if ('minimum' in spec) assert.ok(schema[field].includes(`${spec.minimum}..${spec.maximum}`), field);
       if ('maxLength' in spec) assert.ok(schema[field].includes(`${spec.minLength}..${spec.maxLength}`), field);
-      // The rubric states these six; the schema states what it does not.
-      const inRubric = ['reasoning_depth', 'context_scale', 'divergence', 'local_only', 'realtime_loop', 'multi_task'].includes(field);
+      // The rubric states these four; the schema states what it does not.
+      const inRubric = ['context_scale', 'divergence', 'local_only', 'realtime_loop'].includes(field);
       if (spec.description && !inRubric) assert.ok(schema[field].includes(spec.description), `${field} description`);
     }
   }
+});
+
+const promptSchema = prompt => JSON.parse(prompt.slice(prompt.indexOf('{', prompt.indexOf('response_schema (')), prompt.indexOf('\nTask (evidence')));
+
+test('M1: multi_task and reasoning_depth carry their whole AgentCompass description, which the rubric does not repeat', () => {
+  const schema = promptSchema(buildClassifierPrompt('Fix util.py').prompt);
+  const missing = {
+    multi_task: ['bundles more than one separate task', 'without waiting for each other', 'collect reference images', 'however many steps',
+      'investigate-fix-test-release', 'implement plus its tests', 'a review plus its report', 'the remaining steps of a handoff',
+      'already assigns one share', 'needs the previous part'],
+    reasoning_depth: ['not how long the brief is', 'drift round', 'build/install/switch release', 'click and screenshot', 'reformat text',
+      'structured research packet', 'diagnose one subsystem', 'multi-stage research line', 'strategic', 'frontier mathematical'],
+  };
+  for (const [field, phrases] of Object.entries(missing)) {
+    for (const phrase of phrases) assert.ok(schema[field].includes(phrase), `${field}: ${phrase}`);
+    assert.ok(schema[field].endsWith(TASK_PROFILE_SCHEMA.properties[field].description), `${field}: the description, whole`);
+  }
+});
+
+test('M2: task_count is a string in the prompt and the prompt says so; a number is what AgentCompass validate_profile makes of it: no error, not coerced', () => {
+  const {prompt} = buildClassifierPrompt('x');
+  const schema = promptSchema(prompt);
+  for (const value of ['1', '2', '3', '>3']) assert.ok(schema.task_count.includes(JSON.stringify(value)), value);
+  assert.match(schema.task_count, /JSON string/);
+  assert.match(prompt, /task_count.*"1".*never.*1\b/);
+  for (const field of ['hours_confidence', 'urgency', 'interaction_style']) {
+    for (const value of TASK_PROFILE_SCHEMA.properties[field].enum) assert.ok(schema[field].includes(JSON.stringify(value)), `${field}: ${value}`);
+  }
+  // allocator.py validate_profile keeps task_count only `if raw.get('task_count') in TASK_COUNTS`: 1 is dropped, the profile stands, multi_task decides.
+  for (const count of [1, 2, 3, 4]) {
+    assert.equal(validateClassifierProfile(makeProfile({task_count: count})).task_count, '1', `${count}: multi_task false`);
+    assert.equal(validateCallerProfile(makeProfile({task_count: count})).task_count, '1', `${count}: a caller the same`);
+    const answer = overrides => ({quota: OK, useCache: false, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(makeProfile(overrides))}});
+    assert.equal(routeTask('Fix util.py', REAL, answer({task_count: count})).status, 'native', `${count}: multi_task false`);
+    const split = routeTask('Fix util.py', REAL, answer({multi_task: true, task_count: count}));
+    assert.deepEqual([split.status, split.task_count], ['split', '2'], `${count}: multi_task true is a split, its count not taken from the number`);
+  }
+  // A string outside the list, and a string that contradicts multi_task, stay refused here, as before.
+  assert.throws(() => validateClassifierProfile(makeProfile({task_count: 'many'})), /task_count/);
+  assert.throws(() => validateClassifierProfile(makeProfile({task_count: '2'})), /task_count/);
+  assert.throws(() => validateClassifierProfile(makeProfile({task_count: null})), /task_count/);
+  const {task_count, ...without} = makeProfile();
+  assert.throws(() => validateClassifierProfile(without), /missing required field.*task_count/);
+});
+
+test('rule 1 of the AgentCompass prompt is back whole: inputs inlined or public mean local_only false, even with a local output path named', () => {
+  assert.ok(buildClassifierPrompt('x').prompt.includes('`local_only`: `true` only when depending on un-inlined local files/repos/processes/GUI; `false` when inputs are ' +
+    'inlined or from the public web (`web_research`, `self_contained_code`, `text_in_text_out`, `direction_reasoning`, `complex_build_plan`), even if a local output path is named.'));
+});
+
+const groupedNumber = number => number.toLocaleString('en-US');
+test('m1: the documents state the limit and the first signal lost as they are measured', () => {
+  let limit = 0;
+  for (let low = 1, high = ONESHOT_PROMPT_LIMIT; low <= high;) {
+    const size = (low + high) >> 1;
+    if (buildClassifierPrompt('x'.repeat(size)).prompt) {limit = size;low = size + 1;}
+    else high = size - 1;
+  }
+  const rounded = groupedNumber(Math.floor(limit / 100) * 100);
+  for (const doc of ['README.md', 'docs/CINDY_REAL_ACCEPTANCE_AND_CANCEL_FIX.md']) {
+    assert.ok(ownSource(doc).includes(`about ${rounded} characters once JSON-escaped`), `${doc}: ${rounded}`);
+  }
+  assert.ok(ownSource('docs/sandbox-real-e2e/README.md').includes(`one over about ${rounded} being refused`));
+
+  const signals = {
+    'depth 3': rows => rows.some(row => row.expected_profile.reasoning_depth === 3),
+    'depth 4': rows => rows.some(row => row.expected_profile.reasoning_depth === 4),
+    multi_task: rows => rows.some(row => row.expected_profile.multi_task === true),
+    'a live pair': rows => rows.some(isLive) && rows.some(isCodingCounterexample),
+  };
+  let firstLost = null;
+  for (let size = 15000; !firstLost && size <= limit; size += 5) {
+    const rows = keptCases(size);
+    firstLost = Object.keys(signals).find(name => !signals[name](rows)) || null;
+  }
+  assert.equal(firstLost, 'depth 4');
+  const readme = ownSource('README.md');
+  assert.match(readme, /depth 4 goes first/);
+  assert.doesNotMatch(readme, /depth 3 goes first/);
+});
+
+const NOW = Date.parse('2026-11-07T00:00:00Z');
+const CORPUS_ANSWERS = {
+  ordinary: {},
+  live: {realtime_loop: true, work_kind: 'computer_use', needs_gui: true, needs_visual: true, interaction_style: 'exploration'},
+  several: {multi_task: true, task_count: '3'},
+  self: {self: true},
+  fast: {wants_fast: true, urgency: 'high'},
+  reading: {work_kind: 'debug_review', code_complexity: 0, hallucination_risk: 3},
+};
+// The first text that routes unlike the base task with the same answer, or that routes on anything but that answer; null when none does.
+function firstCorpusDifference(route) {
+  for (const [name, overrides] of Object.entries(CORPUS_ANSWERS)) {
+    const answer = makeProfile(overrides);
+    const decide = text => route(text, REAL, {quota: OK, useCache: false, now: NOW, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(answer)}});
+    const expected = decide(BASE_TASK);
+    const profile = expected.profile ?? expected.decision.profile;
+    for (const [field, value] of Object.entries(answer)) {
+      if (JSON.stringify(profile[field]) !== JSON.stringify(value)) return `${name}: the base task's ${field} is ${JSON.stringify(profile[field])}, the model said ${JSON.stringify(value)}`;
+    }
+    const want = JSON.stringify(expected);
+    for (const text of KEYWORD_CORPUS) if (JSON.stringify(decide(text)) !== want) return `${name}: ${text.slice(0, 60)}`;
+  }
+  return null;
+}
+// Reviewed keyword and shape rules, as they would be written into the real routing path (probe p5.mjs of the fourth review).
+const KEYWORD_RULES = [
+  ['keyword 抢票 -> realtime_loop', "{const brief=`${task}`; if (brief.split('抢票').length>1) profile={...profile,realtime_loop:true};}"],
+  ['keyword urgent -> wants_fast', "{const brief=`${task}`; if (brief.split('urgent').length>1||brief.split('asap').length>1) profile={...profile,wants_fast:true};}"],
+  ['keyword 同时 -> multi_task', "{const brief=`${task}`; if (brief.split('同时').length>1) profile={...profile,multi_task:true,task_count:'2'};}"],
+  ['keyword review -> code_complexity 0', "{const brief=`${task}`; if (brief.replace('review','')!==brief) profile={...profile,code_complexity:0};}"],
+  ['optional call', "{const brief=`${task}`; if (brief.includes?.('urgent')) profile={...profile,wants_fast:true};}"],
+  ['length -> self', '{const {length}=`${task}`; if (length<40) profile={...profile,self:true};}'],
+  ['question mark -> self', "{const brief=`${task}`; if (brief.at(-1)==='?') profile={...profile,self:true};}"],
+];
+
+test('m3: with the same answer from the model every text in the corpus routes the same: the answer decides the profile, whatever words the task has', () => {
+  assert.ok(KEYWORD_CORPUS.length > 150, String(KEYWORD_CORPUS.length));
+  assert.equal(firstCorpusDifference(routeTask), null);
+});
+
+test('m3: the corpus and the scan each fail on every reviewed keyword rule put into routeTask', async () => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-keyword-'));
+  try {
+    fs.cpSync(new URL('../plugin/engine/', import.meta.url), work, {recursive: true});
+    const source = fs.readFileSync(path.join(work, 'route.mjs'), 'utf8');
+    const at = source.indexOf('  const split = splitGate(profile);', source.indexOf('export function routeTask'));
+    assert.ok(at > 0, 'the place in routeTask where the profile is settled');
+    for (const [index, [name, rule]] of KEYWORD_RULES.entries()) {
+      const mutated = `${source.slice(0, at)}  ${rule}\n${source.slice(at)}`;
+      const file = path.join(work, `route-${index}.mjs`);
+      fs.writeFileSync(file, mutated);
+      const {routeTask: mutatedRoute} = await import(pathToFileURL(file).href);
+      assert.notEqual(firstCorpusDifference(mutatedRoute), null, `the corpus: ${name}`);
+      assert.notDeepEqual(scanOwnFile('plugin/engine/route.mjs', mutated), [], `the scan: ${name}`);
+    }
+  } finally {
+    fs.rmSync(work, {recursive: true, force: true});
+  }
+});
+
+test('m3: every spelling of the fourth review fails the scan', () => {
+  const rel = 'plugin/engine/route.mjs';
+  const source = ownSource(rel);
+  assert.deepEqual(scanOwnFile(rel, source), []);
+  for (const added of [
+    'if (brief.split("urgent").length>1) x();',
+    'if (brief.replace("urgent","")!==brief) x();',
+    'if (brief.replaceAll("urgent","").length<brief.length) x();',
+    'if (brief.slice(0,3)==="fix") x();',
+    'if (brief.substring(0,3)==="fix") x();',
+    'if (brief.at(0)==="?") x();',
+    'if (brief.toLowerCase()==="what is a mutex?") x();',
+    'if (brief.normalize()==="x") x();',
+    'if (brief.includes?.("urgent")) x();',
+    'if (brief?.includes?.("urgent")) x();',
+    'const m="includes"; if (brief[m]("urgent")) x();',
+    'if (brief["inc"+"ludes"]("urgent")) x();',
+    'if (Reflect.apply(String.prototype.includes,brief,["urgent"])) x();',
+    'const inc=String.prototype.includes; if (inc.call(brief,"urgent")) x();',
+    'const {includes}=String.prototype; if (includes.call(brief,"urgent")) x();',
+    'if (/urgent/[Symbol.match](brief)) x();',
+    'if (/urgent/[Symbol.replace](brief,"")!==brief) x();',
+    'const fn=/urgent/.test.bind(/urgent/); if (fn(brief)) x();',
+    'const re=/urgent/; const t2=re.test; if (t2.call(re,brief)) x();',
+    'if (["urgent","asap"].some(w=>brief.split(w).length>1)) x();',
+    'if (new Set(brief).has("?")) x();',
+    'if (Array.from(brief).length<240) x();',
+    'if (Object.values(brief).length<240) x();',
+    'const a="/*"; if (brief.includes("urgent")) x(); const b="*/";',
+    'const {length}=brief; if (length<240) x();',
+    'for (const ch of brief) if (ch==="?") x();',
+    'if (brief==="urgent") x();',
+    'if (brief.codePointAt(0)===65) x();',
+    'if (brief.localeCompare("x")===0) x();',
+    'const {length}=task; if (length<240) x();',
+    'for (const ch of task) if (ch==="?") x();',
+    'if (task==="urgent") x();',
+    'if (task.split("urgent").length>1) x();',
+    'if (task.includes?.("urgent")) x();',
+    // Beyond those: plain reads under an unknown name.
+    'if (brief.length<240) x();',
+    'if ("urgent"===brief) x();',
+  ]) assert.notDeepEqual(scanOwnFile(rel, `${source}\n${added}\n`), [], `missed: ${added}`);
 });

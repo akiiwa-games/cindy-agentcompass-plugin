@@ -74,22 +74,25 @@ keyword, regex or length heuristics on the task text:
   card, else the manifest's `oneshotModel` (this plugin sets none), else the auxiliary chain in Cindy settings. The plugin cannot name it and
   learns it from the answer (`classifier_model`). Cindy runs this channel on its Cindy account (`xd`), OpenAI, xAI and Anthropic API-key
   connections; a Claude subscription adds no quick-text model.
-- **the prompt**: the AgentCompass `SCORER_PROMPT` without its CRITICAL RULES 1-5 (each one repeats, more briefly, an entry of the rubric that follows),
+- **the prompt**: the AgentCompass `SCORER_PROMPT` without its CRITICAL RULES 2-5 (each one repeats, more briefly, an entry of the rubric that follows),
   then `plugin/engine/classifier-cases.json` (the AgentCompass file `skills/agent-compass/references/classifier-cases.json`, unchanged: route
   definitions, rubric, 47 calibration cases; `test/fixtures/agentcompass/` holds the copy `npm test` compares it with), the schema as one entry per field
-  with every constraint and description, and last the whole task inside an `untrusted_task_evidence` JSON envelope with prompt-injection rules. The
-  answer is validated against `TASK_PROFILE_SCHEMA` with every field required, so one without `self` or `wants_fast` is `invalid_classifier_output` and
-  starts nothing (including `realtime_loop` and `expected_hours` in `0.05..24`), and cached in memory and in
+  with every constraint and every description but the four the rubric covers (`context_scale`, `divergence`, `local_only`, `realtime_loop`), and last the
+  whole task inside an `untrusted_task_evidence` JSON envelope with prompt-injection rules. The answer is validated against `TASK_PROFILE_SCHEMA` with every
+  field required, so one without `self` or `wants_fast` is `invalid_classifier_output` and starts nothing (including `realtime_loop` and `expected_hours` in
+  `0.05..24`). `task_count` must be a JSON string and the prompt says so; a number gets what AgentCompass `validate_profile` gives it: no error and no
+  count taken from it, with `multi_task` deciding. The answer is cached in memory and in
   `~/.agent-compass/cindy-plugin/score-cache.json`, keyed by prompt/schema digest and full task input.
 - **the 32,768-character budget**: this channel takes a single `prompt` of at most 32,768 characters and has no separate context field, so the
   task and the instructions share it. The rubric and route definitions always go whole; calibration cases take what is left, whole ones only, in
   an order computed from the fields of the case file alone (`calibrationCaseOrder`), never from what the task says: the `multi_task` case, a live case
   paired with a counterexample that writes or fixes code, one case of each `reasoning_depth` rarest first, then the other pairs (a live case never goes in
-  without its counterexample), the rest of the rarest depths, and one of each `work_kind` in turn. All 47 fit a task of up to about 6,200 characters;
-  33 at 10,000, 21 at 15,000, 10 at 17,000, 6 at 18,000. Every one of those signals is there up to about 18,250 characters; above that, whatever still fits goes in, in that
-  order, so depth 3 goes first, a live pair at about 18,900, `multi_task` at about 19,350 and depth 4 last. `decision.classifier_calibration_cases` records `{included, total}`. A task
-  that does not fit with no cases left (about 19,700 characters once JSON-escaped) is refused with `task_too_long_for_classifier`, never cut; give it
-  an explicit `profile`.
+  without its counterexample), the rest of the rarest depths, and one of each `work_kind` in turn. All 47 fit a task of up to about 4,450 characters;
+  30 at 10,000, 12 at 15,000, 7 at 16,000, 3 at 17,000. Every one of those signals is there up to about 16,500 characters; above that, whatever still fits goes
+  in, in that order, so depth 4 goes first at about 16,500 and depths 3 and 4 then alternate, both are gone at about 16,950, a live pair at about 17,100,
+  `multi_task` at about 17,600, and depth 4 goes for good at about 17,800. `decision.classifier_calibration_cases` records `{included, total}`. A task that does
+  not fit with no cases left (about 17,900 characters once JSON-escaped) is refused with `task_too_long_for_classifier`, never cut; give it an explicit
+  `profile`.
 - **when the classifier is unavailable**: on any failure the built-in engine **never** falls back to keyword profiling. It returns
   `status: "blocked"` with `profile_source: "unavailable"`, a `decision.reason` of `classifier_<Cindy's code>` (`classifier_no_candidate`,
   `classifier_timeout`, `classifier_rate_limited`, ...) or `invalid_classifier_output`, no `prepared` receipt, and a `next_action` saying the model
@@ -101,8 +104,9 @@ keyword, regex or length heuristics on the task text:
   hold up every task. Any other failure (`INTERNAL`, `TIMEOUT`, a malformed answer) may be that task's doing and holds up only that task's text, in every
   session. `classifier_rate_limited` holds up nothing. A classified task clears it, and so does any change of what picks the model: the card, `oneshotModel`
   or the catalog. The card has no API, so that one is seen through `errand` in `<app data>/owners/*/ghost-errand-prefs.json`, an undocumented Cindy file; if
-  Cindy changes it, the cooldown just runs out. No wait is longer than 5 minutes, even with the clock moved back. Cached tasks and explicit profiles
-  are not held up.
+  Cindy changes it, the cooldown just runs out. The plugin cannot see the auxiliary model in Cindy settings or a permission at all, so a fix there waits out
+  the cooldown, up to 5 minutes, and the answer says so. No wait is longer than 5 minutes, even with the clock moved back. Cached tasks and explicit
+  profiles are not held up.
 - **an explicit `profile`** must give every field in the tool schema's `required` list, otherwise `invalid_caller_profile` and nothing starts;
   `profile: null` is the same as no profile.
   The external CLI classifies for itself and takes no profile: passing one answers `profile_not_supported_by_cli`.

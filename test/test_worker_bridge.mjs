@@ -7,6 +7,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {BASE_TASK, KEYWORD_CORPUS} from './task_text_corpus.mjs';
 
 const PLUGIN = new URL('../plugin/', import.meta.url);
 const CATALOG = JSON.parse(fs.readFileSync(new URL('./fixtures/cindy-0.1.121-catalog.json', import.meta.url), 'utf8'));
@@ -771,5 +772,37 @@ test('a3: a cooldown never waits more than 5 minutes, and a clock moved back doe
     classifyWith(p, `Failure ${i}.`, id => refusedBy('classifier_no_candidate', id));
     assert.ok(classifierCooldownsOf(p).channel.until <= Date.now() + 300000, `failure ${i}`);
     expireClassifierCooldowns(p);
+  }
+});
+
+test('m2: the hint says a fix the plugin cannot see still waits out the cooldown, up to 5 minutes, and what does not wait', () => {
+  const p = plugin(codex, 0, 'none');
+  const failed = classifyWith(p, 'First task.', id => refusedBy('classifier_no_candidate', id));
+  const cooling = askAgain(p, 'Second task.');
+  assert.deepEqual(stateOf(cooling), ['blocked', 'classifier_cooling_down']);
+  for (const hint of [failed.result.router.next_action, cooling.result.router.next_action]) {
+    assert.match(hint, /auxiliary model[^.]*permission[^.]*up to 5 minutes/);
+    assert.match(hint, /`profile`/);
+  }
+  assert.match(fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8'), /auxiliary model[^.]*permission[^.]*up to 5 minutes/);
+});
+
+test('m3: through the worker, both steps, the same answer routes every text in the corpus the same; opposite answers on the same text go opposite ways', () => {
+  const route = (overrides, tasks) => {
+    const p = plugin(codex, 0, 'none');
+    const params = task => ({task, catalog: CATALOG, classifyViaHost: true, context: ctx(p.root)});
+    const asked = rpc(p, tasks.map((task, index) => ({id: index + 1, method: 'prepare', params: params(task)})));
+    const replies = rpc(p, tasks.map((task, index) => ({id: index + 1, method: 'prepare', params: {...params(task), ...classified(overrides, asked[index].result.classifier.attemptId)}})));
+    return replies.map(reply => {
+      const {classifier_calibration_cases, ...decision} = reply.result.router.decision;
+      return {state: reply.result.state, bundle: reply.result.bundle, decision};
+    });
+  };
+  const tasks = [BASE_TASK, ...KEYWORD_CORPUS];
+  for (const overrides of [{}, {realtime_loop: true, wants_fast: true, urgency: 'high'}]) {
+    const [expected, ...rest] = route(overrides, tasks);
+    assert.equal(expected.decision.profile.realtime_loop, overrides.realtime_loop === true);
+    assert.equal(expected.decision.profile.wants_fast, overrides.wants_fast === true);
+    rest.forEach((actual, index) => assert.deepEqual(actual, expected, KEYWORD_CORPUS[index].slice(0, 60)));
   }
 });
