@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import {spawnSync} from 'node:child_process';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {BASE_TASK, KEYWORD_CORPUS} from './task_text_corpus.mjs';
 import * as engine from '../plugin/engine/route.mjs';
@@ -31,7 +32,7 @@ import {
   validateCallerProfile,
   validateClassifierProfile,
 } from '../plugin/engine/route.mjs';
-import {defaultCheckout} from '../scripts/default-checkout.mjs';
+import {CASE_FILE, defaultCheckout, findCheckout} from '../scripts/default-checkout.mjs';
 
 const OWN_REPO = fileURLToPath(new URL('..', import.meta.url));
 
@@ -545,10 +546,16 @@ test('a5: `npm test` itself compares the case file: the fixture is the AgentComp
     assert.ok(WORK_KINDS.includes(row.expected_profile.work_kind), row.id);
     for (const column of Object.keys(row.expected_profile)) assert.ok(column in TASK_PROFILE_SCHEMA.properties, `${row.id}: ${column}`);
   }
-  // Same lookup as test/sandbox-e2e.mjs.
-  const source = path.join(process.env.AGENTCOMPASS_CHECKOUT || defaultCheckout(OWN_REPO), 'skills', 'agent-compass', 'references', 'classifier-cases.json');
-  if (fs.existsSync(source)) assert.equal(text(source), fixture, `the fixture follows ${source}`);
-  else t.diagnostic('no AgentCompass checkout here: compared with the fixture only');
+  // A checkout named or found must hold the same file. Only with none at all does the fixture have the last word.
+  const checkout = process.env.AGENTCOMPASS_CHECKOUT || findCheckout(OWN_REPO);
+  if (!checkout) {
+    t.diagnostic('no AgentCompass checkout here: compared with the fixture only');
+    return;
+  }
+  const source = path.join(checkout, CASE_FILE);
+  assert.ok(fs.existsSync(source), `the AgentCompass checkout ${checkout} has no case file`);
+  assert.equal(text(source), fixture, `the fixture follows ${source}`);
+  t.diagnostic(`case file compared with ${source}`);
 });
 
 test('R3: a long task keeps every character and costs calibration cases, whole ones in a fixed order; only one that cannot fit at all is refused', () => {
@@ -1279,7 +1286,7 @@ const groupedNumber = number => number.toLocaleString('en-US');
 test('m1, sixth review: what the tests read at the top of the repository is copied into the Linux sandbox', () => {
   const copied = /for part in ([^;]+); do cp -r "\$REPO\/\$part"/.exec(ownSource('test/run-linux-sandbox.sh'))[1].split(' ');
   const sources = fs.readdirSync(new URL('.', import.meta.url)).filter(name => /\.(mjs|py)$/.test(name)).map(name => [name, ownSource(`test/${name}`)]);
-  // Not .git: the sandbox has none, and defaultCheckout, which reads it, gets its checkout from the variable there.
+  // Not .git: the sandbox has none and needs none, because test/sandbox-e2e.mjs names the checkout to the unit tests in AGENTCOMPASS_CHECKOUT.
   for (const name of fs.readdirSync(OWN_REPO).filter(name => name !== '.git' && !copied.includes(name))) {
     const read = new RegExp(`['"](\\.\\./)?${name.replace(/\W/g, '\\$&')}['"/]`);
     for (const [file, source] of sources) assert.doesNotMatch(source, read, `${file} reads ${name}, which test/run-linux-sandbox.sh does not copy`);
@@ -1297,10 +1304,12 @@ test('m1, sixth review: the default AgentCompass checkout is found from a git wo
     fs.mkdirSync(worktree, {recursive: true});
     fs.writeFileSync(path.join(worktree, '.git'), `gitdir: ${main.split(path.sep).join('/')}/.git/worktrees/x\n`);
     assert.equal(defaultCheckout(worktree), nextToWorktree, 'none there: the name it would have');
-    fs.mkdirSync(nextToMain);
+    fs.mkdirSync(path.join(nextToMain, 'agentcompass'), {recursive: true});
     assert.equal(defaultCheckout(worktree), nextToMain);
     assert.equal(defaultCheckout(main), nextToMain);
     fs.mkdirSync(nextToWorktree);
+    assert.equal(defaultCheckout(worktree), nextToMain, 'an empty directory of that name is no checkout and hides none');
+    fs.mkdirSync(path.join(nextToWorktree, 'agentcompass'));
     assert.equal(defaultCheckout(worktree), nextToWorktree, 'its own sibling first');
   } finally {
     fs.rmSync(top, {recursive: true, force: true});
@@ -1308,6 +1317,62 @@ test('m1, sixth review: the default AgentCompass checkout is found from a git wo
   const launcher = ownSource('scripts/run-linux-sandbox.mjs');
   assert.match(launcher, /AGENTCOMPASS_CHECKOUT_SRC: linux\(process\.env\.AGENTCOMPASS_CHECKOUT \|\| defaultCheckout\(repo\)\)/);
   assert.match(ownSource('test/sandbox-e2e.mjs'), /process\.env\.AGENTCOMPASS_CHECKOUT \|\| defaultCheckout\(REPO\)/);
+});
+
+test('m1, seventh review: a5 goes without a checkout only when there is none: one named without the file, an empty directory in the way and a drifted copy all fail', () => {
+  const caseFile = path.join('skills', 'agent-compass', 'references', 'classifier-cases.json');
+  const fixture = ownSource('test/fixtures/agentcompass/classifier-cases.json');
+  const top = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-a5-'));
+  try {
+    const main = path.join(top, 'projects', 'plugin');
+    const repo = path.join(top, 'worktrees', 'x', 'plugin');
+    const nextToMain = path.join(top, 'projects', 'route_manager');
+    const nextToRepo = path.join(top, 'worktrees', 'x', 'route_manager');
+    const named = path.join(top, 'named');
+    fs.mkdirSync(path.join(main, '.git'), {recursive: true});
+    for (const part of ['test', 'plugin', 'scripts']) fs.cpSync(new URL(`../${part}`, import.meta.url), path.join(repo, part), {recursive: true});
+    fs.writeFileSync(path.join(repo, '.git'), `gitdir: ${main.split(path.sep).join('/')}/.git/worktrees/x\n`);
+    const plant = (dir, content) => {
+      fs.mkdirSync(path.join(dir, path.dirname(caseFile)), {recursive: true});
+      fs.writeFileSync(path.join(dir, caseFile), content);
+    };
+    const a5 = (env = {}) => {
+      const {NODE_TEST_CONTEXT, AGENTCOMPASS_CHECKOUT, ...inherited} = process.env;
+      const done = spawnSync(process.execPath, ['--test', '--test-name-pattern', '^a5:', path.join(repo, 'test', 'test_engine.mjs')],
+        {cwd: repo, env: {...inherited, ...env}, encoding: 'utf8', maxBuffer: 1 << 26});
+      return {status: done.status, output: done.stdout + done.stderr};
+    };
+    const refused = (env, label) => assert.equal(a5(env).status, 1, label);
+    const compared = (env, dir, label) => {
+      const {status, output} = a5(env);
+      assert.equal(status, 0, `${label}: ${output.slice(-600)}`);
+      assert.ok(output.includes(`case file compared with ${path.join(dir, caseFile)}`), `${label}: ${output.slice(-600)}`);
+    };
+
+    const alone = a5();
+    assert.equal(alone.status, 0, alone.output.slice(-600));
+    assert.match(alone.output, /no AgentCompass checkout here: compared with the fixture only/, 'no checkout anywhere: the one case that may skip');
+
+    fs.mkdirSync(named);
+    refused({AGENTCOMPASS_CHECKOUT: named}, 'named, no case file');
+    refused({AGENTCOMPASS_CHECKOUT: path.join(top, 'not-there')}, 'named, not there');
+    plant(named, '{"drifted": true}\n');
+    refused({AGENTCOMPASS_CHECKOUT: named}, 'named, drifted');
+    plant(named, fixture);
+    compared({AGENTCOMPASS_CHECKOUT: named}, named, 'named, the same file');
+
+    plant(nextToMain, '{"drifted": true}\n');
+    refused({}, 'found next to the main checkout, drifted');
+    fs.mkdirSync(nextToRepo);
+    refused({}, 'an empty directory next to the worktree does not hide the drift');
+    plant(nextToMain, fixture);
+    compared({}, nextToMain, 'an empty directory next to the worktree does not hide the checkout');
+    fs.writeFileSync(path.join(nextToRepo, 'agentcompass'), '');
+    refused({}, 'a checkout that lost its case file');
+  } finally {
+    fs.rmSync(top, {recursive: true, force: true});
+  }
+  assert.match(ownSource('test/sandbox-e2e.mjs'), /env: \{AGENTCOMPASS_PYTHON: python\.exe, AGENTCOMPASS_CHECKOUT: CHECKOUT\}/, 'the sandbox names its checkout to the unit tests');
 });
 
 test('m1: the documents state the limit and the first signal lost as they are measured', () => {

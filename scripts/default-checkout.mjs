@@ -1,19 +1,28 @@
-// The AgentCompass checkout to use by default: next to this repository, else, from a git worktree, next to its main checkout.
+// The AgentCompass checkout near a repository: next to it, else, from a git worktree, next to its main checkout.
+// A directory of that name with neither the case file nor the agentcompass entry is no checkout and hides none.
 import fs from 'node:fs';
 import path from 'node:path';
 
-export function defaultCheckout(repo) {
-  const sibling = path.join(repo, '..', 'route_manager');
-  if (fs.existsSync(sibling)) return sibling;
+export const CASE_FILE = path.join('skills', 'agent-compass', 'references', 'classifier-cases.json');
+
+const isCheckout = dir => [CASE_FILE, 'agentcompass'].some(part => fs.existsSync(path.join(dir, part)));
+
+function nextToMainCheckout(repo) {
   try {
     const dotGit = path.join(repo, '.git');
-    if (fs.existsSync(dotGit) && fs.statSync(dotGit).isFile()) {
-      const m = /^gitdir:\s*(.+?)[\\/]\.git[\\/]worktrees[\\/]/i.exec(fs.readFileSync(dotGit, 'utf8').trim());
-      if (m) {
-        const mainSibling = path.resolve(m[1], '..', 'route_manager');
-        if (fs.existsSync(mainSibling)) return mainSibling;
-      }
-    }
-  } catch { /* ignore */ }
-  return sibling;
+    if (!fs.existsSync(dotGit) || !fs.statSync(dotGit).isFile()) return null;
+    const m = /^gitdir:\s*(.+?)[\\/]\.git[\\/]worktrees[\\/]/i.exec(fs.readFileSync(dotGit, 'utf8').trim());
+    return m ? path.resolve(m[1], '..', 'route_manager') : null;
+  } catch {
+    return null;
+  }
+}
+
+export function findCheckout(repo) {
+  return [path.join(repo, '..', 'route_manager'), nextToMainCheckout(repo)].filter(Boolean).find(isCheckout) ?? null;
+}
+
+// For a caller that goes on to use it: with none to find, the path that names what is missing.
+export function defaultCheckout(repo) {
+  return findCheckout(repo) ?? path.join(repo, '..', 'route_manager');
 }

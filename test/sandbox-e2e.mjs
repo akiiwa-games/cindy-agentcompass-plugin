@@ -25,7 +25,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawn, spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {defaultCheckout} from '../scripts/default-checkout.mjs';
+import {CASE_FILE, defaultCheckout} from '../scripts/default-checkout.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WIN = process.platform === 'win32';
@@ -175,10 +175,11 @@ try {
 
   operation('unit tests', 'the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox');
   const nodeUnits = await run([process.execPath, '--test', ...['test_market_contract.mjs', 'test_engine.mjs', 'test_cindy_plugin.mjs', 'test_worker_bridge.mjs'].map(f => path.join(REPO, 'test', f))],
-    {cwd: REPO, env: {AGENTCOMPASS_PYTHON: python.exe}});
+    {cwd: REPO, env: {AGENTCOMPASS_PYTHON: python.exe, AGENTCOMPASS_CHECKOUT: CHECKOUT}});
   const [nodePass, nodeFail] = ['pass', 'fail'].map(k => Number((nodeUnits.stdout.match(new RegExp(`ℹ ${k} (\\d+)`)) || [])[1]));
   report.unit_tests = {node: {pass: nodePass, fail: nodeFail}};
   check(`node --test: ${nodePass} passed, ${nodeFail} failed`, nodeUnits.code === 0 && nodePass >= 50 && nodeFail === 0, nodeUnits.stdout.slice(-1500) + nodeUnits.stderr.slice(-500));
+  check('the unit tests compared the case file with this checkout', nodeUnits.stdout.includes(`case file compared with ${path.join(CHECKOUT, CASE_FILE)}`), nodeUnits.stdout.slice(-1500));
   const pyUnits = await run([python.exe, '-X', 'utf8', '-m', 'unittest', 'discover', '-s', path.join(REPO, 'test'), '-p', 'test_*.py'], {cwd: REPO});
   const ran = Number((pyUnits.stderr.match(/Ran (\d+) tests?/) || [])[1]);
   report.unit_tests.python = {ran, ok: pyUnits.code === 0};
