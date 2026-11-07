@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-07T08:09:24.178Z",
+   "started_at": "2026-11-07T08:19:34.052Z",
    "operations": [
     {
      "name": "isolation",
@@ -33,7 +33,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 124 passed, 0 failed",
+       "name": "node --test: 126 passed, 0 failed",
        "ok": true
       },
       {
@@ -648,11 +648,11 @@
     "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:39897/v1"
+    "scorer": "http://127.0.0.1:43303/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 124,
+     "pass": 126,
      "fail": 0
     },
     "python": {
@@ -674,7 +674,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-07T08:09:57.035Z",
+   "finished_at": "2026-11-07T08:20:07.778Z",
    "summary": {
     "operations": 28,
     "checks": 116,
@@ -686,7 +686,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-07T08:06:59.203Z",
+   "started_at": "2026-11-07T08:17:23.331Z",
    "operations": [
     {
      "name": "isolation",
@@ -715,7 +715,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 124 passed, 0 failed",
+       "name": "node --test: 126 passed, 0 failed",
        "ok": true
       },
       {
@@ -1330,11 +1330,11 @@
     "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:2399/v1"
+    "scorer": "http://127.0.0.1:13554/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 124,
+     "pass": 126,
      "fail": 0
     },
     "python": {
@@ -1356,7 +1356,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-07T08:08:48.106Z",
+   "finished_at": "2026-11-07T08:19:11.757Z",
    "summary": {
     "operations": 28,
     "checks": 116,

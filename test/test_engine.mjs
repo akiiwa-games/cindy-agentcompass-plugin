@@ -34,6 +34,7 @@ import {
 } from '../plugin/engine/route.mjs';
 import {CASE_FILE, defaultCheckout, findCheckout} from '../scripts/default-checkout.mjs';
 import {VENDORED_SOURCES, sourceText, vendoredText} from '../scripts/vendor_engine.mjs';
+import {rankCandidates} from '../plugin/engine/allocator.mjs';
 import {resolveModelSpec} from '../plugin/engine/catalog.mjs';
 import {PROFILE_INTEGERS} from '../plugin/engine/profiler.mjs';
 
@@ -921,7 +922,7 @@ const TEXT_CALL_EXCEPTIONS = {
       'c.notes.length', 'candidates.filter(c=>c.notes.length).length', 'best.notes.length', 'candidates.slice(1,6)', ['newSet()', 2],
       "newSet(rows.filter(r=>r.route.agentKind==='codex').map(r=>r.route.providerId))", ['for(constrowofrows)', 2], 'for(constofferedEffortofrow._efforts)',
       'for(consteffortofrow._efforts)', "r.route.agentKind==='codex'", "codex.status!=='unknown'", "q?.status==='exhausted'", "q?.status==='high'",
-      "harness==='pi'", "harness==='codex'",
+      "c.harness==='pi'", "harness==='codex'", "c.row.route.model.lastIndexOf('/')", "c.row.route.model.slice(c.row.route.model.lastIndexOf('/')+1)",
     ],
     "an effort the caller named, read as the allocator reads it": ['String(constraintEffort).trim()', 'String(constraintEffort).trim().toLowerCase()'],
     'a router status, the platform, or a Cindy failure code': [
@@ -1623,6 +1624,53 @@ test('Review 9: a named model or effort holds on every task, and a named Spark i
   // A cooling named route says so.
   const cooled = routeRows(rows, {realtime_loop: false}, {constraintModel: 'gpt-6-astra', cooling: {[routeKey('codex', 'o', 'gpt-6-astra')]: {until: Date.now() + 60000, code: 'x'}}});
   assert.deepEqual([cooled.status, cooled.decision.cooling_down?.[0].model], ['blocked', 'gpt-6-astra']);
+});
+
+const leafAtEffort = (model, effort) => `${model.slice(model.lastIndexOf('/') + 1)}@${effort}`;
+
+test('Review 10: the harness order picks among the harnesses of one model at one effort and moves no other model', () => {
+  const profile = overrides => ({quota: OK_QUOTA, profile: makeProfile({realtime_loop: true, ...overrides}), useCache: false});
+  // claude-sonnet-5-5 is 0.0095 above gpt-6-astra here: an allowance of 0.01 for Pi used to put the Pi route on top.
+  const close = routeTask('x', WITH_CLAUDE, profile({work_kind: 'exploration_analysis', reasoning_depth: 1, code_complexity: 3, error_cost: 3}));
+  assert.deepEqual([close.route.bundle.harness, close.route.bundle.model, close.route.bundle.effort, close.decision.score], ['claude', 'claude-sonnet-5-5', 'high', 0.346]);
+  const next = close.decision.alternatives.slice(0, 2).map(a => `${a.agentKind}/${a.model}@${a.effort} ${a.score}`);
+  assert.deepEqual(next, ['pi/chatgpt/gpt-6-astra@medium 0.3365', 'codex/gpt-6-astra@medium 0.3365'], 'read-and-report work: Pi first, at the same score');
+
+  // Any other work: the native CLI first, at the same score.
+  const coding = routeTask('x', REAL, profile({work_kind: 'general_implementation', reasoning_depth: 1, code_complexity: 1, error_cost: 1}));
+  assert.deepEqual([coding.route.bundle.harness, coding.route.bundle.model, coding.route.bundle.effort], ['codex', 'gpt-6.1-sol', 'low']);
+  assert.deepEqual([coding.decision.alternatives[0].agentKind, coding.decision.alternatives[0].model, coding.decision.alternatives[0].effort, coding.decision.alternatives[0].score],
+    ['pi', 'chatgpt/gpt-6.1-sol', 'low', coding.decision.score]);
+
+  // A lower score stays lower on the preferred harness: quota moves the pair apart, the order does not put them back.
+  const pair = effort => [listedRow('codex', 'tight', 'gpt-6-astra', [effort]), listedRow('pi', 'spare', 'chatgpt/gpt-6-astra', [effort])];
+  const short = routeTask('x', {models: pair('medium')}, {quota: {source: 'test', status: 'high', used_percent: 90, providerId: 'tight'}, profile: makeProfile({realtime_loop: true, reasoning_depth: 1, code_complexity: 1, error_cost: 1}), useCache: false});
+  assert.deepEqual([short.route.bundle.harness, short.route.bundle.providerId], ['pi', 'spare'], 'the native CLI first only when the scores are the same');
+});
+
+test('Review 10: the route is the one the allocator ranks first, whatever harness carries it', () => {
+  const PI_ALONE = {models: [listedRow('codex', 'o', 'gpt-6-astra', ['low', 'medium', 'high']), listedRow('pi', 'o', 'chatgpt/gpt-6.1-sol', ['low', 'medium', 'high']),
+    listedRow('pi', 'o', 'chatgpt/gpt-6.1-terra', ['low', 'medium', 'high']), listedRow('codex', 'o', 'gpt-6-luna', ['low', 'medium', 'high']), listedRow('cc', 'a', 'claude-sonnet-5-5', FULL)]};
+  const kinds = ['general_implementation', 'exploration_analysis', 'debug_review', 'frontend_implementation', 'direction_reasoning', 'complex_build_plan', 'bounded_bulk_work', 'computer_use'];
+  let checked = 0;
+  const moved = [];
+  for (const catalog of [WITH_CLAUDE, PI_ALONE]) {
+    const rows = catalog.models.filter(row => resolveModelSpec(row.route.model).canonical !== 'gpt-5.3-codex-spark');
+    const dispatchEfforts = Object.fromEntries(['codex', 'claude'].map(harness => [harness, Object.fromEntries(rows.map(row => [row.route.model, row.efforts]))]));
+    const candidateModels = rows.flatMap(row => row.efforts.map(effort => ({model: row.route.model, effort})));
+    for (const work_kind of kinds) for (const reasoning_depth of [1, 2, 3, 4]) for (const code_complexity of [0, 3]) for (const error_cost of [1, 3]) for (const realtime_loop of [false, true]) {
+      const profile = makeProfile({work_kind, reasoning_depth, code_complexity, error_cost, realtime_loop,
+        ...(work_kind === 'computer_use' ? {needs_gui: true, needs_visual: true, interaction_style: 'exploration'} : {})});
+      const routed = routeTask('x', catalog, {quota: OK_QUOTA, profile, useCache: false});
+      const {selected} = rankCandidates(profile, {candidateModels, catalog: {dispatchEfforts}});
+      const pick = routed.status === 'native' ? leafAtEffort(routed.route.bundle.model, routed.route.bundle.effort) : null;
+      const first = selected ? leafAtEffort(selected.model, selected.effort) : null;
+      checked += 1;
+      if (pick !== first) moved.push(`${work_kind} ${reasoning_depth}/${code_complexity}/${error_cost} live=${realtime_loop}: ${first} became ${pick}`);
+    }
+  }
+  assert.equal(checked, 512);
+  assert.deepEqual(moved, []);
 });
 
 test('m1: the documents state the limit and the first signal lost as they are measured', () => {

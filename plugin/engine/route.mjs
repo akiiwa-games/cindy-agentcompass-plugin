@@ -985,8 +985,6 @@ export function routeTask(task, catalog, {
       const notes = [];
       if (q?.status === 'exhausted') {notes.push(`quota ${q.used_percent}% used`); score -= 1;}
       else if (q?.status === 'high') {score -= 0.1 * (q.used_percent - 80) / 15; notes.push(`quota ${q.used_percent}% used`);}
-      // Same model on two harnesses: the AgentCompass harness order decides.
-      if (harness === 'pi') score += PI_FIRST.has(kind) ? 0.01 : -0.01;
       const spec = resolveModelSpec(row._canonical).spec;
       const fast = wantsFast && harness === 'codex' && Boolean(row.supportsFastMode) && Boolean(spec.fast_capable) &&
         (q ? q.used_percent < 60 : false);
@@ -994,7 +992,12 @@ export function routeTask(task, catalog, {
       candidates.push({row, harness, effort: launchEffort, fast, score: Math.round(score * 10000) / 10000, components: scored.components, notes});
     }
   }
-  candidates.sort((a, b) => b.score - a.score);
+  // One model at one effort on two harnesses: the AgentCompass harness order picks one. It is no part of a score, so it moves no other model.
+  const modelEffort = c => `${c.row.route.model.slice(c.row.route.model.lastIndexOf('/') + 1)}@${c.effort}`;
+  const firstSeen = new Map();
+  candidates.forEach((c, index) => {if (!firstSeen.has(modelEffort(c))) firstSeen.set(modelEffort(c), index);});
+  const harnessOrder = c => ((c.harness === 'pi') === PI_FIRST.has(kind) ? 0 : 1);
+  candidates.sort((a, b) => b.score - a.score || firstSeen.get(modelEffort(a)) - firstSeen.get(modelEffort(b)) || harnessOrder(a) - harnessOrder(b));
   const best = candidates[0];
   // Why a candidate is out. Outside a live loop the ranking leaves a named model or effort to the loop above.
   const exclusionsOf = c => [

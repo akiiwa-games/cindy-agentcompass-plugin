@@ -17,7 +17,7 @@
      "ok": true,
      "result": {
       "status": "unknown_send",
-      "operation": "23b3396dfe875b5ff7cdfcff1feebe02c4e44556",
+      "operation": "7741fbe966094ebc172f4a147068c695fcb6b410",
       "taskId": "task-1",
       "runId": null,
       "task_id": "task-1",
@@ -29,7 +29,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "23b3396dfe875b5ff7cdfcff1feebe02c4e44556"
+        "operation": "7741fbe966094ebc172f4a147068c695fcb6b410"
        }
       }
      }
@@ -45,14 +45,14 @@
      "ok": true,
      "result": {
       "status": "unknown_send",
-      "operation": "23b3396dfe875b5ff7cdfcff1feebe02c4e44556",
+      "operation": "7741fbe966094ebc172f4a147068c695fcb6b410",
       "taskId": "task-1",
       "error": "CONNECTION_LOST after the input was accepted",
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "23b3396dfe875b5ff7cdfcff1feebe02c4e44556"
+        "operation": "7741fbe966094ebc172f4a147068c695fcb6b410"
        }
       },
       "next_action": "Delivery to task task-1 is unconfirmed. Status keeps checking its durable runs; the input is never resent."
@@ -69,7 +69,7 @@
      "ok": true,
      "result": {
       "status": "cleanup_refused",
-      "operation": "23b3396dfe875b5ff7cdfcff1feebe02c4e44556",
+      "operation": "7741fbe966094ebc172f4a147068c695fcb6b410",
       "taskId": "task-1",
       "state": "unknown_send",
       "archived": false,
@@ -78,7 +78,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "23b3396dfe875b5ff7cdfcff1feebe02c4e44556"
+        "operation": "7741fbe966094ebc172f4a147068c695fcb6b410"
        }
       }
      }
@@ -98,7 +98,7 @@
   },
   {
    "name": "create",
-   "requestKey": "23b3396dfe875b5ff7cdfcff1feebe02c4e44556:create",
+   "requestKey": "7741fbe966094ebc172f4a147068c695fcb6b410:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
@@ -112,7 +112,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "23b3396dfe875b5ff7cdfcff1feebe02c4e44556:send",
+   "requestKey": "7741fbe966094ebc172f4a147068c695fcb6b410:send",
    "chars": 436
   },
   {
@@ -160,12 +160,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "9fabec3b37f32f5c33fb73c5222698b5f49cb276ec44db09fbd93a5576bfc587",
+   "sha256": "94f773f2e143c60fa10126801c7f21eb90f5d9008f40c2e9d54e8054f7648a9a",
    "chars": 436
   }
  ],
  "prepared": {
-  "operation": "23b3396dfe875b5ff7cdfcff1feebe02c4e44556",
+  "operation": "7741fbe966094ebc172f4a147068c695fcb6b410",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -250,9 +250,27 @@
     "quota_penalized_routes": 0,
     "alternatives": [
      {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6.1-sol",
+      "effort": "high",
+      "fast": false,
+      "score": 0.3647,
+      "notes": []
+     },
+     {
       "agentKind": "codex",
       "providerId": "openai",
       "model": "gpt-6-sol",
+      "effort": "high",
+      "fast": false,
+      "score": 0.3566,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6-sol",
       "effort": "high",
       "fast": false,
       "score": 0.3566,
@@ -271,27 +289,9 @@
       "agentKind": "pi",
       "providerId": "openai",
       "model": "chatgpt/gpt-6.1-sol",
-      "effort": "high",
+      "effort": "medium",
       "fast": false,
-      "score": 0.3547,
-      "notes": []
-     },
-     {
-      "agentKind": "codex",
-      "providerId": "openai",
-      "model": "gpt-6.1-sol",
-      "effort": "xhigh",
-      "fast": false,
-      "score": 0.3519,
-      "notes": []
-     },
-     {
-      "agentKind": "pi",
-      "providerId": "openai",
-      "model": "chatgpt/gpt-6-sol",
-      "effort": "high",
-      "fast": false,
-      "score": 0.3466,
+      "score": 0.3548,
       "notes": []
      }
     ]
@@ -307,7 +307,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [a74c157a]\nFIXTURE-SCENARIO: ok review2-foreign\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [060646da]\nFIXTURE-SCENARIO: ok review2-foreign\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1

@@ -129,8 +129,8 @@ keyword, regex or length heuristics on the task text:
   separately.
 - **self**: when the profile has `self: true` (or `delegate: false`), `roll` returns `status: "self"`; nothing starts.
 - **native**: otherwise the allocator (`rankCandidates`) scores every Claude, Codex and Pi row with each effort the row offers against the
-  profile. The best one is started. Where one model is offered by both Pi and its native CLI, Pi wins for read-and-report work and the
-  native CLI otherwise, as in AgentCompass. `realtime_loop` is preserved on both `profile` and `decision`.
+  profile. The best one is started. Where one model at one effort is offered by both Pi and its native CLI at the same score, Pi wins for
+  read-and-report work and the native CLI otherwise, as in AgentCompass; this order is no part of a score and moves no other model. `realtime_loop` is preserved on both `profile` and `decision`.
 - **quota**: the newest rate-limit snapshot the Codex CLI wrote to its session logs (`$CODEX_HOME`, else `~/.codex` and Cindy's own
   `<app data>/CindyGlobal/codex-home`) lowers the score of routes on that connection when it is high or exhausted. The decision lists
   `quota_penalized_routes` and warns when the chosen route itself is short of quota.

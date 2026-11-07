@@ -20,7 +20,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "998e1f17cfc08b54b6452f7e7825fa1e5b902b4d",
+      "operation": "65c2a4d2839e79fa48e11630f712de90a65bf133",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -32,7 +32,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "998e1f17cfc08b54b6452f7e7825fa1e5b902b4d"
+        "operation": "65c2a4d2839e79fa48e11630f712de90a65bf133"
        }
       }
      }
@@ -48,7 +48,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "998e1f17cfc08b54b6452f7e7825fa1e5b902b4d",
+      "operation": "65c2a4d2839e79fa48e11630f712de90a65bf133",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -63,7 +63,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "998e1f17cfc08b54b6452f7e7825fa1e5b902b4d"
+        "operation": "65c2a4d2839e79fa48e11630f712de90a65bf133"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -89,7 +89,7 @@
      "ok": true,
      "result": {
       "status": "completed",
-      "operation": "998e1f17cfc08b54b6452f7e7825fa1e5b902b4d",
+      "operation": "65c2a4d2839e79fa48e11630f712de90a65bf133",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -100,14 +100,14 @@
       "final_result_summary": "[Worker final report] harness-pi",
       "summary_shortened": false,
       "full_result_artifacts": [
-       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\998e1f17cfc08b54b6452f7e7825fa1e5b902b4d\\messages-9ca300e6b7486aed.json",
-       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\998e1f17cfc08b54b6452f7e7825fa1e5b902b4d\\messages-a4a8d1c3e0cca10e.json"
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\65c2a4d2839e79fa48e11630f712de90a65bf133\\messages-a5eda11d62327b44.json",
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\65c2a4d2839e79fa48e11630f712de90a65bf133\\messages-a4a8d1c3e0cca10e.json"
       ],
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "cleanup",
        "args": {
-        "operation": "998e1f17cfc08b54b6452f7e7825fa1e5b902b4d"
+        "operation": "65c2a4d2839e79fa48e11630f712de90a65bf133"
        }
       },
       "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
@@ -124,7 +124,7 @@
      "ok": true,
      "result": {
       "status": "cleaned",
-      "operation": "998e1f17cfc08b54b6452f7e7825fa1e5b902b4d",
+      "operation": "65c2a4d2839e79fa48e11630f712de90a65bf133",
       "taskId": "task-1",
       "task_id": "task-1"
      }
@@ -144,7 +144,7 @@
   },
   {
    "name": "create",
-   "requestKey": "998e1f17cfc08b54b6452f7e7825fa1e5b902b4d:create",
+   "requestKey": "65c2a4d2839e79fa48e11630f712de90a65bf133:create",
    "route": {
     "agentKind": "pi",
     "model": "chatgpt/gpt-6.1-terra",
@@ -158,7 +158,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "998e1f17cfc08b54b6452f7e7825fa1e5b902b4d:send",
+   "requestKey": "65c2a4d2839e79fa48e11630f712de90a65bf133:send",
    "chars": 452
   },
   {
@@ -229,12 +229,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "4c1169b1a65898bc93d30d86ced496105ba858f6f3ea8990e0b2a8543df1c683",
+   "sha256": "1a40f8fcaed86e0b76b5155d75fff3e31aa611a73cf5911c77a998e6849ea46b",
    "chars": 452
   }
  ],
  "prepared": {
-  "operation": "998e1f17cfc08b54b6452f7e7825fa1e5b902b4d",
+  "operation": "65c2a4d2839e79fa48e11630f712de90a65bf133",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -287,7 +287,7 @@
      "total": 47
     },
     "canonical_model": "gpt-6.1-terra",
-    "score": 0.329,
+    "score": 0.319,
     "components": {
      "fit": 0.766,
      "route_fit": 0.4,
@@ -319,21 +319,21 @@
     "quota_penalized_routes": 0,
     "alternatives": [
      {
-      "agentKind": "pi",
-      "providerId": "openai",
-      "model": "chatgpt/gpt-6.1-terra",
-      "effort": "medium",
-      "fast": false,
-      "score": 0.3255,
-      "notes": []
-     },
-     {
       "agentKind": "codex",
       "providerId": "openai",
       "model": "gpt-6.1-terra",
       "effort": "high",
       "fast": false,
       "score": 0.319,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6.1-terra",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.3155,
       "notes": []
      },
      {
@@ -351,16 +351,16 @@
       "model": "chatgpt/gpt-6.1-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3095,
+      "score": 0.2995,
       "notes": []
      },
      {
-      "agentKind": "pi",
+      "agentKind": "codex",
       "providerId": "openai",
-      "model": "chatgpt/gpt-6-luna",
+      "model": "gpt-6.1-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.309,
+      "score": 0.2995,
       "notes": []
      }
     ]
@@ -376,7 +376,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi-1794038890483]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi-1794039515039]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1
@@ -413,7 +413,7 @@
     "effort": "high",
     "fastMode": false
    },
-   "inputText": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi-1794038890483]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "inputText": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi-1794039515039]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
    "outputMessageId": "out-final"
   }
  ],
