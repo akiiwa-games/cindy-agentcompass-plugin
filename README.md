@@ -80,8 +80,8 @@ keyword, regex or length heuristics on the task text:
   with every constraint and every description but the four the rubric covers (`context_scale`, `divergence`, `local_only`, `realtime_loop`), and last the
   whole task inside an `untrusted_task_evidence` JSON envelope with prompt-injection rules. The answer is validated against `TASK_PROFILE_SCHEMA` with every
   field required, so one without `self` or `wants_fast` is `invalid_classifier_output` and starts nothing (including `realtime_loop` and `expected_hours` in
-  `0.05..24`). `task_count` must be a JSON string and the prompt says so; a number gets what AgentCompass `validate_profile` gives it: no error and no
-  count taken from it, with `multi_task` deciding. The answer is cached in memory and in
+  `0.05..24`). `task_count` is a JSON string and the prompt says so; a positive whole number is read as its bucket (1, 2, 3, 4 and up as `">3"`) and then
+  checked like the string. Any other value, or one that contradicts `multi_task`, is invalid. The answer is cached in memory and in
   `~/.agent-compass/cindy-plugin/score-cache.json`, keyed by prompt/schema digest and full task input.
 - **the 32,768-character budget**: this channel takes a single `prompt` of at most 32,768 characters and has no separate context field, so the
   task and the instructions share it. The rubric and route definitions always go whole; calibration cases take what is left, whole ones only, in

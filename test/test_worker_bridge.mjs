@@ -806,3 +806,22 @@ test('m3: through the worker, both steps, the same answer routes every text in t
     rest.forEach((actual, index) => assert.deepEqual(actual, expected, KEYWORD_CORPUS[index].slice(0, 60)));
   }
 });
+
+test('M1, fifth review: through the worker, an unquoted count splits with its count, and the same task asks Cindy nothing the second time; a contradicting number starts nothing', () => {
+  for (const [count, bucket] of [[3, '3'], [4, '>3']]) {
+    const p = plugin(codex, 0, 'none');
+    const task = `Do several things, count ${count}.`;
+    const first = classifyWith(p, task, id => classified({multi_task: true, task_count: count}, id));
+    assert.deepEqual([first.result.router.status, first.result.router.task_count], ['split', bucket]);
+    const again = askAgain(p, task);
+    assert.notEqual(again.result.state, 'classify', 'Cindy is not asked again');
+    assert.deepEqual([again.result.router.status, again.result.router.task_count], ['split', bucket]);
+    assert.equal(again.result.classifier, undefined);
+  }
+  for (const [multi, count] of [[false, 2], [true, 1], [true, 0], [true, 2.5]]) {
+    const p = plugin(codex, 0, 'none');
+    const reply = classifyWith(p, 'Do something.', id => classified({multi_task: multi, task_count: count}, id));
+    assert.deepEqual(stateOf(reply), ['blocked', 'invalid_classifier_output'], `${multi} ${count}`);
+    assert.match(reply.result.router.error, /task_count/);
+  }
+});

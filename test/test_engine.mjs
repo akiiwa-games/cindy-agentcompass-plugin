@@ -1192,7 +1192,7 @@ test('M1: multi_task and reasoning_depth carry their whole AgentCompass descript
   }
 });
 
-test('M2: task_count is a string in the prompt and the prompt says so; a number is what AgentCompass validate_profile makes of it: no error, not coerced', () => {
+test('M2: task_count is a string in the prompt and the prompt says so', () => {
   const {prompt} = buildClassifierPrompt('x');
   const schema = promptSchema(prompt);
   for (const value of ['1', '2', '3', '>3']) assert.ok(schema.task_count.includes(JSON.stringify(value)), value);
@@ -1201,21 +1201,75 @@ test('M2: task_count is a string in the prompt and the prompt says so; a number 
   for (const field of ['hours_confidence', 'urgency', 'interaction_style']) {
     for (const value of TASK_PROFILE_SCHEMA.properties[field].enum) assert.ok(schema[field].includes(JSON.stringify(value)), `${field}: ${value}`);
   }
-  // allocator.py validate_profile keeps task_count only `if raw.get('task_count') in TASK_COUNTS`: 1 is dropped, the profile stands, multi_task decides.
-  for (const count of [1, 2, 3, 4]) {
-    assert.equal(validateClassifierProfile(makeProfile({task_count: count})).task_count, '1', `${count}: multi_task false`);
-    assert.equal(validateCallerProfile(makeProfile({task_count: count})).task_count, '1', `${count}: a caller the same`);
-    const answer = overrides => ({quota: OK, useCache: false, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(makeProfile(overrides))}});
-    assert.equal(routeTask('Fix util.py', REAL, answer({task_count: count})).status, 'native', `${count}: multi_task false`);
-    const split = routeTask('Fix util.py', REAL, answer({multi_task: true, task_count: count}));
-    assert.deepEqual([split.status, split.task_count], ['split', '2'], `${count}: multi_task true is a split, its count not taken from the number`);
+});
+
+// Probe probe_f2_f3.mjs of the fifth review, and on from there.
+const TASK_COUNT_ANSWERS = [
+  [false, '1', '1'], [false, 1, '1'],
+  [true, '2', '2'], [true, '3', '3'], [true, '>3', '>3'],
+  [true, 2, '2'], [true, 3, '3'], [true, 4, '>3'], [true, 40, '>3'],
+];
+const TASK_COUNT_REFUSALS = [
+  [false, 2], [false, 3], [false, 4], [false, '2'], [true, 1], [true, '1'],
+  ...[true, false].flatMap(multi => [0, -1, -5, 1.5, 2.5, NaN, Infinity, -Infinity, 'many', null, true].map(count => [multi, count])),
+];
+const validators = {classifier: validateClassifierProfile, caller: validateCallerProfile};
+
+test('M1, fifth review: a positive whole task_count goes to its bucket: the profile agrees with itself, validating it again changes nothing, the split keeps the count', () => {
+  for (const [name, validate] of Object.entries(validators)) {
+    for (const [multi, count, bucket] of TASK_COUNT_ANSWERS) {
+      const label = `${name}: multi_task ${multi}, task_count ${JSON.stringify(count)}`;
+      const once = validate(makeProfile({multi_task: multi, task_count: count}));
+      assert.deepEqual([once.multi_task, once.task_count], [multi, bucket], label);
+      assert.deepEqual(validate(once), once, `${label}: validating it again changes nothing`);
+      assert.deepEqual(validateClassifierProfile(once), once, `${label}: what the cache reads it with`);
+      assert.equal(splitGate(once)?.task_count ?? null, multi ? bucket : null, `${label}: the split`);
+    }
   }
-  // A string outside the list, and a string that contradicts multi_task, stay refused here, as before.
-  assert.throws(() => validateClassifierProfile(makeProfile({task_count: 'many'})), /task_count/);
-  assert.throws(() => validateClassifierProfile(makeProfile({task_count: '2'})), /task_count/);
-  assert.throws(() => validateClassifierProfile(makeProfile({task_count: null})), /task_count/);
+});
+
+test('m1, fifth review: any other number, and a number that contradicts multi_task, is refused like the string, from a model and from a caller', () => {
+  for (const [name, validate] of Object.entries(validators)) {
+    for (const [multi, count] of TASK_COUNT_REFUSALS) {
+      assert.throws(() => validate(makeProfile({multi_task: multi, task_count: count})), /task_count/, `${name}: multi_task ${multi}, task_count ${String(count)}`);
+    }
+  }
+  const answer = rawOutput => ({quota: OK, useCache: false, classification: {ok: true, model: 'm', rawOutput}});
+  for (const [multi, count] of [[false, 2], [true, 1], [true, 0], [false, -1], [true, 2.5]]) {
+    const raw = JSON.stringify(makeProfile({multi_task: multi, task_count: count}));
+    const blocked = routeTask('Fix util.py', REAL, answer(raw));
+    assert.deepEqual([blocked.status, blocked.decision.reason], ['blocked', 'invalid_classifier_output'], raw);
+    assert.equal(routeTask('Fix util.py', REAL, {quota: OK, profile: makeProfile({multi_task: multi, task_count: count})}).decision.reason, 'invalid_caller_profile', raw);
+  }
+  // A number too large for JSON.parse arrives as Infinity.
+  const huge = JSON.stringify(makeProfile({multi_task: true, task_count: '2'})).replace('"task_count":"2"', '"task_count":1e999');
+  assert.equal(routeTask('Fix util.py', REAL, answer(huge)).decision.reason, 'invalid_classifier_output');
+  // A field left out stays missing: nothing stands in for it.
   const {task_count, ...without} = makeProfile();
   assert.throws(() => validateClassifierProfile(without), /missing required field.*task_count/);
+});
+
+test('M1, fifth review: an unquoted count survives the score cache, in memory and on disk: the second call hits it, as with a string, and keeps the count', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-count-'));
+  try {
+    for (const [count, bucket] of [[2, '2'], [3, '3'], [4, '>3'], ['3', '3']]) {
+      const task = `task with parts, count ${JSON.stringify(count)}`;
+      const cacheFile = path.join(dir, 'score-cache.json');
+      clearClassifierCache();
+      const answered = routeTask(task, REAL, {quota: OK, cacheFile, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(makeProfile({multi_task: true, task_count: count}))}});
+      assert.deepEqual([answered.status, answered.task_count, answered.profile.task_count], ['split', bucket, bucket], task);
+      assert.equal(prepareClassifierRequest(task, {cacheFile}).cached, true, `${task}: step one of the worker, from memory`);
+      const fromMemory = routeTask(task, REAL, {quota: OK, cacheFile});
+      assert.deepEqual([fromMemory.status, fromMemory.task_count, fromMemory.classifier_model], ['split', bucket, 'm'], `${task}: from memory`);
+      clearClassifierCache();
+      assert.equal(prepareClassifierRequest(task, {cacheFile}).cached, true, `${task}: step one of the worker, from disk`);
+      const fromDisk = routeTask(task, REAL, {quota: OK, cacheFile});
+      assert.deepEqual([fromDisk.status, fromDisk.task_count, fromDisk.classifier_model], ['split', bucket, 'm'], `${task}: from disk`);
+    }
+  } finally {
+    clearClassifierCache();
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
 });
 
 test('rule 1 of the AgentCompass prompt is back whole: inputs inlined or public mean local_only false, even with a local output path named', () => {

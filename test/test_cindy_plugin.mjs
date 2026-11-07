@@ -788,6 +788,26 @@ test('split and self are decided by the profile alone: the same text goes three 
   assert.equal(plain.workerCreates(),1);
 });
 
+test('M1, fifth review: an unquoted count from Cindy splits with its count and the next session asks nothing; a contradicting one starts nothing',async()=>{
+  const taskText='Plain task text with an unquoted count';
+  clearClassifierCache();
+  const f=classifierFixture({profileOverrides:{multi_task:true,task_count:3,reason:'three deliverables'}});
+  const first=(await f.send('roll',{task:taskText})).result;
+  assert.deepEqual([first.status,first.task_count,first.profile_source],['split','3','classifier']);
+  const second=(await f.send('roll',{task:taskText},{...ctx,session_id:'second-parent'})).result;
+  assert.deepEqual([second.status,second.task_count,second.profile_source],['split','3','classifier']);
+  assert.equal(f.oneshots().length,1,'the second session hits the cache');
+  assert.equal(f.workerCreates(),0);
+  for (const overrides of [{multi_task:false,task_count:2},{multi_task:true,task_count:1},{multi_task:true,task_count:2.5}]) {
+    clearClassifierCache();
+    const bad=classifierFixture({profileOverrides:overrides});
+    const refused=(await bad.send('roll',{task:taskText})).result;
+    assert.deepEqual([refused.status,refused.decision.reason],['blocked','invalid_classifier_output'],JSON.stringify(overrides));
+    assert.equal(bad.workerCreates(),0);
+  }
+  clearClassifierCache();
+});
+
 test('r7: classification needs no working folder, so self and split answer from any project; a worker draft in another folder is discarded and names the setting to change',async()=>{
   const elsewhere={...ctx,workdir:'D:/another-project'};
   clearClassifierCache();

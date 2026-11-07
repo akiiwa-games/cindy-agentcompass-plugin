@@ -433,18 +433,22 @@ function checkProfileFields(raw, who, required, allowed) {
   if (typeof raw.urgency !== 'string' || !URGENCY_LEVELS.has(raw.urgency)) {
     throw Error(`Invalid urgency in ${who} profile: ${JSON.stringify(raw.urgency)}`);
   }
-  // A number here is what AgentCompass validate_profile takes it for: no answer, neither an error nor the count it looks like. multi_task decides.
-  if (typeof raw.task_count !== 'number') {
-    if (typeof raw.task_count !== 'string' || !TASK_COUNT_BUCKETS.has(raw.task_count)) {
-      throw Error(`Invalid task_count in ${who} profile: ${JSON.stringify(raw.task_count)}`);
-    }
-    if ((raw.multi_task === false && raw.task_count !== '1') || (raw.multi_task === true && raw.task_count === '1')) {
-      throw Error(`Invalid task_count ${JSON.stringify(raw.task_count)} for multi_task=${raw.multi_task}: must be "1" iff multi_task is false`);
-    }
+  if (typeof raw.task_count !== 'string' || !TASK_COUNT_BUCKETS.has(raw.task_count)) {
+    throw Error(`Invalid task_count in ${who} profile: ${JSON.stringify(raw.task_count)}`);
+  }
+  if ((raw.multi_task === false && raw.task_count !== '1') || (raw.multi_task === true && raw.task_count === '1')) {
+    throw Error(`Invalid task_count ${JSON.stringify(raw.task_count)} for multi_task=${raw.multi_task}: must be "1" iff multi_task is false`);
   }
   if ('reason' in raw && (typeof raw.reason !== 'string' || !raw.reason.trim() || raw.reason.length > 240)) {
     throw Error(`Invalid reason in ${who} profile: must be 1..240 non-empty string`);
   }
+}
+
+// A model may leave the quotes off: a positive whole number means its bucket, and is then checked exactly like the string. Any other number stays invalid.
+function withTaskCountBucket(raw) {
+  const count = raw?.task_count;
+  if (!Number.isInteger(count) || count < 1) return raw;
+  return {...raw, task_count: count > 3 ? '>3' : String(count)};
 }
 
 function normalizedProfile(raw) {
@@ -456,13 +460,15 @@ function normalizedProfile(raw) {
 }
 
 export function validateClassifierProfile(raw) {
-  checkProfileFields(raw, 'Classifier', CLASSIFIER_REQUIRED_KEYS, ALLOWED_PROFILE_KEYS);
-  return normalizedProfile(raw);
+  const profile = withTaskCountBucket(raw);
+  checkProfileFields(profile, 'Classifier', CLASSIFIER_REQUIRED_KEYS, ALLOWED_PROFILE_KEYS);
+  return normalizedProfile(profile);
 }
 
 export function validateCallerProfile(raw) {
-  checkProfileFields(raw, 'Caller', CALLER_REQUIRED_KEYS, CALLER_ALLOWED_KEYS);
-  return normalizedProfile(raw);
+  const profile = withTaskCountBucket(raw);
+  checkProfileFields(profile, 'Caller', CALLER_REQUIRED_KEYS, CALLER_ALLOWED_KEYS);
+  return normalizedProfile(profile);
 }
 
 // Deterministic 64-bit FNV-1a hash in pure JS (no extra node:* import required).
