@@ -7,10 +7,10 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
-export const DEFAULT_COMMIT = '34448f9e9b82a2506fbda7481371e55526757c14';
+export const DEFAULT_COMMIT = '6834bc0dbf054e6f08b28a483e3dffdd9d04f662';
 
 // plugin/engine/<name>.mjs: src/<source>.js
-export const VENDORED_SOURCES = {catalog: 'catalog', allocator: 'allocator', profiler: 'profiler-core', quota: 'quota', continuity: 'continuity'};
+export const VENDORED_SOURCES = {catalog: 'catalog', allocator: 'allocator', profiler: 'profiler-core', quota: 'quota', 'quota-loader': 'quota-loader', continuity: 'continuity'};
 
 const renamed = (text, rename) => text.replace(/from "\.\/([\w-]+)\.(m?js)"/g, (_, name, ext) => `from "./${rename(name, ext)}"`);
 

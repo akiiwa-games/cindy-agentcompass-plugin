@@ -77,6 +77,7 @@ const DEFAULT_CLASSIFIER_PROFILE = {
   task_count: '1',
   self: false,
   wants_fast: false,
+  read_only_review: false,
   reason: 'fixture classification from fake Cindy host model',
 };
 

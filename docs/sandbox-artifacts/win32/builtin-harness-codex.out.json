@@ -20,7 +20,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "e9bd2bbceb14498354a6a4e0d03bbdcc8556c584",
+      "operation": "87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -32,7 +32,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "e9bd2bbceb14498354a6a4e0d03bbdcc8556c584"
+        "operation": "87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c"
        }
       }
      }
@@ -48,7 +48,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "e9bd2bbceb14498354a6a4e0d03bbdcc8556c584",
+      "operation": "87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -63,7 +63,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "e9bd2bbceb14498354a6a4e0d03bbdcc8556c584"
+        "operation": "87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -89,7 +89,7 @@
      "ok": true,
      "result": {
       "status": "completed",
-      "operation": "e9bd2bbceb14498354a6a4e0d03bbdcc8556c584",
+      "operation": "87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -100,14 +100,14 @@
       "final_result_summary": "[Worker final report] harness-codex",
       "summary_shortened": false,
       "full_result_artifacts": [
-       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\e9bd2bbceb14498354a6a4e0d03bbdcc8556c584\\messages-0879ec03cf3183ba.json",
-       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\e9bd2bbceb14498354a6a4e0d03bbdcc8556c584\\messages-1868a0f6775cfe51.json"
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c\\messages-3ce3960c072659e5.json",
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c\\messages-1868a0f6775cfe51.json"
       ],
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "cleanup",
        "args": {
-        "operation": "e9bd2bbceb14498354a6a4e0d03bbdcc8556c584"
+        "operation": "87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c"
        }
       },
       "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
@@ -124,7 +124,7 @@
      "ok": true,
      "result": {
       "status": "cleaned",
-      "operation": "e9bd2bbceb14498354a6a4e0d03bbdcc8556c584",
+      "operation": "87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c",
       "taskId": "task-1",
       "task_id": "task-1"
      }
@@ -144,12 +144,12 @@
   },
   {
    "name": "create",
-   "requestKey": "e9bd2bbceb14498354a6a4e0d03bbdcc8556c584:create",
+   "requestKey": "87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c:create",
    "route": {
     "agentKind": "codex",
-    "model": "gpt-6.1-sol",
+    "model": "gpt-6-luna",
     "providerId": "openai",
-    "effort": "low",
+    "effort": "high",
     "fastMode": false
    },
    "permissionMode": "bypassPermissions"
@@ -158,7 +158,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "e9bd2bbceb14498354a6a4e0d03bbdcc8556c584:send",
+   "requestKey": "87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c:send",
    "chars": 409
   },
   {
@@ -202,7 +202,7 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 28398,
+   "chars": 28396,
    "expectJson": true,
    "callId": "call-1"
   }
@@ -229,12 +229,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "ccb327266c1433231df771e7b3300c9f597e791f9850110cb376fae5711c364c",
+   "sha256": "0401913f26d3c01a153a8b4399cfb0d70556595753cd29330474641b450af829",
    "chars": 409
   }
  ],
  "prepared": {
-  "operation": "e9bd2bbceb14498354a6a4e0d03bbdcc8556c584",
+  "operation": "87a9e3202d0c7b83d8f2c2c62ab0f7e847d60a6c",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -247,8 +247,8 @@
      "harness": "codex",
      "account": "openai",
      "providerId": "openai",
-     "model": "gpt-6.1-sol",
-     "effort": "low",
+     "model": "gpt-6-luna",
+     "effort": "high",
      "fast": false,
      "modeId": "full-access"
     }
@@ -277,24 +277,26 @@
      "multi_task": false,
      "task_count": "1",
      "self": false,
-     "wants_fast": false
+     "wants_fast": false,
+     "read_only_review": false
     },
     "profile_source": "classifier",
     "classifier_model": "fixture-quick-text",
     "realtime_loop": false,
+    "read_only_review": false,
     "classifier_calibration_cases": {
-     "included": 47,
-     "total": 47
+     "included": 53,
+     "total": 53
     },
-    "canonical_model": "gpt-6.1-sol",
-    "score": 0.3288,
+    "canonical_model": "gpt-6-luna",
+    "score": 0.4,
     "components": {
-     "fit": 0.77,
-     "route_fit": 0.54,
+     "fit": 1,
+     "route_fit": 1,
      "vector_fit": 1,
      "subjective_fit": 1,
      "ability": 1,
-     "ability_value": 2.86,
+     "ability_value": 2.61,
      "required_ability": 2.325,
      "continuity": 0,
      "quality_bonus": 0,
@@ -304,8 +306,9 @@
      "fast_bonus": 0,
      "opportunity_cost": 0,
      "effort_penalty": 0,
-     "overqualification": 0.0022,
-     "shortfall": 0
+     "overqualification": 0,
+     "shortfall": 0,
+     "harness_factor": 1
     },
     "wants_fast": false,
     "not_routed": [
@@ -321,46 +324,46 @@
      {
       "agentKind": "pi",
       "providerId": "openai",
-      "model": "chatgpt/gpt-6.1-sol",
-      "effort": "low",
+      "model": "chatgpt/gpt-6-luna",
+      "effort": "high",
       "fast": false,
-      "score": 0.3288,
-      "notes": []
-     },
-     {
-      "agentKind": "cc",
-      "providerId": "anthropic",
-      "model": "claude-sonnet-5-5",
-      "effort": "low",
-      "fast": false,
-      "score": 0.3288,
-      "notes": []
-     },
-     {
-      "agentKind": "cc",
-      "providerId": "anthropic",
-      "model": "claude-opus-5-5",
-      "effort": "low",
-      "fast": false,
-      "score": 0.3229,
-      "notes": []
-     },
-     {
-      "agentKind": "cc",
-      "providerId": "anthropic",
-      "model": "claude-sonnet-5-5",
-      "effort": "medium",
-      "fast": false,
-      "score": 0.3192,
+      "score": 0.4,
       "notes": []
      },
      {
       "agentKind": "codex",
       "providerId": "openai",
-      "model": "gpt-6.1-sol",
+      "model": "gpt-6-luna",
       "effort": "medium",
       "fast": false,
-      "score": 0.3162,
+      "score": 0.397,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6-luna",
+      "effort": "medium",
+      "fast": false,
+      "score": 0.397,
+      "notes": []
+     },
+     {
+      "agentKind": "codex",
+      "providerId": "openai",
+      "model": "gpt-6-luna",
+      "effort": "xhigh",
+      "fast": false,
+      "score": 0.388,
+      "notes": []
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6-luna",
+      "effort": "xhigh",
+      "fast": false,
+      "score": 0.388,
       "notes": []
      }
     ]
@@ -371,12 +374,12 @@
    "harness": "codex",
    "account": "openai",
    "providerId": "openai",
-   "model": "gpt-6.1-sol",
-   "effort": "low",
+   "model": "gpt-6-luna",
+   "effort": "high",
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [codex-1794039513407]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [codex-1794081166361]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1
@@ -389,9 +392,9 @@
    "revision": 2,
    "resolvedConfig": {
     "agentKind": "codex",
-    "model": "gpt-6.1-sol",
+    "model": "gpt-6-luna",
     "providerId": "openai",
-    "effort": "low",
+    "effort": "high",
     "fastMode": false
    },
    "permissionMode": "bypassPermissions",
@@ -408,12 +411,12 @@
    "status": "completed",
    "acceptedConfig": {
     "agentKind": "codex",
-    "model": "gpt-6.1-sol",
+    "model": "gpt-6-luna",
     "providerId": "openai",
-    "effort": "low",
+    "effort": "high",
     "fastMode": false
    },
-   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [codex-1794039513407]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [codex-1794081166361]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
    "outputMessageId": "out-final"
   }
  ],

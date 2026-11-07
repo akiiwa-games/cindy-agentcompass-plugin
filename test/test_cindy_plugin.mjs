@@ -615,6 +615,7 @@ const BASE_PROFILE={
   task_count:'1',
   self:false,
   wants_fast:false,
+  read_only_review:false,
   reason:'classified by fake Cindy host',
 };
 // options.oneshot: what the quick-text channel answers, an object or a function of the request number; options.oneshotHang never answers.

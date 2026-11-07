@@ -10,20 +10,27 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {BASE_TASK, KEYWORD_CORPUS} from './task_text_corpus.mjs';
 import * as engine from '../plugin/engine/route.mjs';
 import {
+  ACCOUNT_STATES,
   CALLER_REQUIRED_KEYS,
   CLASSIFIER_CASES,
   HARNESS,
   ONESHOT_PROMPT_LIMIT,
   PROMPT_SCHEMA_DIGEST,
+  READ_ONLY_REVIEW_QUESTION,
   REALTIME_LOOP_QUESTION,
   TASK_PROFILE_SCHEMA,
+  WANTS_FAST_QUESTION,
   WORK_KINDS,
   buildClassifierPrompt,
   clearClassifierCache,
   codexHomes,
   codexQuota,
+  formatQuotaAccountList,
+  listQuotaAccounts,
+  normalizePlan,
   parseClassifierOutput,
   prepareClassifierRequest,
+  quotaAccountWarnings,
   routeKey,
   routeTask,
   scoreCacheKey,
@@ -68,6 +75,7 @@ function makeProfile(overrides = {}) {
     task_count: '1',
     self: false,
     wants_fast: false,
+    read_only_review: false,
     reason: 'classified task profile',
     ...overrides,
   };
@@ -295,7 +303,7 @@ test('native routes are exact rows of the real catalog: codex for edits, Pi for 
   assert.ok(review.decision.alternatives.length > 0 && review.decision.components, 'the decision is explained');
 });
 
-test('fast mode is driven by profile (wants_fast / urgency: high), a fast-capable codex row and known quota under 60%', () => {
+test('fast mode is driven by profile.wants_fast, a fast-capable codex row and known quota under 60%; urgency alone never enables fast mode', () => {
   const task = 'Rename the helper foo to bar in util.py and update its two callers.';
   const fast = routeWithProfile(task, {wants_fast: true, urgency: 'high'});
   assert.equal(fast.route.bundle.fast, true);
@@ -304,9 +312,12 @@ test('fast mode is driven by profile (wants_fast / urgency: high), a fast-capabl
   assert.ok(inCatalog(fast, REAL));
 
   assert.equal(routeWithProfile(task, {wants_fast: false, urgency: 'normal'}).route.bundle.fast, false, 'wants_fast false');
+  assert.equal(routeWithProfile(task, {wants_fast: false, urgency: 'high'}).route.bundle.fast, false, 'urgency high alone does not enable fast mode');
   assert.equal(routeWithProfile(task, {wants_fast: true, urgency: 'high'}, REAL, {source: 'test', status: 'ok', used_percent: 70}).route.bundle.fast, false, 'quota at 70%');
   assert.equal(routeWithProfile(task, {wants_fast: true, urgency: 'high'}, REAL, {source: 'test', status: 'unknown'}).route.bundle.fast, false, 'unknown quota');
   assert.equal(routeWithClassifier(task, {urgency: 'high', wants_fast: true}).decision.wants_fast, true);
+  assert.equal(routeWithClassifier(task, {urgency: 'high', wants_fast: false}).decision.wants_fast, false);
+  assert.equal(routeWithClassifier(task, {urgency: 'high', wants_fast: false}).route.bundle.fast, false);
   assert.equal(routeWithClassifier(task, {urgency: 'normal', wants_fast: false}).decision.wants_fast, false);
 });
 
@@ -450,15 +461,19 @@ test('visual_analysis, computer_use, realtime_loop passthrough, multi-Codex quot
 
   const lunaOnlyCatalog = {models: [REAL.models.find(r => r.route.model === 'gpt-6-luna')]};
   const lunaDebug = routeWithProfile('Fix translation.py.', {work_kind: 'debug_review', reasoning_depth: 2, code_complexity: 2, context_scale: 2, hallucination_risk: 3}, lunaOnlyCatalog);
+  assert.equal(lunaDebug.status, 'blocked');
   assert.equal(lunaDebug.decision.work_kind, 'debug_review');
-  assert.equal(lunaDebug.route.bundle.effort, 'max');
+  assert.equal(lunaDebug.decision.reason, 'no_model_meets_floor');
+  const lunaTool = routeWithProfile('Fix translation.py.', {work_kind: 'tool_execution', reasoning_depth: 2, code_complexity: 2, context_scale: 2, hallucination_risk: 3}, lunaOnlyCatalog);
+  assert.equal(lunaTool.decision.work_kind, 'tool_execution');
+  assert.equal(lunaTool.route.bundle.effort, 'max');
 
   const multiSegmentPiCatalog = {models: [
-    {route: {agentKind: 'pi', providerId: 'openrouter', model: 'openrouter/qwen/qwen3-coder-next', effort: 'high', fastMode: false}, efforts: ['medium', 'high'], supportsFastMode: false},
+    {route: {agentKind: 'pi', providerId: 'openrouter', model: 'openrouter/qwen/qwen3.8-max', effort: 'high', fastMode: false}, efforts: ['medium', 'high'], supportsFastMode: false},
   ]};
-  const multiSeg = routeWithProfile('Rename foo to bar in util.py.', {}, multiSegmentPiCatalog);
+  const multiSeg = routeWithProfile('Rename foo to bar in util.py.', {reasoning_depth: 1, code_complexity: 1}, multiSegmentPiCatalog);
   assert.equal(multiSeg.status, 'native', 'multi-segment Pi model IDs remain stable across canonicalization and allocator lookup');
-  assert.equal(multiSeg.route.bundle.model, 'openrouter/qwen/qwen3-coder-next');
+  assert.equal(multiSeg.route.bundle.model, 'openrouter/qwen/qwen3.8-max');
 });
 
 test('nothing runnable: an empty or foreign catalog is blocked, never guessed', () => {
@@ -504,13 +519,13 @@ test('M6 regression: expected_hours allows up to 24 (aligned with AgentCompass) 
   assert.throws(() => validateCallerProfile(makeProfile({multi_task: true, task_count: '1'})), /task_count/);
 });
 
-test('R5: the prompt carries the AgentCompass rubric, route definitions and all 47 calibration cases verbatim, and nothing made up', () => {
+test('R5: the prompt carries the AgentCompass rubric, route definitions and all 53 calibration cases verbatim, and nothing made up', () => {
   assert.ok(!WORK_KINDS.includes('dot_execution'), 'WORK_KINDS must not include dot_execution');
   assert.ok(!TASK_PROFILE_SCHEMA.properties.work_kind.enum.includes('dot_execution'), 'TASK_PROFILE_SCHEMA must not include dot_execution');
   const {prompt, calibrationCases} = buildClassifierPrompt('Fix util.py');
   assert.doesNotMatch(prompt, /dot_execution/, 'the prompt must not offer dot_execution');
-  assert.equal(CLASSIFIER_CASES.calibration_cases.length, 47);
-  assert.deepEqual(calibrationCases, {included: 47, total: 47});
+  assert.equal(CLASSIFIER_CASES.calibration_cases.length, 53);
+  assert.deepEqual(calibrationCases, {included: 53, total: 53});
   const columns = [...new Set(CLASSIFIER_CASES.calibration_cases.flatMap(row => Object.keys(row.expected_profile)))];
   for (const row of CLASSIFIER_CASES.calibration_cases) {
     // As AgentCompass _compact_rubric_for_prompt renders a case, so the text and every expected value match the source file.
@@ -529,10 +544,10 @@ test('R5: the prompt carries the AgentCompass rubric, route definitions and all 
   assert.ok(prompt.indexOf('calibration_cases') < prompt.indexOf('untrusted_task_evidence":'), 'the task comes after the instructions');
 });
 
-// AgentCompass skills/agent-compass/references/classifier-cases.json at commit 83d4dcc. To update: replace the fixture and the shipped
+// AgentCompass skills/agent-compass/references/classifier-cases.json at commit 50e6366. To update: replace the fixture and the shipped
 // copy together, then this digest; a change on one side alone fails below.
-const CASE_FILE_SHA256 = 'b2603a96b3f6dcb1029aee0044224d8ca005ea90d7e229a9e9f03e30f9e184f1';
-const CASE_FILE_VERSION = '2026-11-06';
+const CASE_FILE_SHA256 = '03406d927b2631b0f5f3b23d590564bd8c1f4f0dcf23cd42034cac345fe26e6c';
+const CASE_FILE_VERSION = '2026-11-07';
 
 test('a5: `npm test` itself compares the case file: the fixture is the AgentCompass one, the shipped copy matches it, the file is sound, and a checkout at hand is compared too', t => {
   const text = file => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
@@ -578,8 +593,8 @@ test('R3: a long task keeps every character and costs calibration cases, whole o
     assert.equal(rows.length, built.calibrationCases.included, `${size}: only whole cases`);
   }
   assert.deepEqual([...seen].sort((a, b) => b - a), seen, 'more task, fewer cases');
-  assert.equal(seen[0], 47);
-  assert.ok(seen.at(-1) < 47);
+  assert.equal(seen[0], 53);
+  assert.ok(seen.at(-1) < 53);
   // A long task keeps at least one live and one non-live case when there is room for a few.
   const few = buildClassifierPrompt('x'.repeat(15001)).prompt;
   const flags = CLASSIFIER_CASES.calibration_cases.filter(row => few.includes(JSON.stringify(row.task))).map(row => row.expected_profile.realtime_loop);
@@ -881,11 +896,11 @@ const TEXT_CALL_EXCEPTIONS = {
     'sets and tables of fixed values, built once': [
       "newSet(['low','medium','high'])", "newSet(['unknown','low','normal','high'])", "newSet(['1','2','3','>3'])", 'newSet(INTERACTION_STYLES)',
       'Object.entries(PROFILE_INTEGERS)', "newSet(['exploration_analysis','research_packet','web_research','text_in_text_out'])",
-      'Object.keys(KIND_TRAITS)', "newSet(['context_scale','divergence','local_only','realtime_loop'])", 'newSet(CLASSIFIER_REQUIRED_KEYS)',
+      'Object.keys(KIND_TRAITS)', "newSet(['context_scale','divergence','local_only','realtime_loop','wants_fast','read_only_review'])", 'newSet(CLASSIFIER_REQUIRED_KEYS)',
       "newSet(['gpt-5.3-codex-spark'])",
       "newSet([...ALLOWED_PROFILE_KEYS,'delegate'])", "k!=='other_or_mixed'", "k!=='dot_execution'", "key!=='reason'",
       'for(const[field,[min,max]]ofPROFILE_INTEGER_ENTRIES)',
-      "for(constflagof['needs_visual','needs_gui','local_only','realtime_loop','multi_task','self','wants_fast','delegate'])",
+      "for(constflagof['needs_visual','needs_gui','local_only','realtime_loop','multi_task','self','wants_fast','read_only_review','delegate'])",
     ],
     "the size of the whole task against Cindy's prompt limit, or a cache key suffix: never what it says": [
       'evidence.length', 'desc.length',
@@ -903,8 +918,8 @@ const TEXT_CALL_EXCEPTIONS = {
     ],
     'a profile field or its fallback reason, from the model or a caller: checkProfileFields, the gates': [
       ['profile.reason.trim()', 4], 'missing.length', 'WORK_KINDS.includes(raw.work_kind)', 'raw.reason.trim()', 'raw.reason.length',
-      'Object.keys(raw)', 'for(constkeyofObject.keys(raw))', "rawCount!=='1'", "profile.urgency==='high'", "raw.task_count!=='1'",
-      "raw.task_count==='1'", "normalized.urgency==='high'",
+      'Object.keys(raw)', 'for(constkeyofObject.keys(raw))', "rawCount!=='1'", "raw.task_count!=='1'",
+      "raw.task_count==='1'",
     ],
     'the score cache file': [
       'Math.random().toString(16).slice(2,10)', 'sortedKeys.slice(0,Math.max(0,sortedKeys.length-SCORE_CACHE_MAX))', 'sortedKeys.length',
@@ -920,9 +935,12 @@ const TEXT_CALL_EXCEPTIONS = {
     "the catalog and the allocator's ranking": [
       ['runnable.length', 2], ['notRouted.length', 2], '...newSet(ranked.allCandidates.flatMap(exclusionsOf))', ['skipped.length', 3], 'row.efforts?.length', "(spec.efforts||[]).includes('high')", ['offered.length', 2],
       'c.notes.length', 'candidates.filter(c=>c.notes.length).length', 'best.notes.length', 'candidates.slice(1,6)', ['newSet()', 2],
-      "newSet(rows.filter(r=>r.route.agentKind==='codex').map(r=>r.route.providerId))", ['for(constrowofrows)', 2], 'for(constofferedEffortofrow._efforts)',
-      'for(consteffortofrow._efforts)', "r.route.agentKind==='codex'", "codex.status!=='unknown'", "q?.status==='exhausted'", "q?.status==='high'",
+      "newSet(rows.filter(r=>r.route.agentKind==='codex').map(r=>r.route.providerId))", ['for(constrowofactiveRows)', 2], 'for(constofferedEffortofrow._efforts)',
+      'for(consteffortofrow._efforts)', "r.route.agentKind==='codex'", ["codex.status!=='unknown'", 2], "q?.status==='exhausted'", "q?.status==='high'",
       "c.harness==='pi'", "harness==='codex'", "c.row.route.model.lastIndexOf('/')", "c.row.route.model.slice(c.row.route.model.lastIndexOf('/')+1)",
+      'quotaAccounts.length', 'accountWarnings.length', 'activeRows.length',
+      "...newSet(excludedRows.map(row=>{constacc=accountOf(row);return`${acc.key}:${acc.state}${acc.reason?`(${acc.reason})`:''}`;}))",
+      'a.key===`${HARNESS[row.route.agentKind]}/${row.route.providerId}`', "a.provider==='codex'", 'reason.startsWith(c.model)',
     ],
     "an effort the caller named, read as the allocator reads it": ['String(constraintEffort).trim()', 'String(constraintEffort).trim().toLowerCase()'],
     'a router status, the platform, or a Cindy failure code': [
@@ -984,7 +1002,7 @@ const TEXT_CALL_EXCEPTIONS = {
     "the router's answer: a status, a source or a decision reason": [
       "['self','split'].includes(result.status)", "'split'", "result.engine==='builtin'", "result.profile_source!=='unavailable'",
       ["result.status==='blocked'", 2], "result.decision?.reason==='no_runnable_model'", "result.decision?.reason==='no_model_meets_floor'",
-      "result.profile_source==='unavailable'", ["result.status==='classify'", 2], "result.status==='native'",
+      "result.decision?.reason==='account_unavailable'", "result.profile_source==='unavailable'", ["result.status==='classify'", 2], "result.status==='native'",
     ],
     'receipts, cooldown records and child processes': [
       "['prepared','create_rejected'].includes(old.state)", 'newSet()', "newSet(['ROUTE_UNAVAILABLE','UNSUPPORTED_CAPABILITY','PERMISSION_DENIED'])",
@@ -1042,7 +1060,7 @@ test('r3: the static scan catches every reviewed variant, walks all own files, a
   assert.deepEqual(findTaskTextHeuristics('await node(msg,"prepare",{task,catalog}); const operation=digest(id+task);'), []);
 
   const pluginDir = fileURLToPath(new URL('../plugin/', import.meta.url));
-  const vendored = new Set(['engine/allocator.mjs', 'engine/catalog.mjs', 'engine/continuity.mjs', 'engine/profiler.mjs', 'engine/quota.mjs']);
+  const vendored = new Set(['engine/allocator.mjs', 'engine/catalog.mjs', 'engine/continuity.mjs', 'engine/profiler.mjs', 'engine/quota-loader.mjs', 'engine/quota.mjs']);
   const own = fs.readdirSync(pluginDir, {recursive: true}).map(rel => String(rel).split(path.sep).join('/'))
     .filter(rel => /\.(?:js|cjs|mjs)$/.test(rel) && !vendored.has(rel));
   assert.deepEqual(own.sort(), ['engine/route.mjs', 'main.js', 'worker.cjs'], 'a new source file is scanned too: name it here');
@@ -1105,8 +1123,8 @@ test('a6: the acceptance document no longer says the built-in engine classifies 
   assert.match(doc, /the split and self gates, the classifier profile and the AgentCompass allocator/);
 });
 
-test('A1: the classifier must state self and wants_fast: an answer without them is invalid, never defaulted; a caller may still leave them out', () => {
-  for (const field of ['self', 'wants_fast']) {
+test('A1: the classifier must state self, wants_fast and read_only_review: an answer without them is invalid, never defaulted; a caller may still leave them out', () => {
+  for (const field of ['self', 'wants_fast', 'read_only_review']) {
     const {[field]: _, ...without} = makeProfile();
     assert.throws(() => validateClassifierProfile(without), new RegExp(`missing required field.*${field}`), field);
     const blocked = routeTask('What is a mutex?', REAL, {quota: OK, useCache: false, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(without)}});
@@ -1114,9 +1132,11 @@ test('A1: the classifier must state self and wants_fast: an answer without them 
     assert.equal(blocked.route, undefined);
     assert.ok(!CALLER_REQUIRED_KEYS.includes(field));
   }
-  const {self, wants_fast, ...bare} = makeProfile();
+  const {self, wants_fast, read_only_review, ...bare} = makeProfile();
   assert.equal(validateCallerProfile(bare).self, false);
-  assert.equal(validateCallerProfile({...bare, urgency: 'high'}).wants_fast, true, 'a caller who says urgent and nothing else asks for fast');
+  assert.equal(validateCallerProfile(bare).wants_fast, false);
+  assert.equal(validateCallerProfile(bare).read_only_review, false);
+  assert.equal(validateCallerProfile({...bare, urgency: 'high'}).wants_fast, false, 'urgency is informational; wants_fast is not inferred from urgency');
 });
 
 const CASES = CLASSIFIER_CASES.calibration_cases;
@@ -1179,8 +1199,8 @@ test('the fixed cost of the prompt is cut, not its meaning: a 17,900-character t
       if (field !== 'work_kind') for (const value of spec.enum || []) assert.ok(schema[field].includes(value), `${field} ${value}`);
       if ('minimum' in spec) assert.ok(schema[field].includes(`${spec.minimum}..${spec.maximum}`), field);
       if ('maxLength' in spec) assert.ok(schema[field].includes(`${spec.minLength}..${spec.maxLength}`), field);
-      // The rubric states these four; the schema states what it does not.
-      const inRubric = ['context_scale', 'divergence', 'local_only', 'realtime_loop'].includes(field);
+      // The rubric states these six; the schema states what it does not.
+      const inRubric = ['context_scale', 'divergence', 'local_only', 'realtime_loop', 'wants_fast', 'read_only_review'].includes(field);
       if (spec.description && !inRubric) assert.ok(schema[field].includes(spec.description), `${field} description`);
     }
   }
@@ -1382,13 +1402,14 @@ test('m1, seventh review: a5 goes without a checkout only when there is none: on
 });
 
 // akiiwa-games/magpie-agentcompass-router at this commit, src/<source>.js. To update: run scripts/vendor_engine.mjs, then these digests.
-const MAGPIE_COMMIT = '34448f9e9b82a2506fbda7481371e55526757c14';
+const MAGPIE_COMMIT = '6834bc0dbf054e6f08b28a483e3dffdd9d04f662';
 const MAGPIE_SHA256 = {
-  catalog: '14afd3ed09560d05a76e501df3621365a73e7d5edc9e619e2168233f0c15811b',
-  allocator: '7a02250ca7ea943639d580b512fefc7e258aa28763521a365f5bf0ca00dd0c51',
-  profiler: 'a70912f3ff60f15277f8751742f2150ae3f1740399fc547fcaea6cb1fb61a6d1',
-  quota: 'a6bf8b615bcfebbf2090731a766def085b6f2f61cb5111ce4076109ffc74f2a4',
-  continuity: '7d0d2549822d8aa3ae5210787606c5a0bedb54435f8320c187e0171fddea2a77',
+  catalog: '177d2c1d1fb2d6927a4124d647ec61349e4deb999fd12bd9e80f56619bc6b5ec',
+  allocator: 'f56a68270429279771ee85f073b0cf7345dc9c5a92f02114a956e62970f7bbf1',
+  profiler: 'f24da094a43caffe3130f7ab8521a2ec54bf55c65d61afc4121ed6c9fd1a0928',
+  quota: 'dffadee006903890cb3b3f681dab7bf74bfcd401152be2d34327b4f4fea8f33c',
+  'quota-loader': '63910970a5b7e30625431f6417ee257588e4c07e4827deed4ab760bfc5690ebb',
+  continuity: '1f09d06a2f2a8ed43af3e16c57a7f103e4ae9aad36fbf5f99dc255e41d7776eb',
 };
 
 test('Magpie sync: the vendored engine is the source at its commit, byte for byte but for the header and the import paths', () => {
@@ -1484,22 +1505,22 @@ test('Review 9: a live loop reads the speed of the model Cindy lists, not of the
   // Measured too slow at every effort: routing folds it into claude-opus-5-5, whose low is fast.
   const opus48 = routeRows([listedRow('cc', 'anthropic', 'claude-opus-4-8', FULL)]);
   assert.deepEqual([opus48.status, opus48.decision.reason], ['blocked', 'no_model_meets_floor']);
-  assert.ok(opus48.decision.excluded.includes('claude-opus-4-8@high: responsiveness 0.05 below the realtime_loop floor 0.5 (too slow per turn for a live loop)'), JSON.stringify(opus48.decision.excluded));
+  assert.ok(opus48.decision.excluded.includes('claude-opus-4-8@high: responsiveness 0.05 below the realtime_loop floor 0.5'), JSON.stringify(opus48.decision.excluded));
   // Its own curve has high at 0, claude-sonnet-5-5 has it at 0.70.
   const sonnet46 = routeRows([listedRow('cc', 'anthropic', 'claude-sonnet-4-6', ['high'])]);
   assert.deepEqual([sonnet46.status, sonnet46.decision.excluded],
-    ['blocked', ['claude-sonnet-4-6@high: responsiveness 0.00 below the realtime_loop floor 0.5 (too slow per turn for a live loop)']]);
-  // A flat curve: medium is as fast as its own low, where claude-opus-5-5 slows down with effort.
-  const opus46 = routeRows([listedRow('cc', 'anthropic', 'claude-opus-4-6', FULL)], {reasoning_depth: 2, code_complexity: 2, error_cost: 2});
-  assert.deepEqual([opus46.status, opus46.route?.bundle.model, opus46.route?.bundle.effort, opus46.decision.components?.responsiveness], ['native', 'claude-opus-4-6', 'medium', 0.853]);
+    ['blocked', ['claude-sonnet-4-6@high: responsiveness 0.00 below the realtime_loop floor 0.5']]);
+  // Its own curve has high at 0.663, where gpt-6.1-sol has it at 0.
+  const sol56 = routeRows([listedRow('codex', 'openai', 'gpt-5.6-sol', ['high'])], {reasoning_depth: 2, code_complexity: 2, error_cost: 2});
+  assert.deepEqual([sol56.status, sol56.route?.bundle.model, sol56.route?.bundle.effort, sol56.decision.components?.responsiveness], ['native', 'gpt-5.6-sol', 'high', 0.663]);
   // No speed data of their own: the default, not the curve of gpt-6.1-sol or gpt-6-astra.
   for (const model of ['gpt-4o', 'o3']) {
     const unmeasured = routeRows([listedRow('codex', 'openai', model, ['high'])]);
     assert.deepEqual([unmeasured.status, unmeasured.route?.bundle.model, unmeasured.route?.bundle.effort], ['native', model, 'high'], JSON.stringify(unmeasured.decision));
     assert.deepEqual([unmeasured.decision.components.responsiveness, unmeasured.decision.components.responsiveness_source], [0.52, 'default']);
   }
-  // Any other task still scores on what routing folds it into, and launches the name Cindy listed.
-  for (const [model, canonical] of [['claude-opus-4-8', 'claude-opus-5-5'], ['gpt-4o', 'gpt-6.1-sol']]) {
+  // A family match still scores on what routing folds it into, and launches the name Cindy listed.
+  for (const [model, canonical] of [['claude-opus-4-5', 'claude-opus-5-5'], ['gpt-6-preview', 'gpt-6-astra']]) {
     const calm = routeRows([listedRow('cc', 'anthropic', model, ['high'])], {realtime_loop: false});
     assert.deepEqual([calm.status, calm.route.bundle.model, calm.decision.canonical_model], ['native', model, canonical]);
   }
@@ -1507,7 +1528,7 @@ test('Review 9: a live loop reads the speed of the model Cindy lists, not of the
 
 test('Review 9: a live loop steps down only within the efforts that one row offers, and says why it refuses', () => {
   const astra = efforts => listedRow('codex', 'openai-codex', 'gpt-6-astra', efforts);
-  const tooSlow = 'gpt-6-astra@high: responsiveness 0.00 below the realtime_loop floor 0.5 (too slow per turn for a live loop)';
+  const tooSlow = 'gpt-6-astra@high: responsiveness 0.00 below the realtime_loop floor 0.5';
   const hard = {reasoning_depth: 3, code_complexity: 3, error_cost: 3};
 
   const onlyHigh = routeRows([astra(['high'])]);
@@ -1520,7 +1541,7 @@ test('Review 9: a live loop steps down only within the efforts that one row offe
   assert.deepEqual([lowAndHighHard.status, lowAndHighHard.decision.reason], ['blocked', 'no_model_meets_floor']);
   assert.deepEqual(lowAndHighHard.decision.excluded, [
     'gpt-6-astra@low: ability 3.61 below the coupled floor 3.90',
-    'gpt-6-astra@low (stepped down from high): ability 3.61 below the coupled floor 3.90',
+    'gpt-6-astra: stepped down from high to low for realtime_loop, and ability 3.61 at low is below the coupled floor 3.90',
   ]);
 
   // Efforts stay with their connection: b has no medium however a does.
@@ -1590,7 +1611,7 @@ test('Review 9: a named model or effort holds on every task, and a named Spark i
     for (const name of ['constraintModel', 'pinnedModel']) {
       assert.equal(bundleOf({[name]: 'gpt-6-astra'}), 'gpt-6-astra@low', name);
       assert.equal(bundleOf({[name]: 'gpt-6-astra:medium'}), 'gpt-6-astra@medium', name);
-      assert.equal(bundleOf({[name]: 'gpt-5.3-codex-spark'}, [...rows, spark]), `gpt-5.3-codex-spark@${realtime_loop ? 'low' : 'medium'}`, name);
+      assert.equal(bundleOf({[name]: 'gpt-5.3-codex-spark'}, [...rows, spark]), 'gpt-5.3-codex-spark@medium', name);
     }
     assert.equal(bundleOf({constraintModel: 'gpt-6-astra', constraintEffort: 'medium'}), 'gpt-6-astra@medium');
     assert.equal(bundleOf({constraintModel: 'gpt-6-astra', constraintEffort: 'HIGH'}), 'gpt-6-astra@high', 'also when too slow for a live loop');
@@ -1634,13 +1655,13 @@ test('Review 10: the harness order picks among the harnesses of one model at one
   const close = routeTask('x', WITH_CLAUDE, profile({work_kind: 'exploration_analysis', reasoning_depth: 1, code_complexity: 3, error_cost: 3}));
   assert.deepEqual([close.route.bundle.harness, close.route.bundle.model, close.route.bundle.effort, close.decision.score], ['claude', 'claude-sonnet-5-5', 'high', 0.346]);
   const next = close.decision.alternatives.slice(0, 2).map(a => `${a.agentKind}/${a.model}@${a.effort} ${a.score}`);
-  assert.deepEqual(next, ['pi/chatgpt/gpt-6-astra@medium 0.3365', 'codex/gpt-6-astra@medium 0.3365'], 'read-and-report work: Pi first, at the same score');
+  assert.deepEqual(next, ['pi/chatgpt/gpt-6-astra@medium 0.3364', 'codex/gpt-6-astra@medium 0.3364'], 'read-and-report work: Pi first, at the same score');
 
   // Any other work: the native CLI first, at the same score.
   const coding = routeTask('x', REAL, profile({work_kind: 'general_implementation', reasoning_depth: 1, code_complexity: 1, error_cost: 1}));
-  assert.deepEqual([coding.route.bundle.harness, coding.route.bundle.model, coding.route.bundle.effort], ['codex', 'gpt-6.1-sol', 'low']);
+  assert.deepEqual([coding.route.bundle.harness, coding.route.bundle.model, coding.route.bundle.effort], ['codex', 'gpt-6-luna', 'medium']);
   assert.deepEqual([coding.decision.alternatives[0].agentKind, coding.decision.alternatives[0].model, coding.decision.alternatives[0].effort, coding.decision.alternatives[0].score],
-    ['pi', 'chatgpt/gpt-6.1-sol', 'low', coding.decision.score]);
+    ['pi', 'chatgpt/gpt-6-luna', 'medium', coding.decision.score]);
 
   // A lower score stays lower on the preferred harness: quota moves the pair apart, the order does not put them back.
   const pair = effort => [listedRow('codex', 'tight', 'gpt-6-astra', [effort]), listedRow('pi', 'spare', 'chatgpt/gpt-6-astra', [effort])];
@@ -1806,4 +1827,147 @@ test('m3: every spelling of the fourth review fails the scan', () => {
     'if (brief.length<240) x();',
     'if ("urgent"===brief) x();',
   ]) assert.notDeepEqual(scanOwnFile(rel, `${source}\n${added}\n`), [], `missed: ${added}`);
+});
+
+test('Step 2 regression: read_only_review requires code_complexity 0 and is surfaced on every route outcome', () => {
+  const validReview = makeProfile({work_kind: 'debug_review', code_complexity: 0, hallucination_risk: 3, read_only_review: true});
+  assert.equal(validateClassifierProfile(validReview).read_only_review, true);
+  assert.equal(validateCallerProfile(validReview).read_only_review, true);
+
+  for (const complexity of [1, 2, 3]) {
+    const contradictory = makeProfile({work_kind: 'debug_review', code_complexity: complexity, read_only_review: true});
+    assert.throws(() => validateClassifierProfile(contradictory), /must be 0 when read_only_review is true/);
+    assert.throws(() => validateCallerProfile(contradictory), /must be 0 when read_only_review is true/);
+    const blockedClassifier = routeTask('Review src/auth.py', WITH_CLAUDE, {
+      quota: OK,
+      useCache: false,
+      classification: {ok: true, model: 'm', rawOutput: JSON.stringify(contradictory)},
+    });
+    assert.deepEqual([blockedClassifier.status, blockedClassifier.decision.reason], ['blocked', 'invalid_classifier_output']);
+    const blockedCaller = routeTask('Review src/auth.py', WITH_CLAUDE, {quota: OK, profile: contradictory});
+    assert.deepEqual([blockedCaller.status, blockedCaller.decision.reason], ['blocked', 'invalid_caller_profile']);
+  }
+
+  const routed = routeTask('Review src/auth.py', WITH_CLAUDE, {quota: OK, profile: validReview});
+  assert.equal(routed.status, 'native');
+  assert.equal(routed.decision.read_only_review, true);
+  assert.equal(routed.decision.profile.read_only_review, true);
+
+  const split = routeTask('Review two independent repos', WITH_CLAUDE, {
+    quota: OK,
+    profile: {...validReview, multi_task: true, task_count: '2'},
+  });
+  assert.deepEqual([split.status, split.read_only_review, split.decision.read_only_review], ['split', true, true]);
+});
+
+test('Step 3 regression: plan normalization matches full name before stripping trailing multiplier, and account states surface warnings and block broken accounts', () => {
+  // Q4: full-name-first plan matching before stripping trailing ×N / xN ('Max ×20' -> max20, not stripped to 'Max' -> max5).
+  assert.deepEqual(normalizePlan('claude', 'Max ×20'), {key: 'max20', raw: 'Max ×20', known: true, inactive: false});
+  assert.deepEqual(normalizePlan('claude', 'Max ×5'), {key: 'max5', raw: 'Max ×5', known: true, inactive: false});
+  assert.deepEqual(normalizePlan('codex', 'Pro × 5'), {key: 'pro', raw: 'Pro × 5', known: true, inactive: false});
+  assert.deepEqual(normalizePlan('codex', 'Free × 3'), {key: null, raw: 'Free × 3', known: true, inactive: true});
+
+  assert.deepEqual(ACCOUNT_STATES, {
+    READY: 'ready',
+    PLAN_INACTIVE: 'plan_inactive',
+    USAGE_FAILING: 'usage_failing',
+    AUTH_FAILED: 'auth_failed',
+    DISABLED: 'disabled',
+  });
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-acct-'));
+  try {
+    // 1. Corrupt Codex session log -> usage_failing (never had a valid reading -> dispatchable: false), surfaced in warnings.
+    const corruptHome = path.join(dir, 'corrupt');
+    const corruptDay = path.join(corruptHome, 'sessions', '2026', '11', '07');
+    fs.mkdirSync(corruptDay, {recursive: true});
+    const corruptFile = path.join(corruptDay, 'rollout-1.jsonl');
+    fs.writeFileSync(corruptFile, '{"payload":{"rate_limits":BROKEN_JSON\n');
+    fs.utimesSync(corruptFile, new Date(NOW - 60000), new Date(NOW - 60000));
+    const qCorrupt = codexQuota({CODEX_HOME: corruptHome}, NOW);
+    assert.equal(qCorrupt.state, 'usage_failing');
+    assert.match(qCorrupt.error, /corrupt rate-limit snapshot/);
+    const blockedCorrupt = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: corruptHome}, now: NOW, profile: makeProfile()});
+    assert.deepEqual([blockedCorrupt.status, blockedCorrupt.decision.reason], ['blocked', 'account_unavailable']);
+    assert.equal(blockedCorrupt.decision.accounts[0].state, 'usage_failing');
+    assert.equal(blockedCorrupt.decision.accounts[0].dispatchable, false);
+    assert.ok(blockedCorrupt.decision.warnings.some(w => /usage_failing/.test(w)), JSON.stringify(blockedCorrupt.decision.warnings));
+
+    // When a healthy Claude connection is available alongside the failing Codex connection, routing excludes Codex and dispatches to Claude while surfacing the Codex warning.
+    const fallbackToClaude = routeTask('Fix util.py', WITH_CLAUDE, {env: {CODEX_HOME: corruptHome}, now: NOW, profile: makeProfile()});
+    assert.deepEqual([fallbackToClaude.status, fallbackToClaude.route.bundle.harness], ['native', 'claude']);
+    assert.ok(fallbackToClaude.decision.warnings.some(w => /codex\/openai: usage_failing/.test(w)));
+
+    // 2. Stale reading (3h old: >2h fresh threshold, <6h max age) -> state: usage_failing, dispatchable: true, warning surfaced, fast mode off.
+    const staleHome = path.join(dir, 'stale');
+    const staleDay = path.join(staleHome, 'sessions', '2026', '11', '07');
+    fs.mkdirSync(staleDay, {recursive: true});
+    const staleDate = new Date(NOW - 3 * 3600 * 1000);
+    const staleFile = path.join(staleDay, 'rollout-1.jsonl');
+    fs.writeFileSync(
+      staleFile,
+      `${JSON.stringify({timestamp: staleDate.toISOString(), payload: {rate_limits: {plan_type: 'pro', secondary: {used_percent: 20, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
+    );
+    fs.utimesSync(staleFile, staleDate, staleDate);
+    const staleRoute = routeTask('Fix util.py', REAL, {
+      env: {CODEX_HOME: staleHome},
+      now: NOW,
+      profile: makeProfile({wants_fast: true, urgency: 'high'}),
+    });
+    assert.equal(staleRoute.status, 'native');
+    assert.equal(staleRoute.route.bundle.fast, false, 'fast mode is disabled when usage telemetry is failing/stale');
+    assert.equal(staleRoute.decision.accounts[0].state, 'usage_failing');
+    assert.equal(staleRoute.decision.accounts[0].dispatchable, true);
+    assert.ok(staleRoute.decision.warnings.some(w => /usage_failing/.test(w)));
+
+    // 3. Expired reading (7h old: >6h max age) -> state: usage_failing, dispatchable: false -> blocked on REAL.
+    const expiredHome = path.join(dir, 'expired');
+    const expiredDay = path.join(expiredHome, 'sessions', '2026', '11', '07');
+    fs.mkdirSync(expiredDay, {recursive: true});
+    const expiredDate = new Date(NOW - 7 * 3600 * 1000);
+    const expiredFile = path.join(expiredDay, 'rollout-1.jsonl');
+    fs.writeFileSync(
+      expiredFile,
+      `${JSON.stringify({timestamp: expiredDate.toISOString(), payload: {rate_limits: {plan_type: 'pro', secondary: {used_percent: 20, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
+    );
+    fs.utimesSync(expiredFile, expiredDate, expiredDate);
+    const expiredRoute = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: expiredHome}, now: NOW, profile: makeProfile()});
+    assert.deepEqual([expiredRoute.status, expiredRoute.decision.reason], ['blocked', 'account_unavailable']);
+    assert.equal(expiredRoute.decision.accounts[0].state, 'usage_failing');
+    assert.equal(expiredRoute.decision.accounts[0].dispatchable, false);
+
+    // 4. Inactive plan (free) -> state: plan_inactive, dispatchable: false -> blocked on REAL.
+    const freeHome = path.join(dir, 'free');
+    const freeDay = path.join(freeHome, 'sessions', '2026', '11', '07');
+    fs.mkdirSync(freeDay, {recursive: true});
+    const freshDate = new Date(NOW - 60000);
+    const freeFile = path.join(freeDay, 'rollout-1.jsonl');
+    fs.writeFileSync(
+      freeFile,
+      `${JSON.stringify({timestamp: freshDate.toISOString(), payload: {rate_limits: {plan_type: 'Free × 3', secondary: {used_percent: 10, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
+    );
+    fs.utimesSync(freeFile, freshDate, freshDate);
+    const freeRoute = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: freeHome}, now: NOW, profile: makeProfile()});
+    assert.deepEqual([freeRoute.status, freeRoute.decision.reason], ['blocked', 'account_unavailable']);
+    assert.equal(freeRoute.decision.accounts[0].state, 'plan_inactive');
+    assert.equal(freeRoute.decision.accounts[0].dispatchable, false);
+
+    // 5. Caller-supplied accounts snapshot with auth_failed and plan_inactive -> formatQuotaAccountList and quotaAccountWarnings surface both, and routeTask blocks when all accounts are excluded.
+    const accountsSnapshot = {
+      'codex/openai': {provider: 'codex', account: 'openai', plan: 'free', status: 'plan_inactive'},
+      'claude/anthropic': {provider: 'claude', account: 'anthropic', plan: 'Max ×20', http_status: 401, error: 'HTTP 401 unauthorized'},
+    };
+    const listedAccounts = listQuotaAccounts(accountsSnapshot, NOW);
+    assert.equal(listedAccounts.length, 2);
+    const formatted = formatQuotaAccountList(listedAccounts);
+    assert.match(formatted, /codex\/openai.*state=plan_inactive \[excluded from dispatch\]/);
+    assert.match(formatted, /claude\/anthropic.*state=auth_failed \[excluded from dispatch\]/);
+    const warnings = quotaAccountWarnings(accountsSnapshot, NOW);
+    assert.equal(warnings.length, 2);
+    const allExcluded = routeTask('Fix util.py', WITH_CLAUDE, {accounts: accountsSnapshot, now: NOW, profile: makeProfile()});
+    assert.deepEqual([allExcluded.status, allExcluded.decision.reason], ['blocked', 'account_unavailable']);
+    assert.equal(allExcluded.decision.warnings.length, 2);
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
 });

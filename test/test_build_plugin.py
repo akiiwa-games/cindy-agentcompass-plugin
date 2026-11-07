@@ -25,7 +25,7 @@ class BuildPluginTests(unittest.TestCase):
             self.assertEqual(code, 0, doc)
             shipped = sorted(p.relative_to(output).as_posix() for p in output.rglob('*') if p.is_file())
             self.assertEqual(shipped, ['assets/icon.png', 'engine/allocator.mjs', 'engine/catalog.mjs', 'engine/classifier-cases.json', 'engine/continuity.mjs',
-                                       'engine/profiler.mjs', 'engine/quota.mjs', 'engine/route.mjs', 'ghost.json', 'locales/en.json', 'locales/ja.json', 'locales/ko.json',
+                                       'engine/profiler.mjs', 'engine/quota-loader.mjs', 'engine/quota.mjs', 'engine/route.mjs', 'ghost.json', 'locales/en.json', 'locales/ja.json', 'locales/ko.json',
                                        'locales/zh-CN.json', 'main.js', 'router.json', 'worker.cjs'])
             config = json.loads((output / 'router.json').read_text(encoding='utf-8'))
             self.assertEqual(config['command'][1:], ['-m', 'agentcompass', 'roll'])

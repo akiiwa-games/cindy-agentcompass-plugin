@@ -16,7 +16,7 @@
      "ok": true,
      "result": {
       "status": "unknown_send",
-      "operation": "41a1fec9025d620c10748c9465f821de6487ef63",
+      "operation": "94afe2ce43db1d90d0d192c73a3f57371462e7a1",
       "taskId": "task-1",
       "runId": null,
       "task_id": "task-1",
@@ -28,7 +28,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "41a1fec9025d620c10748c9465f821de6487ef63"
+        "operation": "94afe2ce43db1d90d0d192c73a3f57371462e7a1"
        }
       }
      }
@@ -44,7 +44,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "41a1fec9025d620c10748c9465f821de6487ef63",
+      "operation": "94afe2ce43db1d90d0d192c73a3f57371462e7a1",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -59,7 +59,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "41a1fec9025d620c10748c9465f821de6487ef63"
+        "operation": "94afe2ce43db1d90d0d192c73a3f57371462e7a1"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -80,7 +80,7 @@
   },
   {
    "name": "create",
-   "requestKey": "41a1fec9025d620c10748c9465f821de6487ef63:create",
+   "requestKey": "94afe2ce43db1d90d0d192c73a3f57371462e7a1:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
@@ -94,7 +94,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "41a1fec9025d620c10748c9465f821de6487ef63:send",
+   "requestKey": "94afe2ce43db1d90d0d192c73a3f57371462e7a1:send",
    "chars": 434
   },
   {
@@ -116,7 +116,7 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 28425,
+   "chars": 28423,
    "expectJson": true,
    "callId": "call-1"
   }
@@ -136,12 +136,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "17fd0c7e550ed6158dbeddccacdcafbb19ac65817e9456131945adeb217a0456",
+   "sha256": "f4ec662eaf207bd5c0141bde575ee8c4acc61bad7efeab72443d8bb54a2bdbd8",
    "chars": 434
   }
  ],
  "prepared": {
-  "operation": "41a1fec9025d620c10748c9465f821de6487ef63",
+  "operation": "94afe2ce43db1d90d0d192c73a3f57371462e7a1",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -184,17 +184,19 @@
      "multi_task": false,
      "task_count": "1",
      "self": false,
-     "wants_fast": false
+     "wants_fast": false,
+     "read_only_review": false
     },
     "profile_source": "classifier",
     "classifier_model": "fixture-quick-text",
     "realtime_loop": false,
+    "read_only_review": false,
     "classifier_calibration_cases": {
-     "included": 47,
-     "total": 47
+     "included": 53,
+     "total": 53
     },
     "canonical_model": "gpt-6.1-sol",
-    "score": 0.3647,
+    "score": 0.3646,
     "components": {
      "fit": 0.897,
      "route_fit": 0.54,
@@ -212,7 +214,8 @@
      "opportunity_cost": 0,
      "effort_penalty": 0,
      "overqualification": 0.0045,
-     "shortfall": 0
+     "shortfall": 0,
+     "harness_factor": 1
     },
     "wants_fast": false,
     "not_routed": [
@@ -231,7 +234,7 @@
       "model": "chatgpt/gpt-6.1-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3647,
+      "score": 0.3646,
       "notes": []
      },
      {
@@ -240,7 +243,7 @@
       "model": "gpt-6-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3566,
+      "score": 0.3574,
       "notes": []
      },
      {
@@ -249,7 +252,7 @@
       "model": "chatgpt/gpt-6-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3566,
+      "score": 0.3574,
       "notes": []
      },
      {
@@ -258,7 +261,7 @@
       "model": "gpt-6.1-sol",
       "effort": "medium",
       "fast": false,
-      "score": 0.3548,
+      "score": 0.3546,
       "notes": []
      },
      {
@@ -267,7 +270,7 @@
       "model": "chatgpt/gpt-6.1-sol",
       "effort": "medium",
       "fast": false,
-      "score": 0.3548,
+      "score": 0.3546,
       "notes": []
      }
     ]
@@ -283,7 +286,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [a2b94289]\nFIXTURE-SCENARIO: ok review2-claim\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [082fb59a]\nFIXTURE-SCENARIO: ok review2-claim\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1
@@ -319,7 +322,7 @@
     "effort": "high",
     "fastMode": false
    },
-   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [a2b94289]\nFIXTURE-SCENARIO: ok review2-claim\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
+   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [082fb59a]\nFIXTURE-SCENARIO: ok review2-claim\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
   }
  ],
  "workerStderr": ""

@@ -19,7 +19,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "2b011beb80da058542d49feba56594e8adc8d1e6",
+      "operation": "99e6b31074bcb5b1d57da670fefe6f2bdf30d849",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -31,7 +31,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "2b011beb80da058542d49feba56594e8adc8d1e6"
+        "operation": "99e6b31074bcb5b1d57da670fefe6f2bdf30d849"
        }
       }
      }
@@ -47,7 +47,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "2b011beb80da058542d49feba56594e8adc8d1e6",
+      "operation": "99e6b31074bcb5b1d57da670fefe6f2bdf30d849",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -62,7 +62,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "2b011beb80da058542d49feba56594e8adc8d1e6"
+        "operation": "99e6b31074bcb5b1d57da670fefe6f2bdf30d849"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -88,7 +88,7 @@
      "ok": true,
      "result": {
       "status": "completed",
-      "operation": "2b011beb80da058542d49feba56594e8adc8d1e6",
+      "operation": "99e6b31074bcb5b1d57da670fefe6f2bdf30d849",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -99,14 +99,14 @@
       "final_result_summary": "[Worker final report] fast-blind",
       "summary_shortened": false,
       "full_result_artifacts": [
-       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\2b011beb80da058542d49feba56594e8adc8d1e6\\messages-c500fc0cb794343a.json",
-       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\2b011beb80da058542d49feba56594e8adc8d1e6\\messages-51f16adf02df78df.json"
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\99e6b31074bcb5b1d57da670fefe6f2bdf30d849\\messages-dda7240d2b888b7e.json",
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\99e6b31074bcb5b1d57da670fefe6f2bdf30d849\\messages-51f16adf02df78df.json"
       ],
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "cleanup",
        "args": {
-        "operation": "2b011beb80da058542d49feba56594e8adc8d1e6"
+        "operation": "99e6b31074bcb5b1d57da670fefe6f2bdf30d849"
        }
       },
       "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
@@ -123,7 +123,7 @@
      "ok": true,
      "result": {
       "status": "cleaned",
-      "operation": "2b011beb80da058542d49feba56594e8adc8d1e6",
+      "operation": "99e6b31074bcb5b1d57da670fefe6f2bdf30d849",
       "taskId": "task-1",
       "task_id": "task-1"
      }
@@ -143,7 +143,7 @@
   },
   {
    "name": "create",
-   "requestKey": "2b011beb80da058542d49feba56594e8adc8d1e6:create",
+   "requestKey": "99e6b31074bcb5b1d57da670fefe6f2bdf30d849:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
@@ -157,7 +157,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "2b011beb80da058542d49feba56594e8adc8d1e6:send",
+   "requestKey": "99e6b31074bcb5b1d57da670fefe6f2bdf30d849:send",
    "chars": 424
   },
   {
@@ -201,7 +201,7 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 28413,
+   "chars": 28411,
    "expectJson": true,
    "callId": "call-1"
   }
@@ -228,12 +228,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "2f571dd438860bd6e663a38c1cad48cc3b93a2e625ff8e0e95795c7277b666b5",
+   "sha256": "f5539c3a515f57dc47a23b37cbec1c06112f97185a0a8fa2c5265cee3ac5015b",
    "chars": 424
   }
  ],
  "prepared": {
-  "operation": "2b011beb80da058542d49feba56594e8adc8d1e6",
+  "operation": "99e6b31074bcb5b1d57da670fefe6f2bdf30d849",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -276,17 +276,19 @@
      "multi_task": false,
      "task_count": "1",
      "self": false,
-     "wants_fast": true
+     "wants_fast": true,
+     "read_only_review": false
     },
     "profile_source": "classifier",
     "classifier_model": "fixture-quick-text",
     "realtime_loop": false,
+    "read_only_review": false,
     "classifier_calibration_cases": {
-     "included": 47,
-     "total": 47
+     "included": 53,
+     "total": 53
     },
     "canonical_model": "gpt-6.1-sol",
-    "score": 0.3647,
+    "score": 0.3646,
     "components": {
      "fit": 0.897,
      "route_fit": 0.54,
@@ -304,7 +306,8 @@
      "opportunity_cost": 0,
      "effort_penalty": 0,
      "overqualification": 0.0045,
-     "shortfall": 0
+     "shortfall": 0,
+     "harness_factor": 1
     },
     "wants_fast": true,
     "not_routed": [
@@ -323,7 +326,7 @@
       "model": "chatgpt/gpt-6.1-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3647,
+      "score": 0.3646,
       "notes": []
      },
      {
@@ -332,7 +335,7 @@
       "model": "gpt-6-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3566,
+      "score": 0.3574,
       "notes": []
      },
      {
@@ -341,7 +344,7 @@
       "model": "chatgpt/gpt-6-sol",
       "effort": "high",
       "fast": false,
-      "score": 0.3566,
+      "score": 0.3574,
       "notes": []
      },
      {
@@ -350,7 +353,7 @@
       "model": "gpt-6.1-sol",
       "effort": "medium",
       "fast": false,
-      "score": 0.3548,
+      "score": 0.3546,
       "notes": []
      },
      {
@@ -359,7 +362,7 @@
       "model": "chatgpt/gpt-6.1-sol",
       "effort": "medium",
       "fast": false,
-      "score": 0.3548,
+      "score": 0.3546,
       "notes": []
      }
     ]
@@ -375,7 +378,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Use fast mode: rename the helper foo to bar in util.py and update its two callers. [blind-1794039523484]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Use fast mode: rename the helper foo to bar in util.py and update its two callers. [blind-1794081170639]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1
@@ -412,7 +415,7 @@
     "effort": "high",
     "fastMode": false
    },
-   "inputText": "Use fast mode: rename the helper foo to bar in util.py and update its two callers. [blind-1794039523484]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "inputText": "Use fast mode: rename the helper foo to bar in util.py and update its two callers. [blind-1794081170639]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
    "outputMessageId": "out-final"
   }
  ],

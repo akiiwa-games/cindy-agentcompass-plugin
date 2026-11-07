@@ -12,7 +12,7 @@ Not covered on real Cindy, in any sign-in configuration:
 
 - the default route returning valid JSON with `profile_source: "classifier"`, and which model Cindy actually used;
 - the realtime-loop task and the "write a ticket-grabbing script" counterexample;
-- a task over 15,000 characters being classified, and one over about 17,900 being refused;
+- a task over 15,000 characters being classified, and one over about 20,100 being refused;
 - `blocked` when the classifier is unavailable, including `NO_CANDIDATE`, and the cooldown record and hint after a failure;
 - no leftovers in the task list;
 - the `split` and `self` gates deciding from the profile, and a caller `profile` running through;

@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/allocator.js at 34448f9e9b82a2506fbda7481371e55526757c14 (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/allocator.js at 6834bc0dbf054e6f08b28a483e3dffdd9d04f662 (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate with scripts/vendor_engine.mjs rather than edit.
 /**
  * AgentCompass Core Pure Intent & Multi-Dimensional Capability Allocator
@@ -21,18 +21,28 @@ import {
   EFFORT_CURVES,
   EFFORT_ORDER,
   EFFORT_RESPONSIVENESS,
-  FLAT_EFFORT_CURVE,
-  FLAT_EFFORT_CURVE_MODELS,
   KIND_TRAITS,
   MODEL_ALIASES,
   ROUTE_FIT_PEERS,
   SUBJECTIVE_DIMENSIONS,
+  CATALOG_NAME_WARNING,
   canonicalModel,
+  catalogNameWarning,
+  escapeControls,
+  healthKey,
+  nameFixesEffort,
+  pyRound,
+  resolveModel,
   resolveModelSpec,
   resolveResponsivenessModelKey,
+  safeName,
+  splitEffortSuffix,
 } from "./catalog.mjs";
-import { inferTaskProfile, validateProfile } from "./profiler.mjs";
-import { evaluateModelQuota, normalizeQuotaSnapshot } from "./quota.mjs";
+import { unroutedDecision, validateProfile } from "./profiler.mjs";
+import { evaluateModelQuota, listQuotaAccounts, normalizeQuotaSnapshot } from "./quota.mjs";
+
+const MARKED_UNHEALTHY = "model is currently marked unhealthy";
+const EFFORT_NOT_PINNED = "explicit effort constraint";
 
 export const EFFORT_SCALED_CAPABILITIES = [
   "reasoning",
@@ -48,11 +58,11 @@ export function clamp(val, low, high) {
 }
 
 export function round4(val) {
-  return Math.round(val * 10000) / 10000;
+  return pyRound(val, 4);
 }
 
 export function round3(val) {
-  return Math.round(val * 1000) / 1000;
+  return pyRound(val, 3);
 }
 
 export function profileDifficulty(profile, policy = DEFAULT_SCORING_POLICY) {
@@ -157,18 +167,14 @@ export function capabilityScore(weights, model, catalog = {}) {
 }
 
 /**
- * Collapse models that share a route-fit slot (`allocator.py:route_preference`).
+ * Drop a peer whose anchor is also listed; the peer then shares that anchor's place (`allocator.py:route_preference`).
  */
-export function routePreference(preferred = [], peers = ROUTE_FIT_PEERS, aliases = MODEL_ALIASES) {
-  const collapsed = [];
-  for (const rawItem of preferred) {
-    const item = canonicalModel(rawItem, aliases);
-    const target = peers?.[item] ? canonicalModel(peers[item], aliases) : item;
-    if (!collapsed.includes(target)) {
-      collapsed.push(target);
-    }
-  }
-  return collapsed;
+export function routePreference(preferred = [], peers = ROUTE_FIT_PEERS) {
+  const present = new Set(preferred);
+  return preferred.filter((name) => {
+    const anchor = peers?.[name];
+    return !(anchor && present.has(anchor));
+  });
 }
 
 /**
@@ -177,26 +183,26 @@ export function routePreference(preferred = [], peers = ROUTE_FIT_PEERS, aliases
 export function fitScore(kind, model, catalog = {}, options = {}) {
   const routes = catalog.routes || CANONICAL_ROUTES;
   const policy = catalog.policy || DEFAULT_SCORING_POLICY;
-  const peers = catalog.routeFitPeers || ROUTE_FIT_PEERS;
+  let peers = catalog.routeFitPeers || ROUTE_FIT_PEERS;
   const route = routes[kind] || {};
-  const rawCanonical = canonicalModel(model, catalog.aliases);
-  const canonical = peers?.[rawCanonical]
-    ? canonicalModel(peers[rawCanonical], catalog.aliases)
-    : rawCanonical;
-  let preferred = routePreference(route.preferred || [], peers, catalog.aliases);
-  if (
-    preferred[0] === "dot" &&
-    (options.local_only || (options.dotAvailable === false && canonical !== "dot"))
-  ) {
-    preferred = preferred.slice(1);
+  const canonical = canonicalModel(model, catalog.aliases, catalog.models);
+  let raw = (route.preferred || []).map((m) => canonicalModel(m, catalog.aliases, catalog.models));
+  if (raw[0] === "dot" && canonical !== "dot" && (options.local_only || options.dotAvailable === false)) {
+    raw = raw.slice(1);
+    // As `allocator.py`: the list without dot is scored without route-order peers.
+    peers = {};
   }
-
-  if (preferred.length === 0 && !route.capability_fit) {
+  const preferred = routePreference(raw, peers);
+  if (preferred.length === 0 && raw.length === 0) {
     return 0.6;
   }
-  const place = preferred.indexOf(canonical);
+  const anchor = peers?.[canonical];
+  const place =
+    anchor && preferred.includes(anchor) && raw.includes(canonical)
+      ? preferred.indexOf(anchor)
+      : preferred.indexOf(canonical);
   if (place === -1 && route.capability_fit) {
-    return round4(0.2 + 0.5 * capabilityScore(route.capability_fit, rawCanonical, catalog));
+    return round4(0.2 + 0.5 * capabilityScore(route.capability_fit, canonical, catalog));
   }
   if (route.strict_order) {
     if (place === -1) return 0.3;
@@ -206,7 +212,7 @@ export function fitScore(kind, model, catalog = {}, options = {}) {
   if (place === 0) return 1.0;
   const band = policy.fallback_fit || { start: 0.6, step: 0.015, floor: 0.4 };
   if (place === -1) return band.floor;
-  return Math.max(band.floor, round4(band.start - band.step * (place - 1)));
+  return Math.max(band.floor, band.start - band.step * (place - 1));
 }
 
 /**
@@ -582,10 +588,17 @@ export function splitEffortFromModelId(rawModel, models = DEFAULT_MODELS, aliase
   return { base, effort };
 }
 
+/**
+ * The provider a numbered account belongs to (`claude-2` -> `claude`), which is whose `dispatch_efforts` it reads.
+ */
+export function providerFamily(provider) {
+  return String(provider || "").trim().toLowerCase().replace(/[-_]\d+$/, "");
+}
+
 export function bundleHarness(bundle, account = null, bundleId = null) {
   const explicit = String(bundle?.harness || "").trim().toLowerCase();
   if (explicit) return explicit;
-  const prov = String(bundle?.provider || account || "").trim().toLowerCase();
+  const prov = providerFamily(bundle?.provider || account);
   const bid = String(bundleId || bundle?.id || "").trim().toLowerCase();
   const launchM = String(bundle?.launch_model || "").trim().toLowerCase();
   const model = String(bundle?.model || "").trim().toLowerCase();
@@ -650,21 +663,26 @@ export function scoringEffort(bundle, info) {
 }
 
 export function bundleApplies(bundle, taskCtx = {}) {
+  return whenFailure(bundle, taskCtx) === null;
+}
+
+/** Which part of a bundle's `when` this task fails, or `null` when the bundle applies. */
+function whenFailure(bundle, taskCtx) {
   const rule = bundle?.when;
-  if (!rule || typeof rule !== "object") return true;
+  if (!rule || typeof rule !== "object") return null;
   const pinnedId =
     taskCtx?.pinned_bundle ||
     taskCtx?.pinnedBundle ||
     taskCtx?.constraint_bundle ||
     taskCtx?.constraintBundle ||
     taskCtx?.constraints?.bundle;
-  if (pinnedId && bundle?.id && pinnedId === bundle.id) {
-    return true;
+  if (pinnedId && bundle?.id && (pinnedId === bundle.id || pinnedId === bundle.source_id)) {
+    return null;
   }
   if ("max_reasoning_depth" in rule) {
     const depth = taskCtx?.profile?.reasoning_depth;
     if (!Number.isFinite(depth) || depth > Number(rule.max_reasoning_depth)) {
-      return false;
+      return `its when rule allows reasoning depth up to ${rule.max_reasoning_depth}, the task has ${depth}`;
     }
   }
   if ("min_difficulty" in rule) {
@@ -675,10 +693,10 @@ export function bundleApplies(bundle, taskCtx = {}) {
       DIFFICULTY_ORDER.includes(req) &&
       DIFFICULTY_ORDER.indexOf(diff) < DIFFICULTY_ORDER.indexOf(req)
     ) {
-      return false;
+      return `its when rule asks for difficulty ${req} or above, the task is ${diff}`;
     }
   }
-  return true;
+  return null;
 }
 
 export function bundleCooldownReason(bundle, launchFailures, nowMs = Date.now()) {
@@ -701,7 +719,6 @@ export function bundleCooldownReason(bundle, launchFailures, nowMs = Date.now())
 
 const KNOWN_EFFORT_SUFFIXES = [
   "none",
-  "off",
   "minimal",
   "low",
   "medium",
@@ -709,7 +726,6 @@ const KNOWN_EFFORT_SUFFIXES = [
   "xhigh",
   "max",
   "ultra",
-  "auto",
   "default",
 ];
 
@@ -721,13 +737,13 @@ function splitPinModelAndEffort(normConstraint) {
       return { modelPart: normConstraint.slice(0, colonIdx).trim(), effortPart: suffix };
     }
   }
-  return { modelPart: normConstraint, effortPart: null };
+  const { effort } = resolveModel(normConstraint);
+  return { modelPart: normConstraint, effortPart: KNOWN_EFFORT_SUFFIXES.includes(effort) ? effort : null };
 }
 
 /**
- * Whether a pinned model names this candidate. Identity is the responsiveness key, as `allocator.py` compares
- * `canonical()` of both sides: `claude-opus-4-6` and `claude-opus-5-5` are different models here even though routing
- * folds one into the other.
+ * Whether a pinned model names this candidate. Identity is each row's own key (contract R1): a family row
+ * (`claude-opus-9` for `claude-opus-5-5`) is another model, so it neither answers to the pin nor stands in for it.
  */
 function matchesPinnedModel(bundle, computedId, normConstraint, modelPart, taskCtx) {
   const rawModel = bundle?.model;
@@ -742,31 +758,53 @@ function matchesPinnedModel(bundle, computedId, normConstraint, modelPart, taskC
   ) {
     return true;
   }
+  const leafOf = (name) => splitEffortSuffix(String(name || "")).name.split("/").pop().toLowerCase();
+  if (rawModel && leafOf(modelPart) === leafOf(rawModel)) return true;
   const models = taskCtx.models || DEFAULT_MODELS;
   const aliases = taskCtx.aliases || MODEL_ALIASES;
-  const wanted = resolveResponsivenessModelKey(modelPart, models, aliases).key;
-  if (!wanted) return false;
-  return wanted === bid || wanted === resolveResponsivenessModelKey(rawModel, models, aliases).key;
+  // A name only a family guess could place stays itself: naming gemini-2.5-pro never launches the flagship it folds to.
+  const { key: wanted, source } = resolveModel(modelPart, models, aliases);
+  if (source !== "exact" && source !== "alias") return false;
+  return wanted === bid || wanted === healthKey(rawModel, models, aliases);
+}
+
+function pinnedModelOf(taskCtx) {
+  return (
+    taskCtx.constraint_model ||
+    taskCtx.constraintModel ||
+    taskCtx.pinned_model ||
+    taskCtx.pinnedModel ||
+    taskCtx.constraints?.model ||
+    null
+  );
+}
+
+/** The effort the user named, in its own field or in the pinned name (`model:effort`, `model-effort`). */
+function pinnedEffortOf(taskCtx) {
+  const own =
+    taskCtx.constraint_effort ||
+    taskCtx.constraintEffort ||
+    taskCtx.pinned_effort ||
+    taskCtx.pinnedEffort ||
+    taskCtx.constraints?.effort;
+  if (own) return String(own).trim().toLowerCase();
+  const pinned = pinnedModelOf(taskCtx);
+  return pinned ? splitPinModelAndEffort(String(pinned).trim()).effortPart : null;
 }
 
 /**
- * Whether the user pinned this `realtime_loop` candidate; a pin keeps it from stepping down or being excluded.
- * Pin options have no effect on non-realtime routing.
+ * How the user pinned this candidate: `"effort"` names this exact effort (a bundle, or model and effort), so it is kept even
+ * when too slow; `"model"` names the model only, so the effort is still chosen within contract R2's range; `null` is no pin.
  */
-export function isCandidatePinned(bundle, canonical, taskCtx = {}) {
-  if (!taskCtx || typeof taskCtx !== "object") return false;
+export function pinScope(bundle, canonical, taskCtx = {}) {
+  if (!taskCtx || typeof taskCtx !== "object") return null;
   const bid = bundle?.id;
   const rawModel = bundle?.model;
   const candEff = String(bundle?.effort || "high").trim().toLowerCase();
   const computedId = rawModel ? `${rawModel}:${candEff}` : null;
   const pinnedBundle = taskCtx.pinned_bundle || taskCtx.pinnedBundle;
   const constraintBundle = taskCtx.constraint_bundle || taskCtx.constraintBundle || taskCtx.constraints?.bundle;
-  const constraintModel =
-    taskCtx.constraint_model ||
-    taskCtx.constraintModel ||
-    taskCtx.pinned_model ||
-    taskCtx.pinnedModel ||
-    taskCtx.constraints?.model;
+  const constraintModel = pinnedModelOf(taskCtx);
   const constraintEffort =
     taskCtx.constraint_effort ||
     taskCtx.constraintEffort ||
@@ -777,27 +815,52 @@ export function isCandidatePinned(bundle, canonical, taskCtx = {}) {
     (bid && (pinnedBundle === bid || constraintBundle === bid)) ||
     (computedId && (pinnedBundle === computedId || constraintBundle === computedId))
   ) {
-    return true;
+    return "effort";
+  }
+  if (bundle?.source_id && (pinnedBundle === bundle.source_id || constraintBundle === bundle.source_id)) {
+    return "model";
   }
   if (constraintModel) {
     const normConstraint = String(constraintModel).trim();
     const { modelPart, effortPart } = splitPinModelAndEffort(normConstraint);
     const candidate = rawModel ? bundle : { ...bundle, model: canonical };
     if (matchesPinnedModel(candidate, computedId, normConstraint, modelPart, taskCtx)) {
-      if (!effortPart && !constraintEffort) return true;
-      const normConstraintEff = constraintEffort ? String(constraintEffort).trim().toLowerCase() : null;
-      if ((!effortPart || effortPart === candEff) && (!normConstraintEff || normConstraintEff === candEff)) {
-        return true;
+      if (!effortPart && !constraintEffort) {
+        // The whole candidate id (`gpt-6-astra:high`) names its effort too.
+        return normConstraint === computedId ? "effort" : "model";
       }
-      return false;
+      // The effort's own field wins over one in the name, as `allocator.py:named_pin`.
+      const wantedEffort = constraintEffort ? String(constraintEffort).trim().toLowerCase() : effortPart;
+      if (wantedEffort === candEff) return "effort";
     }
   }
-  return false;
+  return null;
+}
+
+/**
+ * Whether the user pinned this candidate.
+ */
+export function isCandidatePinned(bundle, canonical, taskCtx = {}) {
+  return pinScope(bundle, canonical, taskCtx) !== null;
+}
+
+/**
+ * The effort a pin names for a bare pool entry of the pinned model, which a bare name expands to even when its table leaves
+ * it out: the user named both.
+ */
+function pinnedEffortFor(entry, taskCtx, models, aliases) {
+  const pinned = pinnedModelOf(taskCtx);
+  const raw = typeof entry === "string" ? entry : entry?.model;
+  if (!pinned || !raw) return null;
+  const { modelPart, effortPart } = splitPinModelAndEffort(String(pinned).trim());
+  const effort = (taskCtx.constraint_effort ? String(taskCtx.constraint_effort).trim().toLowerCase() : null) || effortPart;
+  if (!effort || !EFFORT_ORDER.includes(effort)) return null;
+  return canonicalModel(modelPart, aliases, models) === canonicalModel(raw, aliases, models) ? effort : null;
 }
 
 /**
  * Effort curves a `realtime_loop` task reads: `accounts.json` `effort_curves` of the responsiveness key, not of the routing
- * canonical. A name with no calibrated row has no speed data, and scores on the curve of the family routing puts it in.
+ * canonical. A family guess has none (`allocator.py:model_curves`): the flagship's speed and curve are not measured on it.
  */
 export function resolveRealtimeCurves(rawModel, canonical, catalog = {}) {
   const models = catalog.models || DEFAULT_MODELS;
@@ -805,14 +868,10 @@ export function resolveRealtimeCurves(rawModel, canonical, catalog = {}) {
   const curvesTable = catalog.effortCurves || EFFORT_CURVES;
   const respTable = catalog.effortResponsiveness || EFFORT_RESPONSIVENESS;
   const { key, known } = resolveResponsivenessModelKey(rawModel || canonical, models, aliases, curvesTable, respTable);
-  if (!known) {
-    const { responsiveness: _unmeasured, ...scoring } = curvesTable?.[canonical] || {};
-    return scoring;
-  }
+  if (!known) return {};
   const own = curvesTable?.[key];
-  const flat = FLAT_EFFORT_CURVE_MODELS.includes(key) ? FLAT_EFFORT_CURVE : null;
   const resp = own?.responsiveness || respTable?.[key];
-  return { ...flat, ...own, ...(resp ? { responsiveness: resp } : {}) };
+  return { ...own, ...(resp ? { responsiveness: resp } : {}) };
 }
 
 function attachTupleIterator(obj, tupleValues) {
@@ -866,7 +925,7 @@ export function bundleResponsiveness(
 
   let effectiveCurves = curves;
   if (!effectiveCurves || !effectiveCurves.responsiveness) {
-    const resolvedCurves = resolveRealtimeCurves(rawModel, canonicalModel(rawModel, aliases), {
+    const resolvedCurves = resolveRealtimeCurves(rawModel, canonicalModel(rawModel, aliases, models), {
       models,
       aliases,
       effortCurves: options.effortCurves,
@@ -911,7 +970,7 @@ export function bundleResponsiveness(
   const telemetryDoc = options.localTelemetry;
   if (telemetryDoc && typeof telemetryDoc === "object" && canonical) {
     const modelsMap = telemetryDoc.models && typeof telemetryDoc.models === "object" ? telemetryDoc.models : telemetryDoc;
-    const row = modelsMap[canonical] || modelsMap[rawModel];
+    const row = (known && modelsMap[canonical]) || modelsMap[rawModel];
     if (row && typeof row === "object") {
       const target = row.by_effort && typeof row.by_effort[eff] === "object" ? row.by_effort[eff] : row;
       const samples = Number(target.samples ?? 0);
@@ -943,8 +1002,8 @@ export function bundleResponsiveness(
 }
 
 /**
- * Efforts `dispatch_efforts` allows this bundle, or `null` when no row covers it. An explicit provider reads its own table
- * (`allocator.py:resolve_realtime_effort`); a bare candidate has none, so it reads the table of its inferred harness.
+ * Efforts `dispatch_efforts` allows this bundle, or `null` when no row covers it. An explicit provider reads its family's
+ * table (`claude-2` reads `claude`); a bare candidate has none, so it reads the table of its inferred harness.
  */
 function dispatchAllowedEfforts(
   bundle,
@@ -957,12 +1016,41 @@ function dispatchAllowedEfforts(
   curvesTable,
   respTable,
 ) {
-  const owner = provider || harness;
+  const owner = providerFamily(provider || harness);
   const table = owner && dispatchEffortsTable && typeof dispatchEffortsTable[owner] === "object" ? dispatchEffortsTable[owner] : null;
   if (!table) return null;
   const rawModel = bundle?.model || canonical;
-  const { key } = resolveResponsivenessModelKey(rawModel, models, aliases, curvesTable, respTable);
-  return table[rawModel] || table[key] || null;
+  const bare = splitEffortSuffix(rawModel).name;
+  const { key, known } = resolveResponsivenessModelKey(bare, models, aliases, curvesTable, respTable);
+  const leaf = bare.split("/").pop();
+  const names = known ? [key, bare, leaf] : [bare, leaf];
+  for (const name of names) {
+    if (name && Array.isArray(table[name]) && table[name].length > 0) {
+      return table[name];
+    }
+  }
+  const own = bundle?.offered_efforts || bundle?.efforts;
+  if (Array.isArray(own)) return own;
+  // A provider whose table does not list the model offers no other effort for it: a step-down never lands on an unverified flag.
+  return provider ? [] : null;
+}
+
+function hasFixedEffort(bundle, models, aliases) {
+  if (bundle?.effort_fixed) return true;
+  const launchId = String(bundle?.launch_model || bundle?.model || "");
+  return nameFixesEffort(launchId, models, aliases);
+}
+
+function canStepDown(bundle, info, models, aliases) {
+  if (hasFixedEffort(bundle, models, aliases)) return false;
+  const own = Array.isArray(bundle?.offered_efforts)
+    ? bundle.offered_efforts
+    : Array.isArray(bundle?.efforts)
+      ? bundle.efforts
+      : null;
+  if (!own) return true;
+  const rank = effortRank(scoringEffort(bundle, info));
+  return own.some((level) => effortRank(level) < rank);
 }
 
 /**
@@ -1038,7 +1126,7 @@ export function resolveRealtimeEffort(
     const aliases = catalog.aliases || MODEL_ALIASES;
     policy = ctx.policy || catalog.policy || DEFAULT_SCORING_POLICY;
     const resolved = ctx.info
-      ? { canonical: ctx.canonical || canonicalModel(bundle?.model || "", aliases), spec: ctx.info }
+      ? { canonical: ctx.canonical || canonicalModel(bundle?.model || "", aliases, models), spec: ctx.info }
       : resolveModelSpec(bundle?.model || "", models, aliases);
     canonical = resolved.canonical;
     info = resolved.spec || {};
@@ -1071,6 +1159,7 @@ export function resolveRealtimeEffort(
   });
   const respVal = initialResp.value;
   const respSource = initialResp.source;
+  const slowestPass = Boolean(taskCtx?.slow_pin_fallback) && pinScope(bundle, canonical, taskCtx) === "model";
 
   const makeReturn = (eff, rVal, rSrc, steppedFrom) =>
     attachTupleIterator(
@@ -1102,7 +1191,7 @@ export function resolveRealtimeEffort(
   }
 
   const rawLaunchId = String(bundle?.launch_model || bundle?.model || "");
-  if (splitEffortFromModelId(rawLaunchId, models, aliases).effort !== null) {
+  if (splitEffortFromModelId(rawLaunchId, models, aliases).effort !== null || splitEffortSuffix(rawLaunchId).effort !== null) {
     return makeReturn(rawEffort, respVal, respSource, null);
   }
 
@@ -1112,7 +1201,7 @@ export function resolveRealtimeEffort(
     taskCtx?.pinned_effort ||
     taskCtx?.pinnedEffort ||
     taskCtx?.constraints?.effort;
-  if (isCandidatePinned(bundle, canonical, taskCtx) || explicitEffortPin) {
+  if (pinScope(bundle, canonical, taskCtx) === "effort" || explicitEffortPin) {
     return makeReturn(rawEffort, respVal, respSource, null);
   }
 
@@ -1127,7 +1216,7 @@ export function resolveRealtimeEffort(
       ? Object.entries(rawBundles)
       : [];
 
-  if (bundleEntries.length > 0) {
+  if (bundleEntries.length > 0 && !slowestPass) {
     const unavailableIds = new Set(ctx.unavailable || taskCtx?.unavailable || []);
     const unhealthySet = taskCtx?.unhealthy_models instanceof Set ? taskCtx.unhealthy_models : new Set(taskCtx?.unhealthy_models || []);
     const failuresMap = ctx.launch_failures || ctx.launchFailures || taskCtx?.launch_failures || taskCtx?.launchFailures || null;
@@ -1155,7 +1244,7 @@ export function resolveRealtimeEffort(
         catalog.effortResponsiveness || EFFORT_RESPONSIVENESS,
       ).key;
       if (sibKey !== selfKey) continue;
-      if (unhealthySet.has(canonicalModel(b.model || "", aliases))) continue;
+      if (unhealthySet.has(healthKey(b.model || "", models, aliases)) || unhealthySet.has(b.model)) continue;
       if (b.disabled || b.discovery_unavailable || !bundleApplies(b, taskCtx)) continue;
       const sibBundle = { ...b, id: sibId };
       if (bundleCooldownReason(sibBundle, failuresMap, nowMs)) continue;
@@ -1183,11 +1272,13 @@ export function resolveRealtimeEffort(
       }
     }
 
-    if (siblings.length > 0) {
-      const gateClearingPeers = siblings.filter(
+    // A row that cannot step does not stand in for the rows that can.
+    const steppable = siblings.filter((s) => canStepDown(s, info, models, aliases));
+    if (steppable.length > 0) {
+      const gateClearingPeers = steppable.filter(
         (s) => effortAbility(policy, curves, info, scoringEffort(s, info)) >= gate,
       );
-      const stepDownPeers = gateClearingPeers.length > 0 ? gateClearingPeers : siblings;
+      const stepDownPeers = gateClearingPeers.length > 0 ? gateClearingPeers : steppable;
       const minRank = Math.min(...stepDownPeers.map((s) => effortRank(scoringEffort(s, info))));
       if (effortRank(rawEffort) > minRank) {
         return makeReturn(rawEffort, respVal, respSource, null);
@@ -1211,17 +1302,27 @@ export function resolveRealtimeEffort(
   const hasAbilityCurve = abilityCurve && Object.keys(abilityCurve).length > 0;
   const rawRank = effortRank(rawEffort);
 
+  // Contract R2: dispatch_efforts, within what this candidate or its pool offers, without what the user disabled.
+  const offered = Array.isArray(bundle?.offered_efforts)
+    ? bundle.offered_efforts
+    : Array.isArray(bundle?.efforts)
+      ? bundle.efforts
+      : null;
+  const disabledEfforts = Array.isArray(bundle?.disabled_efforts) ? bundle.disabled_efforts : [];
   const faster = REALTIME_EFFORT_ORDER.filter(
     (eff) =>
       eff in curvesResp &&
       effortRank(eff) < rawRank &&
       (!hasAbilityCurve || eff in abilityCurve) &&
-      (!allowedEfforts || allowedEfforts.includes(eff)),
+      (!allowedEfforts || allowedEfforts.includes(eff)) &&
+      (!offered || offered.includes(eff)) &&
+      !disabledEfforts.includes(eff),
   );
   faster.sort((a, b) => effortRank(b) - effortRank(a));
 
   let bestClearingBoth = null;
   let bestClearingResp = null;
+  const timed = [];
   for (const candEff of faster) {
     const { value: candResp, source: candSrc } = bundleResponsiveness(bundle, info, policy, curves, {
       effort: candEff,
@@ -1232,9 +1333,9 @@ export function resolveRealtimeEffort(
       effortResponsiveness: catalog.effortResponsiveness,
       localTelemetry: ctx.localTelemetry || taskCtx?.localTelemetry,
     });
-    if (candSrc === "not_applicable" || candResp === null || candResp < respFloor) {
-      continue;
-    }
+    if (candSrc === "not_applicable" || candResp === null) continue;
+    timed.push([candResp, candEff, candSrc]);
+    if (candResp < respFloor) continue;
     if (bestClearingResp === null) {
       bestClearingResp = [candEff, candResp, candSrc];
     }
@@ -1248,16 +1349,25 @@ export function resolveRealtimeEffort(
   if (chosen !== null) {
     return makeReturn(chosen[0], chosen[1], chosen[2], rawEffort);
   }
+  if (slowestPass && timed.length > 0) {
+    // Nothing clears the floor on the model the user named: its fastest effort, warned about by the caller.
+    const able = timed.filter(([, eff]) => effortAbility(policy, curves, info, eff) >= gate);
+    const best = (able.length > 0 ? able : timed).reduce((a, b) => (b[0] > a[0] ? b : a));
+    if (best[0] > respVal) return makeReturn(best[1], best[0], best[2], rawEffort);
+  }
   return makeReturn(rawEffort, respVal, respSource, null);
 }
 
 /**
- * Bundle-level exclusions a `realtime_loop` task applies: availability, the launch cooldown, and user pins.
+ * Bundle-level exclusions: availability, the launch cooldown, and user pins (`allocator.py:evaluate_bundle`).
  */
-function realtimeAvailabilityExclusions(candidate, rawEffort, taskCtx) {
+function availabilityExclusions(candidate, rawEffort, taskCtx) {
   const excluded = [];
   const rawModel = candidate.model;
-  if (candidate.disabled) {
+  // Off by default is not the user's checkbox: naming the model still reaches it.
+  const named = candidate.disabled_by_default && pinScope(candidate, canonicalModel(rawModel, taskCtx.aliases, taskCtx.models), taskCtx);
+  // Unchecking an effort takes it from every row of that account and model, a bare name's included (contract R2).
+  if ((candidate.disabled && !named) || candidate.disabled_efforts?.includes(String(rawEffort).toLowerCase())) {
     excluded.push("unchecked in model management");
   }
   if (candidate.discovery_unavailable) {
@@ -1266,6 +1376,9 @@ function realtimeAvailabilityExclusions(candidate, rawEffort, taskCtx) {
         ? candidate.discovery_unavailable
         : "model not detected by discovery for 7+ days",
     );
+  }
+  if (candidate.not_dispatchable) {
+    excluded.push(`${rawModel}@${rawEffort}: not in dispatch_efforts of ${candidate.provider || candidate.account || "its route"}`);
   }
   if (candidate.id && taskCtx.unavailable instanceof Set && taskCtx.unavailable.has(candidate.id)) {
     excluded.push("marked unavailable by the parent");
@@ -1277,7 +1390,7 @@ function realtimeAvailabilityExclusions(candidate, rawEffort, taskCtx) {
     taskCtx.constraint_bundle ||
     taskCtx.constraintBundle ||
     taskCtx.constraints?.bundle;
-  if (pinnedBundle && candidate.id !== pinnedBundle && computedId !== pinnedBundle) {
+  if (pinnedBundle && candidate.id !== pinnedBundle && candidate.source_id !== pinnedBundle && computedId !== pinnedBundle) {
     excluded.push("explicit bundle constraint");
   }
   const constraintModel =
@@ -1288,27 +1401,85 @@ function realtimeAvailabilityExclusions(candidate, rawEffort, taskCtx) {
     taskCtx.constraints?.model;
   if (constraintModel) {
     const normConstraint = String(constraintModel).trim();
-    const { modelPart, effortPart } = splitPinModelAndEffort(normConstraint);
+    const { modelPart } = splitPinModelAndEffort(normConstraint);
     if (!matchesPinnedModel(candidate, computedId, normConstraint, modelPart, taskCtx)) {
       excluded.push("explicit model constraint");
-    } else if (effortPart && String(rawEffort).toLowerCase() !== effortPart) {
-      excluded.push("explicit effort constraint");
     }
   }
-  const constraintEffort =
-    taskCtx.constraint_effort ||
-    taskCtx.constraintEffort ||
-    taskCtx.pinned_effort ||
-    taskCtx.pinnedEffort ||
-    taskCtx.constraints?.effort;
-  if (constraintEffort && String(rawEffort).toLowerCase() !== String(constraintEffort).trim().toLowerCase()) {
-    excluded.push("explicit effort constraint");
+  const wantedEffort = pinnedEffortOf(taskCtx);
+  if (wantedEffort && String(rawEffort).toLowerCase() !== wantedEffort) {
+    excluded.push(EFFORT_NOT_PINNED);
   }
   const cooling = bundleCooldownReason(candidate, taskCtx.launch_failures || taskCtx.launchFailures, taskCtx.now);
   if (cooling) {
     excluded.push(cooling);
   }
   return excluded;
+}
+
+/**
+ * Absolute harness quality multiplied into weighted fit and ability (`allocator.py:harness_quality_factor`). Most specific
+ * match wins: by_model, by_work_kind, by_harness, the first matching rule, then the default.
+ */
+export function harnessQualityFactor(bundle, kind, policy = DEFAULT_SCORING_POLICY, modelKey = null) {
+  const table = policy?.harness_factors && typeof policy.harness_factors === "object" ? policy.harness_factors : {};
+  const harness = bundle?.harness || bundleHarness(bundle, bundle?.account, bundle?.id);
+  const raw = splitEffortSuffix(String(bundle?.model || "")).name;
+  // The resolved key, then the raw spellings. A family guess never answers for the flagship it folded to.
+  const { key, source } = resolveModel(modelKey || raw);
+  const names = [...(source === "exact" || source === "alias" ? [key] : []), raw, raw.split("/").pop()];
+  const asFactor = (value) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+  let found = null;
+  for (const name of names) found ??= asFactor(table.by_model?.[name]?.[harness]);
+  found ??= asFactor(table.by_work_kind?.[kind]?.[harness]);
+  found ??= asFactor(table.by_harness?.[harness]);
+  if (found === null) {
+    for (const rule of table.rules || []) {
+      if (!rule || typeof rule !== "object") continue;
+      if (rule.harness && rule.harness !== harness) continue;
+      if (rule.work_kind && rule.work_kind !== kind) continue;
+      if (rule.model && !names.includes(rule.model)) continue;
+      if (rule.model_prefix && !names.some((name) => name.toLowerCase().startsWith(rule.model_prefix))) continue;
+      found = asFactor(rule.factor);
+      if (found !== null) break;
+    }
+  }
+  found ??= asFactor(table.default);
+  return found === null ? 1.0 : found;
+}
+
+/**
+ * Sibling harness preference (`allocator.py:apply_harness_order`): among bundles that differ only in harness, each place
+ * behind the route's `harness_order` (else `profile.harness_by_style`, else the policy's) loses `harness_step`. The best
+ * sibling keeps its score, so this never changes which model wins.
+ */
+function applyHarnessOrder(eligible, kind, policy, routes, style) {
+  const byStyle = style ? policy?.profile?.harness_by_style?.[style] : null;
+  const order = routes?.[kind]?.harness_order || byStyle || policy?.harness_order || [];
+  const step = Number(policy?.harness_step ?? 0.03);
+  const place = (c) => {
+    const at = order.indexOf(c.bundle.harness);
+    if (at >= 0) return at;
+    const prov = order.indexOf(c.bundle.provider);
+    return prov >= 0 ? prov : order.length;
+  };
+  const groups = new Map();
+  for (const c of eligible) {
+    const key = JSON.stringify([c.bundle.account || "", c.model, c.effort]);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c);
+  }
+  for (const siblings of groups.values()) {
+    if (siblings.length < 2) continue;
+    const best = Math.min(...siblings.map(place));
+    for (const c of siblings) {
+      const behind = place(c) - best;
+      if (behind > 0) {
+        c.score = round4(c.score - step * behind);
+        c.components.harness = round3(-step * behind);
+      }
+    }
+  }
 }
 
 /**
@@ -1321,23 +1492,25 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
 
   const rawModel = candidate.model;
   const { canonical, spec: info } = resolveModelSpec(rawModel, models, aliases);
-  const realtime = Boolean(taskCtx.realtime_loop);
-  const rawEffort = realtime ? scoringEffort(candidate, info) : candidate.effort || "high";
-  const curves = realtime
-    ? resolveRealtimeCurves(rawModel, canonical, catalog)
-    : (catalog.effortCurves || EFFORT_CURVES)[canonical] || {};
+  const rawEffort = scoringEffort(candidate, info);
+  const curves = resolveRealtimeCurves(rawModel, canonical, catalog);
   const excluded = [];
   const notes = [];
+  const harness = candidate.harness || bundleHarness(candidate, candidate.account, candidate.id);
 
-  if (realtime) {
-    excluded.push(...realtimeAvailabilityExclusions(candidate, rawEffort, taskCtx));
+  excluded.push(...availabilityExclusions(candidate, rawEffort, taskCtx));
+
+  if (info.advisor_only && !(info.advisor_for || []).includes(taskCtx.kind)) {
+    excluded.push("advisor only; cannot execute");
   }
-
+  if (info.excluded_when === "local_only" && taskCtx.local_only) {
+    excluded.push("the task must run on this machine; this worker runs remotely");
+  }
   if (taskCtx.needs_visual && !info.visual) {
     excluded.push("task needs visual input");
   }
-  if (taskCtx.unhealthy_models && taskCtx.unhealthy_models.has(canonical)) {
-    excluded.push("model is currently marked unhealthy");
+  if (taskCtx.unhealthy_models && (taskCtx.unhealthy_models.has(healthKey(rawModel, models, aliases)) || taskCtx.unhealthy_models.has(rawModel))) {
+    excluded.push(MARKED_UNHEALTHY);
   }
   if (
     taskCtx.min_context_tokens &&
@@ -1386,28 +1559,34 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
   if (
     route.restrict_models &&
     taskCtx.specialist_available &&
-    !(route.preferred || []).map((m) => canonicalModel(m, aliases)).includes(canonical)
+    !(route.preferred || []).map((m) => canonicalModel(m, aliases, models)).includes(canonical)
   ) {
     excluded.push(`not in the allowed model list for ${taskCtx.kind}`);
   }
 
   if (ability < gate) {
-    excluded.push(`ability ${ability.toFixed(2)} below the ${taskCtx.difficulty} floor ${gate.toFixed(2)}`);
+    excluded.push(
+      steppedFrom !== null
+        ? `${rawModel}: stepped down from ${steppedFrom} to ${effort} for realtime_loop, and ability ${ability.toFixed(2)} at ${effort} is below the ${taskCtx.difficulty} floor ${gate.toFixed(2)}`
+        : `ability ${ability.toFixed(2)} below the ${taskCtx.difficulty} floor ${gate.toFixed(2)}`
+    );
   }
 
+  let tooSlow = null;
   if (taskCtx.realtime_loop) {
     const respCfg = responsivenessConfig(policy);
-    const pinnedChoice = isCandidatePinned(candidate, canonical, taskCtx);
+    const scope = pinScope(candidate, canonical, taskCtx);
+    const keptSlow = scope === "effort" || (taskCtx.slow_pin_fallback && scope === "model");
     const measuredAs = resolveResponsivenessModelKey(rawModel || canonical, models, aliases).key;
     extraComponents.responsiveness_source = respSource;
     if (respSource === "not_applicable" || respVal === null || respVal === undefined) {
       extraComponents.responsiveness = null;
-      if (pinnedChoice) {
+      if (keptSlow) {
         const warn = `pinned ${candidate.id || rawModel} (${measuredAs}@${effort}) responsiveness is not_applicable for realtime_loop (too slow per turn for a live loop); kept per explicit user selection`;
         extraComponents.realtime_slow_pin_warning = warn;
         notes.push(warn);
       } else {
-        excluded.push("responsiveness not_applicable for this channel (too slow per turn for a live loop)");
+        tooSlow = `${rawModel}@${effort}: responsiveness not_applicable for this channel`;
       }
     } else {
       extraComponents.responsiveness = round3(respVal);
@@ -1416,17 +1595,16 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
       }
       const respFloor = Number(respCfg.floor ?? 0.5);
       if (respVal < respFloor) {
-        if (pinnedChoice) {
+        if (keptSlow) {
           const warn = `pinned ${candidate.id || rawModel} (${measuredAs}@${effort}) responsiveness ${respVal.toFixed(2)} is below the realtime_loop floor ${respFloor} (too slow per turn for a live loop); kept per explicit user selection`;
           extraComponents.realtime_slow_pin_warning = warn;
           notes.push(warn);
         } else {
-          excluded.push(
-            `responsiveness ${respVal.toFixed(2)} below the realtime_loop floor ${respFloor} (too slow per turn for a live loop)`
-          );
+          tooSlow = `${rawModel}@${effort}: responsiveness ${respVal.toFixed(2)} below the realtime_loop floor ${respFloor}`;
         }
       }
     }
+    if (tooSlow) excluded.push(tooSlow);
   }
 
   // Subscription quota, safety margin, opportunity cost & pre-reset sprint evaluation (at stepped-down effort)
@@ -1444,7 +1622,7 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
     excluded.push(...(quotaEval.excluded || [`${rawModel}: subscription quota exhausted`]));
   }
 
-  let fit = fitScore(taskCtx.kind, canonical, catalog, {
+  let fit = fitScore(taskCtx.kind, rawModel, catalog, {
     local_only: taskCtx.local_only,
     dotAvailable: taskCtx.dot_available,
   });
@@ -1497,24 +1675,10 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
   const sunkWeight = Number(quotaEval?.reset_sunk_weight ?? 0.0);
   const sprintSunk = taskCtx.difficulty === "routine" ? 0.0 : sunkWeight;
   const effortScale = burnScale(policy, curves, effort);
-  const routineEffortOverhead =
-    taskCtx.difficulty === "routine" &&
-    taskCtx.minimum_sufficient &&
-    ability >= target &&
-    vfit >= 0.999 &&
-    Array.isArray(info?.efforts) &&
-    info.efforts.includes("low")
-      ? effort === "high"
-        ? 0.004
-        : effort === "medium"
-          ? 0.002
-          : 0.0
-      : 0.0;
   const effortPenalty = round4(
     (policy.extra_effort_penalty ?? 0.025) *
       Math.max(0.0, effortScale - 1.0) *
-      (1.0 - sprintSunk) +
-      routineEffortOverhead
+      (1.0 - sprintSunk)
   );
   const effortGain = Math.max(0.0, ability - highAbility);
   const saturationSpan = Number(policy.profile?.saturation_span ?? 0.3);
@@ -1550,7 +1714,7 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
     const satSpan = Number(pCfg.saturation_span ?? 0.3);
     abilityScore = ability >= gate ? 1.0 : 0.0;
     const excess = clamp((ability - target - satSpan) / Number(pCfg.overqualification_span ?? 0.6), 0, 1);
-    const usd = Number(info.usd_per_hour ?? 3.0) * Math.max(effortScale, 0.0);
+    const usd = Number(info.usd_per_hour ?? 4.0) * Math.max(effortScale, 0.0);
     let price = usd / Number(pCfg.overqualification_ref_usd_per_hour ?? 10.0);
     const gui = taskCtx.kind === "computer_use" || Boolean(taskCtx.profile?.needs_gui);
     const guiCapable = (capabilityVector(info).gui ?? 0) >= 0.7;
@@ -1575,8 +1739,8 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
   let continuityBonus = 0.0;
   const cont = taskCtx.continuity;
   if (cont && cont.previousModel) {
-    const prevCanonical = canonicalModel(cont.previousModel, aliases);
-    if (canonical === prevCanonical && cont.active !== false) {
+    const prevCanonical = canonicalModel(cont.previousModel, aliases, models);
+    if ((canonical === prevCanonical || rawModel === cont.previousModel) && cont.active !== false) {
       let coupling = 0.0;
       if (Number.isFinite(cont.coupling)) {
         coupling = clamp(Number(cont.coupling), 0.0, 1.0);
@@ -1607,9 +1771,11 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
   const freeUsage = Number(quotaEval?.free_usage ?? 0.0);
   const fastBonus = Number(quotaEval?.fast_bonus ?? 0.0);
 
+  const harnessFactor = harnessQualityFactor(candidate, taskCtx.kind, policy, canonical);
+  // As `allocator.py:rank`, on the rounded components: this is the value harness quality scales.
+  const value = Number(weights.fit) * round3(fit) + Number(weights.ability) * round3(abilityScore);
   const totalScore = round4(
-    weights.fit * fit +
-      weights.ability * abilityScore +
+    value * harnessFactor +
       continuityBonus +
       qualityBonus +
       freeUsage +
@@ -1623,14 +1789,21 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
   );
 
   const hours = Number(taskCtx.hours ?? taskCtx.profile?.expected_hours ?? 0.5);
-  const expectedUsd = round4(hours * Number(info.usd_per_hour ?? 3.0) * Math.max(effortScale, 0.0));
+  const expectedUsd = round4(hours * Number(info.usd_per_hour ?? 4.0) * Math.max(effortScale, 0.0));
+
+  const bundle = { harness, model: rawModel, effort };
+  for (const field of ["provider", "account", "modeId", "launch_model", "draws", "pin_carrier"]) {
+    if (candidate[field] !== undefined && candidate[field] !== null) bundle[field] = candidate[field];
+  }
+  if (steppedFrom !== null) bundle.realtime_stepped_from = steppedFrom;
 
   const out = {
-    id: realtime && candidate.id ? candidate.id : `${rawModel}:${effort}`,
+    id: candidate.id ? candidate.id : `${rawModel}:${effort}`,
     model: rawModel,
     canonicalModel: canonical,
     effort,
     fast: Boolean(quotaEval?.fast),
+    bundle,
     excluded,
     eligible: excluded.length === 0,
     score: excluded.length === 0 ? totalScore : null,
@@ -1647,6 +1820,7 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
           fast: Boolean(quotaEval.fast),
           shortage_probability: quotaEval.shortage_probability ?? 0.0,
           binding_window: quotaEval.binding_window || null,
+          warnings: quotaEval.warnings || [],
         }
       : null,
     components: {
@@ -1667,6 +1841,7 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
       effort_penalty: effortPenalty,
       overqualification,
       shortfall: shortfallPenalty,
+      harness_factor: round4(harnessFactor),
       ...extraComponents,
     },
   };
@@ -1680,11 +1855,18 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
   if (taskCtx.realtime_loop) {
     out.expected_usd = expectedUsd;
   }
+  // Too slow and nothing else: what a model-only pin may still keep at its fastest effort.
+  if (tooSlow && excluded.length === 1) {
+    out.too_slow = true;
+  }
 
   return out;
 }
 
-function realtimeBareCandidateEfforts(
+/**
+ * The efforts a bare name expands to: its catalog efforts within what its provider or inferred harness dispatches.
+ */
+function bareCandidateEfforts(
   entryObj,
   spec,
   canonical,
@@ -1733,6 +1915,214 @@ function realtimeBareCandidateEfforts(
 }
 
 /**
+ * Expand one pool entry into `(model, effort)` candidates. A name with an effort in it runs at that effort only; `efforts`
+ * lists what the entry offers; any other entry offers what its provider dispatches.
+ */
+/** `:auto`, `:off` and `:default` say nothing about the effort; only the routed one may follow the model name upstream. */
+function withoutUnconstrainingTag(raw) {
+  return raw.replace(/:(?:auto|off|default)$/i, "");
+}
+
+function expandCandidate(entry, taskCtx, catalog, models, aliases) {
+  const curvesTable = catalog.effortCurves || EFFORT_CURVES;
+  const respTable = catalog.effortResponsiveness || EFFORT_RESPONSIVENESS;
+  const dispatchTable = catalog.dispatchEfforts || DISPATCH_EFFORTS;
+  const pinnedEffort = pinnedEffortFor(entry, taskCtx, models, aliases);
+  const bare = (obj, spec, canonical) =>
+    pinnedEffort
+      ? [pinnedEffort]
+      : bareCandidateEfforts(obj, spec, canonical, models, aliases, dispatchTable, curvesTable, respTable);
+
+  if (typeof entry === "string") {
+    const { name, effort: colonEffort } = splitEffortSuffix(withoutUnconstrainingTag(entry));
+    const effort = colonEffort || resolveModel(name, models, aliases).effort;
+    if (effort && EFFORT_ORDER.includes(effort)) {
+      return [{ model: name, effort, offered_efforts: [effort], effort_fixed: true }];
+    }
+    const { canonical, spec } = resolveModelSpec(name, models, aliases);
+    return bare({ model: name }, spec, canonical).map((eff) => ({ model: name, effort: eff }));
+  }
+  if (!entry || typeof entry !== "object" || !entry.model) return [];
+
+  const { name: modelName, effort: colonEffort } = splitEffortSuffix(withoutUnconstrainingTag(String(entry.model)));
+  const suffixEffort = colonEffort || resolveModel(modelName, models, aliases).effort;
+  const fixedBySuffix = suffixEffort && EFFORT_ORDER.includes(suffixEffort);
+  const model = fixedBySuffix ? modelName : entry.model;
+  const { canonical, spec } = resolveModelSpec(model, models, aliases);
+  const isBundleObj = Boolean(entry.id || entry.provider || entry.account || entry.harness || entry.when);
+
+  let efforts;
+  let notDispatchable = false;
+  if (fixedBySuffix) {
+    efforts = [entry.effort ? String(entry.effort).trim().toLowerCase() : suffixEffort];
+  } else if (entry.effort) {
+    efforts = [String(entry.effort).trim().toLowerCase()];
+  } else if (Array.isArray(entry.efforts)) {
+    const listed = entry.efforts.map((e) => String(e).trim().toLowerCase()).filter(Boolean);
+    const allowed = dispatchAllowedEfforts(
+      { ...entry, model },
+      entry.provider || entry.account,
+      entry.harness || bundleHarness({ ...entry, model }, entry.account, entry.id),
+      canonical,
+      models,
+      aliases,
+      dispatchTable,
+      curvesTable,
+      respTable,
+    );
+    efforts = allowed?.length > 0 ? listed.filter((e) => allowed.includes(e)) : listed;
+    if (efforts.length === 0 && listed.length > 0) {
+      efforts = listed;
+      notDispatchable = true;
+    }
+  } else {
+    efforts = isBundleObj ? [scoringEffort(entry, spec)] : bare(entry, spec, canonical);
+  }
+  const split = efforts.length > 1 && entry.id;
+  const ownEfforts = Array.isArray(entry.efforts) ? entry.efforts.map((e) => String(e).trim().toLowerCase()) : null;
+  const out = efforts.map((eff) => ({
+    ...entry,
+    model,
+    effort: eff,
+    ...(fixedBySuffix ? { offered_efforts: [eff], effort_fixed: true } : ownEfforts ? { offered_efforts: ownEfforts } : {}),
+    ...(notDispatchable ? { not_dispatchable: true } : {}),
+    // Efforts from one entry are different candidates: a sibling check must not take them for itself.
+    ...(split ? { id: `${entry.id}:${eff}`, source_id: entry.id } : {}),
+  }));
+  return out;
+}
+
+/**
+ * Contract R2: an effort the user unchecked on an account, harness and model is no landing for any row of them, a model being
+ * each row's own key: a family row is another model (R1). Off by default is not the user's checkbox.
+ */
+function attachDisabledEfforts(expanded, models, aliases) {
+  const groups = new Map();
+  const keyOf = (c) => {
+    const harness = c.harness || bundleHarness(c, c.account, c.id);
+    return JSON.stringify([c.account || "", harness, healthKey(c.model, models, aliases)]);
+  };
+  for (const c of expanded) {
+    if (!c.disabled || c.disabled_by_default) continue;
+    const key = keyOf(c);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(c.effort);
+  }
+  for (const c of expanded) {
+    const disabled = groups.get(keyOf(c));
+    if (disabled) c.disabled_efforts = disabled;
+  }
+}
+
+function clearingLevels(bundle, taskCtx, catalog, models, aliases) {
+  const policy = catalog.policy || DEFAULT_SCORING_POLICY;
+  const harness = bundle.harness || bundleHarness(bundle, bundle.account, bundle.id);
+  const provider = bundle.provider || bundle.account;
+  if (
+    harness === "antigravity" ||
+    harness === "antigravity-resilient" ||
+    provider === "antigravity" ||
+    provider === "antigravity-resilient"
+  ) {
+    return [];
+  }
+  const canonical = canonicalModel(bundle.model, aliases, models);
+  const curves = resolveRealtimeCurves(bundle.model, canonical, catalog);
+  const speeds = curves?.responsiveness;
+  if (!speeds || typeof speeds !== "object" || Object.keys(speeds).length === 0) {
+    return [];
+  }
+  const { spec: info } = resolveModelSpec(bundle.model, models, aliases);
+  const floor = Number(responsivenessConfig(policy).floor ?? 0.5);
+  const ability =
+    curves?.ability && typeof curves.ability === "object" && Object.keys(curves.ability).length > 0 ? curves.ability : null;
+  const levels = [];
+  for (const level of REALTIME_EFFORT_ORDER) {
+    if (!(level in speeds) || (ability && !(level in ability))) continue;
+    const { value, source } = bundleResponsiveness(bundle, info, policy, curves, {
+      effort: level,
+      harness,
+      models,
+      aliases,
+      effortCurves: catalog.effortCurves,
+      effortResponsiveness: catalog.effortResponsiveness,
+      localTelemetry: taskCtx?.localTelemetry,
+    });
+    if (source !== "not_applicable" && value !== null && value !== undefined && value >= floor) {
+      levels.push(level);
+    }
+  }
+  return levels;
+}
+
+/**
+ * Rows for levels the user's pin reaches on a model the pool has no row at that level for (`allocator.py:named_effort_bundles`):
+ * the effort they named, or, for a model named alone on `realtime_loop` work, every level that clears the floor, so the score
+ * decides among them as it does among written rows.
+ */
+function namedEffortRows(expanded, taskCtx, catalog, models, aliases) {
+  const effort = pinnedEffortOf(taskCtx);
+  const pinned = pinnedModelOf(taskCtx);
+  const levelChoice = !effort && Boolean(taskCtx.realtime_loop && pinned);
+  if ((!effort && !levelChoice) || taskCtx.constraint_bundle || taskCtx.pinned_bundle) return [];
+  const groups = new Map();
+  for (const c of expanded) {
+    const key = healthKey(c.model, models, aliases);
+    const canon = canonicalModel(c.model, aliases, models);
+    if (pinned && pinScope(effort ? { ...c, effort } : c, canon, taskCtx) === null) continue;
+    if (levelChoice && pinScope(c, canon, taskCtx) === "effort") continue;
+    const group = JSON.stringify([c.account || "", c.harness || bundleHarness(c, c.account, c.id), key]);
+    if (!groups.has(group)) groups.set(group, { key, canon, rows: [] });
+    groups.get(group).rows.push(c);
+  }
+  const found = [];
+  for (const { canon, rows } of groups.values()) {
+    const specOf = (r) => resolveModelSpec(r.model, models, aliases).spec;
+    const written = new Set(rows.map((r) => String(scoringEffort(r, specOf(r)) || "").toLowerCase()));
+    const carriers = rows.filter(
+      (r) =>
+        (!r.disabled || r.disabled_by_default) &&
+        !r.discovery_unavailable &&
+        !hasFixedEffort(r, models, aliases),
+    );
+    for (const carrier of carriers) {
+      const allowed = dispatchAllowedEfforts(
+        carrier,
+        carrier.provider || carrier.account,
+        carrier.harness || bundleHarness(carrier, carrier.account, carrier.id),
+        canon,
+        models,
+        aliases,
+        catalog.dispatchEfforts || DISPATCH_EFFORTS,
+        catalog.effortCurves || EFFORT_CURVES,
+        catalog.effortResponsiveness || EFFORT_RESPONSIVENESS,
+      );
+      let levels;
+      if (effort) {
+        levels = (allowed ? allowed.includes(effort) : Boolean(pinned)) ? [effort] : [];
+      } else {
+        levels = clearingLevels(carrier, taskCtx, catalog, models, aliases).filter(
+          (e) => !allowed || allowed.includes(e),
+        );
+      }
+      const ownEfforts = Array.isArray(carrier.offered_efforts)
+        ? carrier.offered_efforts
+        : Array.isArray(carrier.efforts)
+          ? carrier.efforts
+          : null;
+      for (const level of levels) {
+        if (written.has(level) || (ownEfforts && !ownEfforts.includes(level))) continue;
+        written.add(level);
+        const carrierId = carrier.id || `${carrier.model}:${scoringEffort(carrier, specOf(carrier))}`;
+        const { when: _when, ...row } = carrier;
+        found.push({ ...row, id: `${carrierId}@${level}`, effort: level, pin_carrier: carrierId });
+      }
+    }
+  }
+  return found;
+}
+
+/**
  * Expand candidate models into `(model, effort)` bundles and rank them for the given task profile.
  */
 export function rankCandidates(profileInput, options = {}) {
@@ -1744,21 +2134,44 @@ export function rankCandidates(profileInput, options = {}) {
   const nowMs = Number.isFinite(options.now) ? Number(options.now) : Date.now();
 
   const callerNeeds = profileInput?.needs && typeof profileInput.needs === "object" ? profileInput.needs : {};
-  // A task wrapper (`{ profile, realtime_loop, constraints, ... }`) is a realtime-only input; anything else is inferred as on main.
+  // A task wrapper is `{ profile, realtime_loop, constraints, ... }`. Nothing here reads a task's text: no profile, no ranking.
   const wrappedProfile = !profileInput?.reasoning_depth && profileInput?.profile?.reasoning_depth ? profileInput.profile : null;
-  const wrapperRealtime =
-    wrappedProfile &&
-    (typeof options.realtime_loop === "boolean"
-      ? options.realtime_loop
-      : typeof callerNeeds.realtime_loop === "boolean"
-        ? callerNeeds.realtime_loop
-        : typeof profileInput.realtime_loop === "boolean"
-          ? profileInput.realtime_loop
-          : wrappedProfile.realtime_loop === true);
-  const rawProfile = profileInput?.reasoning_depth ? profileInput : wrapperRealtime ? wrappedProfile : null;
-  let profile = rawProfile
-    ? validateProfile(rawProfile)
-    : inferTaskProfile(profileInput || {}, routes);
+  const rawProfile = profileInput?.reasoning_depth ? profileInput : wrappedProfile;
+  let profile;
+  try {
+    if (!rawProfile) {
+      if (profileInput && ("multi_task" in profileInput || "task_count" in profileInput)) {
+        const multiTask =
+          profileInput.multi_task !== undefined
+            ? profileInput.multi_task
+            : profileInput.task_count !== "1" && profileInput.task_count !== 1;
+        const taskCount = profileInput.task_count !== undefined ? profileInput.task_count : multiTask ? "2" : "1";
+        validateProfile({
+          reasoning_depth: 1,
+          code_complexity: 1,
+          context_scale: 1,
+          divergence: 1,
+          hallucination_risk: 1,
+          error_cost: 1,
+          needs_visual: false,
+          needs_gui: false,
+          local_only: false,
+          realtime_loop: false,
+          interaction_style: "engineering",
+          expected_hours: 0.5,
+          hours_confidence: "medium",
+          urgency: "unknown",
+          multi_task: multiTask,
+          task_count: taskCount,
+        });
+      }
+      return { task: null, selected: null, ranking: [], allCandidates: [] };
+    }
+    profile = validateProfile(rawProfile);
+  } catch (err) {
+    err.code = "invalid_caller_profile";
+    throw err;
+  }
   const isTaskWrapper = Boolean(rawProfile && profileInput !== rawProfile);
   const explicitRealtimeLoop =
     typeof options.realtime_loop === "boolean"
@@ -1809,10 +2222,13 @@ export function rankCandidates(profileInput, options = {}) {
   const requirements = profileRequirements(profile, policy);
   const sWeights = subjectiveWeights(profile, kind);
 
-  const unhealthySet = new Set(
-    (options.unhealthyModels || []).map((m) => canonicalModel(m, aliases)).filter(Boolean)
-  );
-  const taskOpts = !rawProfile || isTaskWrapper ? profileInput : null;
+  const unhealthySet = new Set();
+  for (const m of options.unhealthyModels || []) {
+    const key = healthKey(m, models, aliases);
+    if (key) unhealthySet.add(key);
+    if (m) unhealthySet.add(m);
+  }
+  const taskOpts = isTaskWrapper ? profileInput : null;
   const unavailableSet = new Set(options.unavailable || taskOpts?.unavailable || []);
   const continuity =
     options.continuity ||
@@ -1832,23 +2248,6 @@ export function rankCandidates(profileInput, options = {}) {
       : { _normalized: normalizeQuotaSnapshot(options.quotas, nowMs, policy) }
     : null;
 
-  // Build candidate list from user-configured pool or default catalog
-  const candidateModels =
-    Array.isArray(options.candidateModels) && options.candidateModels.length > 0
-      ? options.candidateModels
-      : Object.keys(models).filter((m) => m !== "deepseek-v4.1-flash-free" && !models[m]?.disabled_by_default);
-
-  const candidateCanonicals = new Set();
-  for (const entry of candidateModels) {
-    const rawM = typeof entry === "string" ? entry.split(":")[0] : entry?.model;
-    if (rawM) candidateCanonicals.add(canonicalModel(rawM, aliases));
-  }
-  const dotAvailable = candidateCanonicals.has("dot");
-  const specialistAvailable = Boolean(
-    routeObj.restrict_models &&
-      (routeObj.preferred || []).some((m) => candidateCanonicals.has(canonicalModel(m, aliases)))
-  );
-
   const taskCtx = {
     profile,
     kind,
@@ -1861,8 +2260,6 @@ export function rankCandidates(profileInput, options = {}) {
     needs_gui: profile.needs_gui,
     realtime_loop: Boolean(profile.realtime_loop),
     local_only: Boolean(options.local_only ?? profile.local_only),
-    dot_available: dotAvailable,
-    specialist_available: specialistAvailable,
     demand,
     requirements,
     subjective_weights: sWeights,
@@ -1870,7 +2267,12 @@ export function rankCandidates(profileInput, options = {}) {
     unavailable: unavailableSet,
     launch_failures: options.launchFailures || options.launch_failures || taskOpts?.launch_failures || null,
     pinned_bundle: options.pinnedBundle || options.pinned_bundle || taskOpts?.pinned_bundle || null,
-    constraint_bundle: options.constraintBundle || options.constraint_bundle || taskOpts?.constraint_bundle || null,
+    constraint_bundle:
+      options.constraintBundle ||
+      options.constraint_bundle ||
+      taskOpts?.constraint_bundle ||
+      taskOpts?.constraints?.bundle ||
+      null,
     constraint_model:
       options.constraintModel ||
       options.constraint_model ||
@@ -1901,78 +2303,70 @@ export function rankCandidates(profileInput, options = {}) {
     now: nowMs,
   };
 
-  const rawExpanded = [];
+  // Build candidate list from user-configured pool or default catalog. `disabled_by_default` keeps a model out of the
+  // automatic pool, not away from a user who names it.
+  const pinned = pinnedModelOf(taskCtx);
+  const pinnedKey = pinned ? canonicalModel(splitPinModelAndEffort(String(pinned).trim()).modelPart, aliases, models) : null;
+  const candidateModels =
+    Array.isArray(options.candidateModels) && options.candidateModels.length > 0
+      ? options.candidateModels
+      : Object.keys(models).filter((m) => !models[m]?.disabled_by_default || m === pinnedKey);
+
+  const candidateCanonicals = new Set();
   for (const entry of candidateModels) {
-    if (typeof entry === "string") {
-      const colonIdx = entry.lastIndexOf(":");
-      if (colonIdx > 0) {
-        const suffix = entry.slice(colonIdx + 1).toLowerCase();
-        if (EFFORT_ORDER.includes(suffix)) {
-          rawExpanded.push({ model: entry.slice(0, colonIdx), effort: suffix });
-          continue;
-        }
-      }
-      const { canonical, spec } = resolveModelSpec(entry, models, aliases);
-      const efforts = taskCtx.realtime_loop
-        ? realtimeBareCandidateEfforts(
-            { model: entry },
-            spec,
-            canonical,
-            models,
-            aliases,
-            catalog.dispatchEfforts || DISPATCH_EFFORTS,
-            catalog.effortCurves || EFFORT_CURVES,
-            catalog.effortResponsiveness || EFFORT_RESPONSIVENESS,
-          )
-        : Array.isArray(spec.efforts) && spec.efforts.length > 0
-          ? spec.efforts
-          : ["medium", "high"];
-      for (const eff of efforts) {
-        rawExpanded.push({ model: entry, effort: eff });
-      }
-    } else if (entry && typeof entry === "object" && entry.model) {
-      if (!taskCtx.realtime_loop) {
-        const efforts = Array.isArray(entry.efforts)
-          ? entry.efforts
-          : entry.effort
-            ? [entry.effort]
-            : ["medium", "high"];
-        for (const eff of efforts) {
-          rawExpanded.push({ model: entry.model, effort: eff });
-        }
-        continue;
-      }
-      const { canonical, spec } = resolveModelSpec(entry.model, models, aliases);
-      const isBundleObj = Boolean(entry.id || entry.provider || entry.account || entry.harness || entry.when);
-      const efforts = Array.isArray(entry.efforts)
-        ? entry.efforts.map((e) => String(e).trim().toLowerCase()).filter(Boolean)
-        : entry.effort
-          ? [String(entry.effort).trim().toLowerCase()]
-          : isBundleObj
-            ? [scoringEffort(entry, spec)]
-            : realtimeBareCandidateEfforts(
-                entry,
-                spec,
-                canonical,
-                models,
-                aliases,
-                catalog.dispatchEfforts || DISPATCH_EFFORTS,
-                catalog.effortCurves || EFFORT_CURVES,
-                catalog.effortResponsiveness || EFFORT_RESPONSIVENESS,
-              );
-      for (const eff of efforts) {
-        rawExpanded.push({ ...entry, model: entry.model, effort: eff });
-      }
-    }
+    const rawM = typeof entry === "string" ? entry : entry?.model;
+    if (rawM) candidateCanonicals.add(canonicalModel(rawM, aliases, models));
   }
+  // As `allocator.py`: a route without its text runner is scored without it.
+  taskCtx.dot_available = candidateCanonicals.has("dot") && !new Set(taskCtx.unavailable || []).has("dot_text");
+  taskCtx.specialist_available = Boolean(
+    routeObj.restrict_models &&
+      (routeObj.preferred || []).some((m) => candidateCanonicals.has(canonicalModel(m, aliases, models)))
+  );
+
+  const rawExpanded = candidateModels.flatMap((entry) => expandCandidate(entry, taskCtx, catalog, models, aliases));
+  rawExpanded.push(...namedEffortRows(rawExpanded, taskCtx, catalog, models, aliases));
+  attachDisabledEfforts(rawExpanded, models, aliases);
 
   taskCtx.bundles = options.bundles || rawExpanded;
-  const expanded = taskCtx.realtime_loop ? rawExpanded.filter((c) => bundleApplies(c, taskCtx)) : rawExpanded;
+  const expanded = rawExpanded.filter(
+    (c) => bundleApplies(c, taskCtx) || pinScope(c, canonicalModel(c.model, aliases, models), taskCtx) === "effort",
+  );
 
-  const evaluated = expanded.map((c) => evaluateCandidate(c, taskCtx, catalog));
-  const eligible = evaluated.filter((c) => c.eligible);
+  let evaluated = expanded.map((c) => evaluateCandidate(c, taskCtx, catalog));
+  let eligible = evaluated.filter((c) => c.eligible);
+  // A model named without an effort, too slow at every effort it can run: its fastest one, with a warning.
+  if (
+    eligible.length === 0 &&
+    taskCtx.realtime_loop &&
+    pinned &&
+    !pinnedEffortOf(taskCtx) &&
+    !taskCtx.constraint_bundle &&
+    evaluated.some((c) => c.too_slow)
+  ) {
+    taskCtx.slow_pin_fallback = true;
+    evaluated = expanded.map((c) => evaluateCandidate(c, taskCtx, catalog));
+    eligible = evaluated.filter((c) => c.eligible);
+    const speed = (c) => c.components.responsiveness ?? 0;
+    const fastest = Math.max(0, ...eligible.map(speed));
+    for (const c of eligible) {
+      if (speed(c) < fastest) {
+        c.excluded.push("a faster effort of the named model is available");
+        c.eligible = false;
+      }
+    }
+    eligible = eligible.filter((c) => c.eligible);
+  }
+  applyHarnessOrder(eligible, kind, policy, routes, profile.interaction_style);
   eligible.sort((a, b) => b.score - a.score);
-  const pinnedCand = taskCtx.realtime_loop ? eligible.find((c) => isCandidatePinned(c, c.canonicalModel, taskCtx)) : null;
+  const pinnedCand = eligible.find((c) => isCandidatePinned(c, c.canonicalModel, taskCtx));
+  // Rows their `when` keeps out never compete, but a blocked route still says why.
+  const outOfScope = rawExpanded
+    .filter((c) => !expanded.includes(c))
+    .map((c) => {
+      const row = evaluateCandidate(c, taskCtx, catalog);
+      return { ...row, eligible: false, excluded: [whenFailure(c, taskCtx), ...row.excluded] };
+    });
 
   return {
     task: {
@@ -1986,9 +2380,16 @@ export function rankCandidates(profileInput, options = {}) {
       subjective_weights: sWeights,
       profile,
     },
+    pin: {
+      model: pinned || null,
+      effort: taskCtx.constraint_effort || taskCtx.constraints?.effort || null,
+      bundle: taskCtx.pinned_bundle || taskCtx.constraint_bundle || null,
+    },
     selected: pinnedCand || eligible[0] || null,
     ranking: eligible,
-    allCandidates: evaluated,
+    allCandidates: [...evaluated, ...outOfScope],
+    // Per-account state/reason/last successful reading, so a failing account is visible even when unselected.
+    ...(normalizedQuotas ? { accounts: listQuotaAccounts(normalizedQuotas) } : {}),
   };
 }
 
@@ -2009,31 +2410,389 @@ const PIN_OPTIONS = [
 ];
 
 /**
- * The user's pins among a host's own options, for `selectBestRoute`. Pins only act on `realtime_loop` routing.
+ * The user's pins among a host's own options, for `selectBestRoute`.
  */
 export function pinOptionsOf(options = {}) {
   const pins = {};
   for (const key of PIN_OPTIONS) {
-    if (options[key] !== undefined && options[key] !== null) pins[key] = options[key];
+    if (options?.[key] !== undefined && options?.[key] !== null) pins[key] = options[key];
   }
   return pins;
 }
 
 /**
- * Convenience entry point: takes a raw request or task object + options and returns the winning route decision.
+/**
+ * The pins of several sources, later ones winning field by field: plugin options, then a request's own. Without this a
+ * request's `pinned_model` would lose to a plugin's `constraintModel`, whichever spelling `rankCandidates` reads first.
+ */
+export function mergePinOptions(...sources) {
+  const merged = {};
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+    const c = source.constraints && typeof source.constraints === "object" ? source.constraints : {};
+    const model = source.constraintModel || source.constraint_model || source.pinnedModel || source.pinned_model || c.model;
+    const effort = source.constraintEffort || source.constraint_effort || source.pinnedEffort || source.pinned_effort || c.effort;
+    const bundle = source.pinnedBundle || source.pinned_bundle || source.constraintBundle || source.constraint_bundle || c.bundle;
+    if (model) {
+      merged.constraintModel = model;
+      // A later `model:effort` replaces an earlier effort rather than contradicting it.
+      if (splitPinModelAndEffort(String(model).trim()).effortPart) delete merged.constraintEffort;
+    }
+    if (effort) merged.constraintEffort = effort;
+    if (bundle) merged.pinnedBundle = bundle;
+  }
+  return merged;
+}
+
+/**
+ * Remove a request's pin fields, which name nothing an upstream knows.
+ */
+export function dropPinFields(body) {
+  if (!body || typeof body !== "object") return false;
+  let dropped = false;
+  for (const target of [body, body.task]) {
+    if (!target || typeof target !== "object") continue;
+    for (const key of PIN_OPTIONS) {
+      if (key in target) {
+        delete target[key];
+        dropped = true;
+      }
+    }
+  }
+  return dropped;
+}
+
+/**
+ * Whether these pins fix the effort, so nothing may ratchet it afterwards.
+ */
+export function pinsFixEffort(pins = {}) {
+  if (pins.pinnedBundle || pins.constraintEffort) return true;
+  return Boolean(pins.constraintModel && splitPinModelAndEffort(String(pins.constraintModel).trim()).effortPart);
+}
+
+/**
+ * A configured candidate list: an object entry that names a `model` stays whole, with its provider, effort, efforts and
+ * `when`; an object with no `model` is a model listing (`{ id }`), and a dictionary lists its keys.
+ */
+export function extractModelList(source) {
+  if (!source) return null;
+  if (Array.isArray(source)) {
+    const list = source
+      .map((item) => {
+        if (typeof item === "string") return item.trim();
+        if (item && typeof item === "object") {
+          if (typeof item.model === "string" && item.model.trim()) return { ...item };
+          return String(item.id || item.name || "").trim();
+        }
+        return "";
+      })
+      .filter(Boolean);
+    return list.length > 0 ? list : null;
+  }
+  if (typeof source === "object") {
+    const keys = Object.keys(source)
+      .map((k) => k.trim())
+      .filter(Boolean);
+    return keys.length > 0 ? keys : null;
+  }
+  return null;
+}
+
+/**
+ * The candidate list a plugin's options or a request's context configure, or `null`.
+ */
+export function explicitCandidateModels(options = {}, ctx = {}) {
+  return (
+    extractModelList(options.candidateModels) ||
+    extractModelList(options.allowedModels) ||
+    extractModelList(options.availableModels) ||
+    extractModelList(options.models) ||
+    extractModelList(ctx?.models) ||
+    extractModelList(ctx?.availableModels) ||
+    extractModelList(options.modelMap)
+  );
+}
+
+/**
+ * The model a candidate entry names, without a `:effort` suffix.
+ */
+export function candidateModelName(entry) {
+  return splitEffortSuffix(typeof entry === "string" ? entry : entry?.model || "").name;
+}
+
+/**
+ * The rows a candidate list holds for this model name, with what each may run at (contract R2). Used on a route decided
+ * elsewhere: a session held from an earlier turn, or a route another provider's list has to take.
+ */
+function rowsNaming(list, model, catalog, pins) {
+  const models = catalog?.models || DEFAULT_MODELS;
+  const aliases = catalog?.aliases || MODEL_ALIASES;
+  // A bare entry of the pinned model runs at the effort the pin names, table or not: as a new route expands it.
+  const pinned = { constraint_model: pins?.constraintModel, constraint_effort: pins?.constraintEffort };
+  const rows = (list || []).flatMap((entry) => expandCandidate(entry, pinned, catalog || {}, models, aliases));
+  attachDisabledEfforts(rows, models, aliases);
+  return rows.filter((row) => row.model === model);
+}
+
+/** R2 for one row: dispatch table, within the row's own list, without what the user disabled. A row's own effort is what it runs. */
+function rowOffers(row, effort, catalog) {
+  if (row.disabled && !row.disabled_by_default) return false;
+  if (row.disabled_efforts?.includes(effort)) return false;
+  if (row.effort_fixed) return row.effort === effort;
+  const models = catalog?.models || DEFAULT_MODELS;
+  const aliases = catalog?.aliases || MODEL_ALIASES;
+  const allowed = dispatchAllowedEfforts(
+    row,
+    row.provider || row.account,
+    row.harness || bundleHarness(row, row.account, row.id),
+    canonicalModel(row.model, aliases, models),
+    models,
+    aliases,
+    catalog?.dispatchEfforts || DISPATCH_EFFORTS,
+    catalog?.effortCurves || EFFORT_CURVES,
+    catalog?.effortResponsiveness || EFFORT_RESPONSIVENESS,
+  );
+  if (row.offered_efforts && !row.offered_efforts.includes(effort)) return false;
+  if (effort === row.effort && !row.not_dispatchable) return true;
+  return !allowed || allowed.includes(effort);
+}
+
+/**
+ * Whether a candidate list offers this model at this effort (contract R2). A pool entry that fixes its effort (`m:high`,
+ * `m-high`) or lists them (`{ model, efforts }`) offers those only. `{ model, effort }` is one bundle at its scoring effort and
+ * may step within the dispatch table, as `allocator.py` has `own_efforts` None for it.
+ */
+export function candidateOffers(list, model, effort, catalog, pins) {
+  return rowsNaming(list, model, catalog, pins).some((row) => rowOffers(row, effort, catalog));
+}
+
+const DEPTH_FOR_DIFFICULTY = { routine: 1, hard: 2, coupled: 3, frontier: 4 };
+
+/**
+ * The effort a held session can stay on: its own while the pool offers it, else the highest one below that the pool does and
+ * a new route for this `profile` would take (contract R2). `null` when there is none. A name the pool does not hold verbatim is
+ * not this check's to judge: membership was settled by `gone`.
+ */
+export function heldEffortOn(list, model, effort, catalog, { pins, profile, realtimeLoop } = {}) {
+  const rows = rowsNaming(list, model, catalog, pins);
+  if (rows.length === 0) return effort;
+  const offers = (candidate) => rows.some((row) => rowOffers(row, candidate, catalog));
+  if (offers(effort)) return effort;
+  const fullProfile = profile ? (profile.reasoning_depth ? profile : sessionProfile({ profile, realtimeLoop })) : null;
+  const ranked = fullProfile ? rankCandidates(fullProfile, { candidateModels: list, catalog, realtime_loop: Boolean(realtimeLoop) }).ranking : null;
+  const passes = (candidate) => !ranked || ranked.some((row) => row.model === model && row.effort === candidate);
+  const rank = EFFORT_ORDER.indexOf(effort);
+  for (let i = rank - 1; i >= 0; i--) {
+    if (offers(EFFORT_ORDER[i]) && passes(EFFORT_ORDER[i])) return EFFORT_ORDER[i];
+  }
+  return null;
+}
+
+/** What a session was routed on: a hold and a route after it judge by this, not by what a short follow-up looks like. */
+export function sessionProfile(sessionState) {
+  if (sessionState?.profile?.reasoning_depth) return sessionState.profile;
+  const workKind = sessionState?.profile?.work_kind || sessionState?.workKind || "general_implementation";
+  const difficulty = sessionState?.profile?.difficulty || sessionState?.difficulty || "routine";
+  const kind = workKind in KIND_TRAITS ? workKind : "general_implementation";
+  const [code, context, risk, cost, style] = KIND_TRAITS[kind];
+  const depth = DEPTH_FOR_DIFFICULTY[difficulty] || 1;
+  return {
+    work_kind: kind,
+    reasoning_depth: depth,
+    code_complexity: code,
+    context_scale: Math.max(context, depth >= 3 ? 2 : 1),
+    divergence: kind === "complex_build_plan" || kind === "direction_reasoning" || style === "advisory" ? 3 : 1,
+    hallucination_risk: risk,
+    error_cost: cost,
+    needs_visual: kind === "computer_use" || kind === "visual_analysis",
+    needs_gui: kind === "computer_use",
+    local_only: kind === "computer_use",
+    realtime_loop: Boolean(sessionState?.realtimeLoop),
+    interaction_style: style,
+    expected_hours: 0.5,
+    hours_confidence: "medium",
+    urgency: "unknown",
+    multi_task: false,
+    task_count: "1",
+  };
+}
+
+/** Says why a session that lost its effort was routed again. */
+export function effortGoneWarning(cont) {
+  return `${cont.previousModel}: effort ${cont.previousEffort} is no longer offered; routed again`;
+}
+
+/** The pool's row a held session runs on (`modeId`, `draws`, ...), at its held effort: one that offers it, on an account that does. */
+export function heldBundle(list, model, effort, catalog, pins) {
+  const rows = rowsNaming(list, model, catalog, pins);
+  const offering = rows.filter((r) => rowOffers(r, effort, catalog));
+  const row = offering.find((r) => r.effort === effort) || offering[0] || rows.find((r) => r.effort === effort) || rows[0];
+  return row ? { ...row, effort } : null;
+}
+
+/** Whether a candidate list unchecks this effort on any of its models: a turn that knows no model yet cannot rely on it. */
+export function effortUnchecked(list, effort, catalog) {
+  const models = catalog?.models || DEFAULT_MODELS;
+  const aliases = catalog?.aliases || MODEL_ALIASES;
+  const rows = (list || []).flatMap((entry) => expandCandidate(entry, {}, catalog || {}, models, aliases));
+  attachDisabledEfforts(rows, models, aliases);
+  return rows.some((row) => row.disabled_efforts?.includes(effort));
+}
+
+/**
+ * The model a hold sends the request to, as the candidate list names it: the store keeps models canonical (`claude-opus-5-5`), and
+ * the bare name may resolve to another provider in Magpie than the `upstream/claude-opus-5-5` the session was routed to. The name
+ * routed last (`target`) when it is still a candidate, else the one candidate of that row, else the model itself. A family
+ * name never stands in for its flagship, or the other way round.
+ */
+export function heldTarget(model, sessionState, candidateModels, catalog) {
+  if (!Array.isArray(candidateModels) || candidateModels.length === 0) return model;
+  const names = candidateModels.map(candidateModelName);
+  if (sessionState?.target && names.includes(sessionState.target)) return sessionState.target;
+  const models = catalog?.models || DEFAULT_MODELS;
+  const aliases = catalog?.aliases || MODEL_ALIASES;
+  const key = healthKey(sessionState?.target || model, models, aliases);
+  return names.find((m) => healthKey(m, models, aliases) === key) || model;
+}
+
+/** One line of why a row is out, naming the row. */
+function excludedLine(candidate, why) {
+  return why.startsWith(`${candidate.model}`) ? why : `${candidate.model}@${candidate.effort}: ${why}`;
+}
+
+/** Pool names routed on no row of their own: without this, a retired name just stops being picked. */
+function poolNameWarnings(options, models, aliases) {
+  if (!Array.isArray(options.candidateModels)) return [];
+  const names = options.candidateModels.map((entry) => (typeof entry === "string" ? entry : entry?.model)).filter(Boolean);
+  return [...new Set(names.map((name) => catalogNameWarning(name, models, aliases)).filter(Boolean))];
+}
+
+const MAX_LOGGED_NAME_WARNINGS = 1024;
+const MAX_LOG_LINE = 16384;
+const loggedNameWarnings = new Set();
+
+/** Whether this name warning is new here. The least recently seen goes first: under `routeAllModels` a client can write names. */
+function firstNameWarning(warning) {
+  const seen = loggedNameWarnings.delete(warning);
+  loggedNameWarnings.add(warning);
+  if (loggedNameWarnings.size > MAX_LOGGED_NAME_WARNINGS) loggedNameWarnings.delete(loggedNameWarnings.values().next().value);
+  return !seen;
+}
+
+/** One line whatever the model names in it hold: a reason can quote a row's name as the request wrote it. */
+function logLine(warning) {
+  return escapeControls(warning)
+    .replace(/\S{129,}/g, (long) => `${long.slice(0, 128)}...`)
+    .slice(0, MAX_LOG_LINE);
+}
+
+/** Log a route's warnings. A name warning is about the configuration, not this request: once per runtime. */
+export function logRouteWarnings(warnings) {
+  for (const warning of warnings || []) {
+    if (warning.startsWith(CATALOG_NAME_WARNING) && !firstNameWarning(warning)) continue;
+    console.warn(`agentcompass: ${logLine(warning)}`);
+  }
+}
+
+/**
+ * Why a pinned choice came back blocked (`warnings` of the decision).
+ */
+function blockedWarnings(result) {
+  const label = pinLabel(result.pin);
+  if (!label) {
+    const reasons = [...new Set(result.allCandidates.flatMap((c) => c.excluded.map((reason) => excludedLine(c, reason))))];
+    return [`no candidate is available${reasons.length > 0 ? `: ${reasons.join("; ")}` : ""}`];
+  }
+  const matching = rowsThePinNames(result);
+  if (matching.length === 0) return [`${label} is not among the candidates`];
+  const reasons = [...new Set(matching.flatMap((c) => c.excluded))];
+  return [`${label} is unavailable: ${reasons.join("; ")}`];
+}
+
+/** How a blocked route refers to what was pinned, or `null` with no pin. */
+function pinLabel(pin) {
+  if (pin?.bundle) return `pinned bundle ${safeName(pin.bundle)}`;
+  if (pin?.model) return `pinned model ${safeName(pin.model)}`;
+  return pin?.effort ? `pinned effort ${safeName(pin.effort)}` : null;
+}
+
+function rowsThePinNames(result) {
+  const notTheOne = (why) => why === "explicit model constraint" || why === "explicit bundle constraint";
+  return result.allCandidates.filter((c) => !c.excluded.some(notTheOne));
+}
+
+/** What a client hears when a route is refused: what it pinned, a code, one sentence. The pool and its quotas stay in the local log. */
+function refusalOf(result) {
+  const { pin } = result;
+  const label = pinLabel(pin);
+  if (!label) return "no_route: no candidate can serve this request";
+  const matching = rowsThePinNames(result);
+  if (matching.length === 0) return `pin_not_in_pool: ${label} is not among the candidates`;
+  // Health belongs to a model: a row left out by its effort says nothing here, and an effort pin has no model to blame.
+  const down = matching.some((c) => c.excluded.includes(MARKED_UNHEALTHY) && !c.excluded.includes(EFFORT_NOT_PINNED));
+  if (pin.bundle && down) return `model_unhealthy: the model of ${label} is marked unhealthy`;
+  if (!pin.bundle && pin.model && down) return `model_unhealthy: ${label} is marked unhealthy`;
+  return `pin_unavailable: ${label} cannot serve this request`;
+}
+
+/** The refusal of a block with no decision behind it: its code and one sentence. */
+export function blockedRefusal(blocked) {
+  return blocked.refusal || `${blocked.error || "no_route"}: this request could not be routed`;
+}
+
+const PIN_REFUSALS = ["pin_not_in_pool", "model_unhealthy", "pin_unavailable"];
+
+/** A refusal for any holder of a gateway key: whether a pinned name is in the pool or healthy is the operator's to know. */
+export function refusalSummary(blocked) {
+  const refusal = blockedRefusal(blocked);
+  const colon = refusal.indexOf(": ");
+  const code = refusal.slice(0, colon);
+  return PIN_REFUSALS.includes(code)
+    ? { code: "pin_unavailable", message: "the pinned model cannot serve this request" }
+    : { code, message: refusal.slice(colon + 2) };
+}
+
+/**
+ * Convenience entry point: takes a task profile (or a `{ profile }` wrapper) + options and returns the winning route decision.
  */
 export function selectBestRoute(taskOrProfile, options = {}) {
-  const result = rankCandidates(taskOrProfile, options);
+  let result;
+  try {
+    result = rankCandidates(taskOrProfile, options);
+  } catch (err) {
+    if (err?.code !== "invalid_caller_profile") throw err;
+    return {
+      ok: false,
+      blocked: true,
+      error: "invalid_caller_profile",
+      refusal: "invalid_caller_profile: the task profile is invalid",
+      targetModel: null,
+      canonicalModel: null,
+      targetEffort: "high",
+      modelWithEffort: null,
+      warnings: [String(err.message)],
+      excluded: [],
+      topCandidates: [],
+    };
+  }
+  if (!result.task) return unroutedDecision("no_task_profile");
   const top = result.selected;
-  const warnings = top?.components?.realtime_slow_pin_warning
-    ? [top.components.realtime_slow_pin_warning]
-    : [];
+  const models = options.catalog?.models || DEFAULT_MODELS;
+  const aliases = options.catalog?.aliases || MODEL_ALIASES;
+  const warnings = [
+    ...(top ? (top.components?.realtime_slow_pin_warning ? [top.components.realtime_slow_pin_warning] : []) : blockedWarnings(result)),
+    ...poolNameWarnings(options, models, aliases),
+    ...new Set((result.accounts || []).flatMap((a) => a.warnings)),
+  ];
   return {
     ok: Boolean(top),
+    blocked: !top,
+    refusal: top ? null : refusalOf(result),
     targetModel: top ? top.model : null,
     canonicalModel: top ? top.canonicalModel : null,
     targetEffort: top ? top.effort : "high",
     modelWithEffort: top ? `${top.model}:${top.effort}` : null,
+    bundle: top ? top.bundle : null,
     selectedAccount: top?.quota?.account || null,
     quota: top?.quota || null,
     workKind: result.task.kind,
@@ -2043,6 +2802,8 @@ export function selectBestRoute(taskOrProfile, options = {}) {
     responsiveness: top?.components?.responsiveness ?? null,
     responsivenessSource: top?.components?.responsiveness_source ?? null,
     warnings,
+    excluded: result.allCandidates.flatMap((c) => c.excluded.map((reason) => excludedLine(c, reason))),
+    ...(result.accounts ? { accounts: result.accounts } : {}),
     score: top ? top.score : null,
     components: top ? top.components : null,
     profile: result.task.profile,

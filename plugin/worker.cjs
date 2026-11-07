@@ -279,7 +279,7 @@ async function builtin(input, catalog, dir, root, conf = {}, extra = {}) {
   writeDiag(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
   if (result.status === 'blocked') {
     if (result.decision?.reason === 'no_runnable_model') throw Error(result.error);
-    if (result.decision?.reason === 'no_model_meets_floor' || result.profile_source === 'unavailable') return result;
+    if (result.decision?.reason === 'no_model_meets_floor' || result.decision?.reason === 'account_unavailable' || result.profile_source === 'unavailable') return result;
     throw Error(result.error);
   }
   return result;

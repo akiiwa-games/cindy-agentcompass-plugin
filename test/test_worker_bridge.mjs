@@ -103,6 +103,7 @@ const makeProfile = (overrides = {}) => ({
   task_count: '1',
   self: false,
   wants_fast: false,
+  read_only_review: false,
   reason: 'classified by built-in classifier',
   ...overrides,
 });
@@ -155,7 +156,7 @@ test('zero configuration: the built-in engine routes over the catalog Cindy pass
   assert.equal(reply.result.engine, 'builtin');
   assert.equal(reply.result.router.decision.profile_source, 'classifier');
   assert.equal(reply.result.router.decision.classifier_model, QUICK_MODEL);
-  assert.deepEqual(reply.result.router.decision.classifier_calibration_cases, {included: 47, total: 47});
+  assert.deepEqual(reply.result.router.decision.classifier_calibration_cases, {included: 53, total: 53});
   assert.equal(reply.result.router.decision.realtime_loop, true);
   // A second session rolling the identical task text hits score-cache.json directly without a second classification step.
   const [cachedReply] = rpc(p, [{
@@ -642,8 +643,8 @@ test('R3: a task of more than 15,000 characters is classified whole; one that ca
   const [routed] = rpc(p, [prepare(p, long, 2, CATALOG, classified({}, ask.result.classifier.attemptId))]);
   assert.equal(routed.result.router.status, 'native');
   const cases = routed.result.router.decision.classifier_calibration_cases;
-  assert.equal(cases.total, 47);
-  assert.ok(cases.included > 0 && cases.included < 47, JSON.stringify(cases));
+  assert.equal(cases.total, 53);
+  assert.ok(cases.included > 0 && cases.included < 53, JSON.stringify(cases));
 
   const [tooLong] = rpc(p, [prepare(p, 'x'.repeat(32768), 3, CATALOG, {classifyViaHost: true})]);
   assert.equal(tooLong.result.state, 'blocked');
@@ -659,8 +660,8 @@ test('R3: a task of more than 15,000 characters is classified whole; one that ca
 const askAgain = (p, task, context = ctx(p.root)) => rpc(p, [{id: 1, method: 'prepare', params: {task, catalog: CATALOG, classifyViaHost: true, context}}])[0];
 const stateOf = reply => [reply.result.state, reply.result.router?.decision?.reason ?? null];
 
-test('A1: a model answer without self or wants_fast starts nothing and cools only that task', () => {
-  for (const field of ['self', 'wants_fast']) {
+test('A1: a model answer without self, wants_fast or read_only_review starts nothing and cools only that task', () => {
+  for (const field of ['self', 'wants_fast', 'read_only_review']) {
     const p = plugin(codex, 0, 'none');
     const {[field]: _, ...without} = makeProfile();
     const reply = classifyWith(p, 'What is a mutex?', id => ({classification: {ok: true, attemptId: id, model: QUICK_MODEL, rawOutput: JSON.stringify(without)}}));
@@ -824,4 +825,25 @@ test('M1, fifth review: through the worker, an unquoted count splits with its co
     assert.deepEqual(stateOf(reply), ['blocked', 'invalid_classifier_output'], `${multi} ${count}`);
     assert.match(reply.result.router.error, /task_count/);
   }
+});
+
+test('Step 2 & 3 regression: read_only_review with nonzero code_complexity and inactive Codex plan return structured blocked receipts through worker.cjs', () => {
+  const p = plugin(codex, 0, 'none');
+  const badReview = classifyWith(p, 'Review PR #42.', id => classified({read_only_review: true, code_complexity: 1}, id));
+  assert.deepEqual(stateOf(badReview), ['blocked', 'invalid_classifier_output']);
+  assert.match(badReview.result.router.error, /must be 0 when read_only_review is true/);
+
+  const day = path.join(p.home, '.codex', 'sessions', '2026', '11', '07');
+  fs.mkdirSync(day, {recursive: true});
+  const sessionFile = path.join(day, 'rollout-1.jsonl');
+  const now = new Date();
+  fs.writeFileSync(
+    sessionFile,
+    `${JSON.stringify({timestamp: now.toISOString(), payload: {rate_limits: {plan_type: 'Free × 2', secondary: {used_percent: 10, resets_at: Math.floor((now.getTime() + 86400000) / 1000)}}}})}\n`,
+  );
+  const [blockedAccount] = rpc(p, [prepare(p, 'Fix util.py', 1, CATALOG, withProfile())]);
+  assert.deepEqual(stateOf(blockedAccount), ['blocked', 'account_unavailable'], JSON.stringify(blockedAccount));
+  assert.equal(blockedAccount.result.router.decision.accounts[0].state, 'plan_inactive');
+  assert.equal(blockedAccount.result.router.decision.accounts[0].dispatchable, false);
+  assert.equal(receipts(p).length, 0, 'a blocked account check writes no prepared receipt');
 });

@@ -117,7 +117,8 @@ const scorer = http.createServer((req, res) => {
     const user = (body.messages || []).find(m => m.role === 'user')?.content || '';
     scorerRequests.push({path: req.url, model: body.model, chars: user.length});
     const profile = {work_kind: 'general_implementation', reasoning_depth: 2, code_complexity: 1, context_scale: 2, divergence: 1,
-      hallucination_risk: 2, error_cost: 2, needs_visual: false, needs_gui: false, local_only: false, expected_hours: 0.5,
+      hallucination_risk: 2, error_cost: 2, needs_visual: false, needs_gui: false, local_only: false, realtime_loop: false,
+      wants_fast: false, read_only_review: false, expected_hours: 0.5,
       hours_confidence: 'medium', urgency: 'normal', interaction_style: 'engineering', multi_task: false, task_count: '1',
       reason: 'fixture classification of a small bounded edit'};
     const marker = (/FIXTURE-PROFILE: (\w+)/.exec(user) || [])[1];
@@ -730,7 +731,15 @@ try {
         JSON.stringify(h.create.route) === JSON.stringify({agentKind: 'cc', providerId: 'claude', model: 'claude-opus-5-5', effort, fastMode: false}) &&
         h.create.permissionMode === 'bypassPermissions' && lifecycle(h), {create: h.create, replies: JSON.stringify(h.r).slice(0, 600)});
     }
-    const pi = await harness('pi', 'explore', market, {...zcEnv, CLAUDE_CONFIG_DIR: noClaude});
+    const claudeCreds = path.join(baseEnv.CLAUDE_CONFIG_DIR, '.credentials.json');
+    const savedClaudeCreds = path.join(noClaude, '.credentials.json');
+    fs.renameSync(claudeCreds, savedClaudeCreds);
+    let pi;
+    try {
+      pi = await harness('pi', 'explore', market, {...zcEnv, CLAUDE_CONFIG_DIR: noClaude});
+    } finally {
+      fs.renameSync(savedClaudeCreds, claudeCreds);
+    }
     const pb = pi.receipt.bundle || {};
     check('pi: the router chose the Pi harness on the codex account with its launch model; the fixed full-tool worker is full-access',
       pb.provider === 'pi' && pb.harness === 'pi' && pb.account === 'codex' && pb.launch_model === 'openai-codex/gpt-6.1-sol' && pb.modeId === 'full-access',

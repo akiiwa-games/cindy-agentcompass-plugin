@@ -1,19 +1,14 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/profiler-core.js at 34448f9e9b82a2506fbda7481371e55526757c14 (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/profiler-core.js at 6834bc0dbf054e6f08b28a483e3dffdd9d04f662 (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate with scripts/vendor_engine.mjs rather than edit.
 /**
- * Multi-Protocol Request Extractor & Deterministic 10-Field Task Profiler
+ * Multi-Protocol Request Extractor & Task Profile Schema
  *
- * Ported from AgentCompass (`skills/agent-compass/scripts/allocator.py` and `route_judge.py`).
+ * A task profile comes from the classifier (`src/scorer-live.js`) or from the caller, never from the task's text:
+ * without one the router does not route (`unroutedDecision`).
  * Pure ES2022 module (zero Node-only imports) so it runs identically in both Bun and `moejs`.
  */
 
-import {
-  CANONICAL_ROUTES,
-  DEPTH_BY_DIFFICULTY,
-  HARD_BY_DEFAULT,
-  INTERACTION_STYLES,
-  KIND_TRAITS,
-} from "./catalog.mjs";
+import { INTERACTION_STYLES, KIND_TRAITS } from "./catalog.mjs";
 import { analyzeTurnState } from "./continuity.mjs";
 
 export const PROFILE_INTEGERS = {
@@ -147,151 +142,28 @@ export const TASK_PROFILE_SCHEMA = {
   ],
 };
 
-export const DIVERGENT_WORDS = [
-  "brainstorm",
-  "creative",
-  "novel",
-  "innovat",
-  "propose",
-  "formulate",
-  "scheme",
-  "roadmap",
-  "hypothesis",
-  "ideat",
-  "divergent",
-  "制定方案",
-  "设计方案",
-  "新方案",
-  "创造性",
-  "发散",
-  "创新",
-  "新方向",
-  "提出假设",
-  "路线图",
-  "架构创新",
-];
+export const UNROUTED_NOTICE = "未路由：分类不可用";
 
-export const READONLY_REVIEW_PHRASES = [
-  "(read-only)",
-  "read-only review",
-  "read-only investigation",
-  "read-only code",
-  "read-only audit",
-  "read-only release",
-  "read-only diff",
-  "read-only diagnostic",
-  "read-only inspection",
-  "independent review",
-  "independent code and",
-  "independent audit",
-  "no repo code edits",
-  "write no application code",
-  "write no production code",
-  "do not edit repo",
-  "do not modify repo",
-  "do not change repo",
-  "只读审阅",
-  "只读代码审查",
-  "只读审查",
-  "只读排查",
-  "独立代码审查",
-  "独立审查",
-  "不修改仓库代码",
-];
-
-export const GUI_WORDS = [
-  "click",
-  "screenshot",
-  " gui",
-  "desktop app",
-  "mouse",
-  "点击",
-  "截图",
-  "桌面",
-  "鼠标",
-];
-
-export const COMPUTER_USE_PHRASES = [
-  "click the",
-  "click save",
-  "use the mouse",
-  "with the mouse",
-  "mouse and keyboard",
-  "keyboard and mouse",
-  "operate the browser",
-  "operate the desktop",
-  "点击",
-  "用鼠标",
-  "键鼠",
-  "鼠标键盘",
-  "操作浏览器",
-  "操作桌面",
-];
-
-export const CODE_FILE_RE =
-  /[\w-]\.(?:py|pyw|ts|tsx|js|jsx|mjs|cjs|go|rs|java|kt|cs|cpp|cc|c|h|hpp|rb|php|swift|lua|sh|ps1)(?!\w)(?!\.\w)/i;
-
-const OBJECTIVE_LOCAL_RUNTIME_RE =
-  /\b(?:ssh|ssh-agent|vps|localhost|127\.0\.0\.1|pytest|unittest|sqlite|daemon|worktree|adb|emulator|intranet|webhook|credentials?)\b/i;
-
-const LOCAL_MACHINE_RE =
-  /(?:[A-Za-z]:[\\/]|~\/|\\\\)|\b(?:working tree|git checkout|local repo|this repo|local daemon|local git)\b/i;
-
-const MULTI_TASK_MARK_RE =
-  /(?:^|\n)\s*(?:#{1,4}\s*)?(?:task|deliverable|part|module|workstream|任务|交付物|模块|工作线)\s*(?:[1-9a-d]|[一二三四五六])\s*[.:：\-—]/gi;
-
-export const MAX_PROFILE_CHARS = 4000;
-
-export function capProfileText(text, maxChars = MAX_PROFILE_CHARS) {
-  if (!text || typeof text !== "string") return "";
-  if (text.length <= maxChars) return text;
-  const head = Math.floor(maxChars * 0.625);
-  const tail = maxChars - head;
-  return `${text.slice(0, head)}\n${text.slice(-tail)}`;
+/**
+ * What a request is sent on with when it has no task profile: no routing decision, the client's model as it asked.
+ */
+export function unroutedDecision(reason) {
+  return { ok: false, routed: false, notice: UNROUTED_NOTICE, reason, targetModel: null, targetEffort: null };
 }
 
-const TRIVIAL_MECHANICAL_EDIT_RE =
-  /\b(?:rename\s+(?:the\s+|a\s+|all\s+)?(?:variable|var|function|fn|method|field|property|prop|constant|const|parameter|param|arg|argument|symbol|identifier|ident|class|type|struct|column|key)s?\b|\brename\s+[`'"\w.-]{1,64}\s+to\s+[`'"\w.-]{1,64}\b|(?:fix|correct)\s+(?:a\s+|the\s+)?(?:typo|spelling|whitespace|indentation)\b|(?:remove|delete)\s+unused\s+imports?\b|(?:bump|update)\s+(?:the\s+)?version\s+(?:number|string|in)\b)/i;
-
-export function multiTaskMarks(objective) {
-  return capProfileText(objective).match(MULTI_TASK_MARK_RE) || [];
+/**
+ * A profile the caller passed, checked like the classifier's: `{ profile }`, `{ error }`, or `null` when there is none.
+ * Image parts in the request are a structured signal, so they hold whatever the profile says.
+ */
+export function resolveCallerProfile(raw, hasVisualInput = false) {
+  if (raw === undefined || raw === null) return null;
+  try {
+    const profile = validateProfile(raw);
+    return { profile: hasVisualInput ? { ...profile, needs_visual: true } : profile };
+  } catch (err) {
+    return { error: `invalid_caller_profile: ${String(err?.message || err).slice(0, 120)}` };
+  }
 }
-
-const COUPLED_SIGNALS = [
-  "cross-module",
-  "multi-module",
-  "refactor",
-  "architecture",
-  "concurrency",
-  "deadlock",
-  "race condition",
-  "distributed",
-  "migration",
-  "subsystem",
-  "orchestrat",
-  "跨模块",
-  "多模块",
-  "架构重构",
-  "并发",
-  "死锁",
-  "竞态",
-  "迁移方案",
-  "子系统",
-];
-
-const FRONTIER_SIGNALS = [
-  "formal proof",
-  "mathematical proof",
-  "mathematical critique",
-  "theorem",
-  "optimal-stopping",
-  "frontier reasoning",
-  "prove or refute",
-  "形式化证明",
-  "数学证明",
-  "数学推导",
-  "定理推导",
-];
 
 function extractSystemSummary(rawSystem, maxPreviewChars = 2000) {
   if (!rawSystem) return { preview: "", totalChars: 0 };
@@ -345,11 +217,10 @@ export function extractRequestFacts(body, ctx = {}) {
       hasVisual: false,
       hasCurrentTurnVisual: false,
       hasComputerUse: false,
+      demandsFrontierEscalation: false,
       isToolFollowup: false,
       within: false,
       turn: 0,
-      isShortFollowup: false,
-      isCompacting: false,
       toolCount: 0,
       scannedChars: 0,
       extractedTurns: 0,
@@ -375,8 +246,6 @@ export function extractRequestFacts(body, ctx = {}) {
   const effectiveObjective = turnState.lastUserText || "";
   const effectivePrevUser = turnState.previousUserText || "";
   const hasVisual = Boolean(turnState.hasAnyVisual);
-  const lowerObj = ` ${String(effectiveObjective || "").toLowerCase()} `;
-  const hasComputerUse = !CODE_FILE_RE.test(lowerObj) && COMPUTER_USE_PHRASES.some((w) => lowerObj.includes(w));
   const totalChars = sysChars + (turnState.totalChars || 0);
   const hasExplicitEstimatedTokens =
     Number.isFinite(body?.estimated_input_tokens) ||
@@ -397,6 +266,7 @@ export function extractRequestFacts(body, ctx = {}) {
         : body && typeof body.realtime_loop === "boolean"
           ? body.realtime_loop
           : undefined;
+  const callerProfile = [ctx?.state?.profile, ctx?.profile, body.profile].find((p) => p && typeof p === "object");
 
   return {
     model,
@@ -410,13 +280,13 @@ export function extractRequestFacts(body, ctx = {}) {
     hasVisualInput: hasVisual,
     hasVisual,
     hasCurrentTurnVisual: Boolean(turnState.hasCurrentTurnVisual),
-    hasComputerUse,
+    hasComputerUse: Boolean(needsObj?.gui === true || callerProfile?.needs_gui === true),
+    demandsFrontierEscalation: Number(callerProfile?.reasoning_depth) >= 3,
+    ...(callerProfile ? { callerProfile } : {}),
     ...(explicitRealtimeLoop !== undefined ? { realtime_loop: explicitRealtimeLoop } : {}),
     isToolFollowup: Boolean(turnState.isToolFollowup || turnState.within),
     within: Boolean(turnState.within || turnState.isToolFollowup),
     turn: turnState.turn,
-    isShortFollowup: Boolean(turnState.isShortFollowup),
-    isCompacting: Boolean(turnState.isCompacting),
     toolCount: tools.length,
     scannedChars: turnState.scannedChars || 0,
     extractedTurns: turnState.extractedTurns || 0,
@@ -430,316 +300,41 @@ export function extractRequestFacts(body, ctx = {}) {
   };
 }
 
-export function inferKindFromObjective(objective) {
-  const capped = capProfileText(objective);
-  const text = ` ${capped.toLowerCase()} `;
-  const namesCode = CODE_FILE_RE.test(text);
-  if (!namesCode && COMPUTER_USE_PHRASES.some((w) => text.includes(w))) {
-    return "computer_use";
-  }
-  if (
-    TRIVIAL_MECHANICAL_EDIT_RE.test(capped) &&
-    !COUPLED_SIGNALS.some((w) => text.includes(w)) &&
-    !FRONTIER_SIGNALS.some((w) => text.includes(w)) &&
-    !DIVERGENT_WORDS.some((w) => text.includes(w)) &&
-    !READONLY_REVIEW_PHRASES.some((w) => text.includes(w))
-  ) {
-    return "bounded_bulk_work";
-  }
-  const rules = [
-    [
-      "direction_reasoning",
-      [
-        "formal proof",
-        "mathematical critique",
-        "optimal-stopping",
-        "frontier reasoning",
-        "critique the architecture",
-        "prove or refute",
-        "brainstorm",
-        "first-principles",
-        "first principles",
-        "unconventional",
-        "creative architecture",
-        "creative product",
-        "creative direction",
-        "novel product",
-        "形式化证明",
-        "数学推导",
-        "架构批判",
-        "战略权衡",
-        "头脑风暴",
-        "脑暴",
-        "第一性原理",
-      ],
-    ],
-    [
-      "complex_build_plan",
-      [
-        "migration plan",
-        "migration spec",
-        "implementation specification",
-        "multi-phase",
-        "system architecture plan",
-        "new scheme",
-        "plan a new scheme",
-        "规划一个新方案",
-        "迁移方案",
-        "迁移计划",
-        "分阶段设计",
-        "系统建设方案",
-      ],
-    ],
-    [
-      "bounded_bulk_work",
-      [
-        "bulk ",
-        "batch rename",
-        "mechanical refactor",
-        "uniform rule",
-        "codemod",
-        "批量",
-        "机械替换",
-        "统一替换",
-      ],
-    ],
-    [
-      "web_research",
-      [
-        "web survey",
-        "web research",
-        "vendor survey",
-        "public documentation",
-        "search the web",
-        "search public",
-        "open-web",
-        "literature survey",
-        "网页调研",
-        "文献综述",
-        "厂商调研",
-        "搜索官网",
-        "公开文档",
-      ],
-    ],
-    [
-      "text_in_text_out",
-      [
-        "translate",
-        "translation of",
-        "draft a document",
-        "draft documentation",
-        "rewrite the text",
-        "summarize the text",
-        "翻译",
-        "撰写文档",
-        "文案",
-        "润色",
-        "摘要",
-      ],
-    ],
-    [
-      "visual_analysis",
-      [
-        "visual diff",
-        "design diff",
-        "inspect screenshot",
-        "compare screenshot",
-        "compare screenshots",
-        "inspect the image",
-        "inspect the screenshot",
-        "inspect the supplied screenshot",
-        "compare the screenshots",
-        "layout misalignment",
-        "screenshot review",
-        "ui screenshot",
-        "design inspection",
-        "视觉对比",
-        "截图对比",
-        "检查截图",
-        "设计稿检查",
-        "看图分析",
-      ],
-    ],
-    [
-      "debug_review",
-      [
-        "bug",
-        "fix ",
-        "deadlock",
-        "race condition",
-        "regression",
-        "review the diff",
-        "code review",
-        "diff review",
-        "read-only review",
-        "(read-only)",
-        "independent review",
-        "invariant audit",
-        "security audit",
-        "memory leak",
-        "diagnos",
-        "rendering glitch",
-        "intermittent failure",
-        "报错",
-        "排查",
-        "修复",
-        "死锁",
-        "代码审查",
-        "只读审阅",
-        "只读审查",
-        "安全审计",
-        "内存泄漏",
-      ],
-    ],
-    [
-      "frontend_implementation",
-      [
-        "frontend",
-        "react",
-        "css",
-        "tailwind",
-        "mockup",
-        "desktop ui",
-        "game ui",
-        "界面",
-        "前端",
-        "样式",
-        "组件",
-      ],
-    ],
-    [
-      "research_packet",
-      [
-        "backtest",
-        "quantitative experiment",
-        "benchmark suite",
-        "statistical evaluation",
-        "research packet",
-        "simulation",
-        "data analysis pipeline",
-        "回测",
-        "定量实验",
-        "评测",
-        "仿真",
-        "统计检验",
-      ],
-    ],
-    [
-      "tool_execution",
-      [
-        "runbook",
-        "checklist",
-        "deploy",
-        "release commands",
-        "health check",
-        "run the test suite",
-        "巡检",
-        "发版",
-        "运行测试",
-        "操作手册",
-        "发布流程",
-      ],
-    ],
-    [
-      "exploration_analysis",
-      [
-        "explore",
-        "investigate",
-        "trace",
-        "map the codebase",
-        "architecture exploration",
-        "调研",
-        "分析",
-        "梳理",
-        "探索仓库",
-        "架构追踪",
-      ],
-    ],
-    [
-      "self_contained_code",
-      [
-        "standalone",
-        "self-contained",
-        "algorithm",
-        "isolated module",
-        "独立算法",
-        "独立脚本",
-        "自包含",
-        "实现算法",
-      ],
-    ],
-  ];
-
-  const debugKeywords = rules.find(([k]) => k === "debug_review")?.[1] || [];
-  const debugging = debugKeywords.some((word) => text.includes(word));
-  for (const [kind, keywords] of rules) {
-    if (kind === "text_in_text_out" && (namesCode || debugging)) {
-      continue;
-    }
-    if (keywords.some((w) => text.includes(w))) {
-      return kind;
-    }
-  }
-  return objective && String(objective).trim() ? "general_implementation" : "other_or_mixed";
+/**
+ * A profile from a request's structured signals alone (image parts, explicit `needs.gui`, `realtime_loop`), used only
+ * when the turn has no text (`!facts.objective`) and the user set a candidate pool or a pin (contract R2, R3).
+ */
+export function noTextProfile(facts = {}) {
+  const gui = Boolean(facts.hasComputerUse);
+  return {
+    work_kind: gui ? "computer_use" : "other_or_mixed",
+    reasoning_depth: 1,
+    code_complexity: gui ? 0 : 1,
+    context_scale: 1,
+    divergence: 1,
+    hallucination_risk: gui ? 2 : 1,
+    error_cost: gui ? 2 : 1,
+    needs_visual: Boolean(facts.hasVisualInput || gui),
+    needs_gui: gui,
+    local_only: gui,
+    realtime_loop: Boolean(facts.realtime_loop),
+    interaction_style: "engineering",
+    expected_hours: 0.4,
+    hours_confidence: "medium",
+    urgency: "unknown",
+    multi_task: false,
+    task_count: "1",
+  };
 }
 
-export function isReadonlyReviewTask(objective, profile = null) {
-  if (profile && profile.needs_gui) return false;
-  const text = ` ${capProfileText(objective).toLowerCase()} ${String(profile?.reason || "").toLowerCase()} `;
-  if (READONLY_REVIEW_PHRASES.some((p) => text.includes(p))) return true;
-  return /\bread-only\b[^.]{0,40}\b(?:review|audit|investig|diagnos|inspect|check)\b/i.test(text);
-}
+const TASK_COUNTS = ["1", "2", "3", ">3"];
 
-export function inferDivergence(objective, kind = null, style = null) {
-  if (kind === "computer_use") return 1;
-  if (kind === "complex_build_plan" || kind === "direction_reasoning" || style === "advisory") {
-    return 3;
+function taskCountBucket(value) {
+  if (TASK_COUNTS.includes(value)) return value;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 1) {
+    return TASK_COUNTS[Math.min(value, 4) - 1];
   }
-  const text = ` ${capProfileText(objective).toLowerCase()} `;
-  if (DIVERGENT_WORDS.some((w) => text.includes(w))) {
-    return 3;
-  }
-  if (
-    [
-      "intermittent",
-      "unknown cause",
-      "hypothes",
-      "race condition",
-      "deadlock",
-      "root cause",
-      "root-cause",
-      "memory leak",
-      "security audit",
-      "invariant audit",
-      "偶发",
-      "未知根因",
-      "死锁",
-      "竞态",
-      "根因",
-      "安全审计",
-      "内存泄漏",
-    ].some((w) => text.includes(w))
-  ) {
-    return 2;
-  }
-  return 1;
-}
-
-export function inferReasoningDepth(objective, kind, explicitDifficulty = null) {
-  if (explicitDifficulty && DEPTH_BY_DIFFICULTY[explicitDifficulty]) {
-    return DEPTH_BY_DIFFICULTY[explicitDifficulty];
-  }
-  const text = ` ${capProfileText(objective).toLowerCase()} `;
-  if (FRONTIER_SIGNALS.some((w) => text.includes(w))) {
-    return 4;
-  }
-  if (COUPLED_SIGNALS.some((w) => text.includes(w)) || kind === "complex_build_plan" || kind === "direction_reasoning") {
-    return 3;
-  }
-  if (HARD_BY_DEFAULT.includes(kind) || kind === "self_contained_code") {
-    return 2;
-  }
-  return 1;
+  throw new Error(`task.profile.task_count must be one of ${TASK_COUNTS.join(", ")} or a positive whole number`);
 }
 
 export function validateProfile(raw) {
@@ -794,97 +389,15 @@ export function validateProfile(raw) {
   if (typeof raw.reason === "string" && raw.reason.trim()) {
     profile.reason = raw.reason.trim().slice(0, 300);
   }
-  profile.multi_task = Boolean(raw.multi_task);
-  profile.task_count = ["1", "2", "3", ">3"].includes(raw.task_count) ? raw.task_count : "1";
+  if (typeof raw.multi_task !== "boolean") {
+    throw new Error("task.profile.multi_task must be true or false");
+  }
+  profile.multi_task = raw.multi_task;
+  profile.task_count = taskCountBucket(raw.task_count);
+  if (profile.multi_task !== (profile.task_count !== "1")) {
+    throw new Error(
+      `task.profile.multi_task ${profile.multi_task} contradicts task.profile.task_count ${profile.task_count}`
+    );
+  }
   return profile;
 }
-
-/**
- * Deterministic 10-field task profile (the `< 1 ms` offline twin of the System-One scorer).
- * Ported directly from `allocator.py:infer_task_profile`.
- */
-export function inferTaskProfile(task = {}, routes = CANONICAL_ROUTES) {
-  const rawObjective = typeof task.objective === "string" ? task.objective : "";
-  const objective = capProfileText(rawObjective);
-  const lowerObj = ` ${objective.toLowerCase()} `;
-  let kind = task.work_kind && routes[task.work_kind] ? task.work_kind : inferKindFromObjective(objective);
-  const needs = task.needs && typeof task.needs === "object" ? task.needs : {};
-  const implies = routes[kind]?.implies || {};
-  const depth = inferReasoningDepth(objective, kind, task.difficulty);
-
-  let [code, context, risk, cost, style] = KIND_TRAITS[kind] || KIND_TRAITS.other_or_mixed;
-  if (isReadonlyReviewTask(objective)) {
-    code = 0;
-    if (kind === "general_implementation") {
-      kind = "debug_review";
-    }
-  }
-  const gui =
-    kind === "computer_use" ||
-    Boolean(needs.gui) ||
-    (kind === "other_or_mixed" && GUI_WORDS.some((w) => lowerObj.includes(w)));
-  const realtimeLoop =
-    typeof needs.realtime_loop === "boolean"
-      ? needs.realtime_loop
-      : typeof task.realtime_loop === "boolean"
-        ? task.realtime_loop
-        : false;
-
-  if (depth >= 3) {
-    context = Math.max(context, 2);
-    if (style === "engineering" && code > 0) {
-      code = Math.max(code, 2);
-      if (lowerObj.includes("concurrency") || lowerObj.includes("protocol") || objective.includes("并发")) {
-        code = 3;
-      }
-    }
-  }
-  if (needs.critical) {
-    cost = 3;
-  }
-  const divergence = inferDivergence(objective, kind, style);
-  const evidence = `${objective} ${capProfileText(task.context || "", 1000)} ${String(task.cwd || "").slice(0, 500)}`;
-  const localHit = OBJECTIVE_LOCAL_RUNTIME_RE.test(evidence) || LOCAL_MACHINE_RE.test(evidence);
-  const localOnly =
-    needs.local_only !== undefined ? Boolean(needs.local_only) : Boolean(localHit || implies.local_only);
-
-  const expectedHours =
-    Number.isFinite(Number(task.expected_hours ?? task.hours)) && Number(task.expected_hours ?? task.hours) > 0
-      ? Number(task.expected_hours ?? task.hours)
-      : depth === 1
-        ? 0.4
-        : depth === 2
-          ? 1.0
-          : depth === 3
-            ? 2.0
-            : 3.5;
-
-  const marks = multiTaskMarks(objective);
-  const multiTask =
-    task.multi_task !== undefined ? Boolean(task.multi_task) : marks.length >= 2;
-  const taskCount =
-    task.task_count ||
-    (!multiTask ? "1" : marks.length === 2 ? "2" : marks.length === 3 ? "3" : ">3");
-
-  return validateProfile({
-    work_kind: kind,
-    reasoning_depth: depth,
-    code_complexity: code,
-    context_scale: context,
-    divergence,
-    hallucination_risk: risk,
-    error_cost: cost,
-    needs_visual: Boolean(needs.visual || task.hasVisualInput || implies.visual || gui),
-    needs_gui: gui,
-    local_only: localOnly,
-    realtime_loop: realtimeLoop,
-    interaction_style: style,
-    expected_hours: expectedHours,
-    hours_confidence: "medium",
-    urgency: "unknown",
-    multi_task: multiTask,
-    task_count: taskCount,
-  });
-}
-
-export const profileTask = inferTaskProfile;

@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/continuity.js at 34448f9e9b82a2506fbda7481371e55526757c14 (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/continuity.js at 6834bc0dbf054e6f08b28a483e3dffdd9d04f662 (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate with scripts/vendor_engine.mjs rather than edit.
 /**
  * Session Affinity, Turn-Loop Lock, Cache-Temperature Hold & Monotonic Effort Ratchet.
@@ -17,6 +17,8 @@ import {
   DEFAULT_SCORING_POLICY,
   MODEL_ALIASES,
   canonicalModel,
+  healthKey,
+  resolveModel,
   resolveModelSpec,
 } from "./catalog.mjs";
 import { isModelQuotaExhausted } from "./quota.mjs";
@@ -233,48 +235,6 @@ export function stripAgentNoise(rawText) {
  */
 export function userSaidFromText(rawText) {
   return stripAgentNoise(rawText);
-}
-
-/**
- * Detect whether a user turn is a short conversational follow-up / continuation nudge
- * (e.g. "继续", "好的", "按这个改", "continue", "ok go ahead", "lgtm", "do it").
- */
-export function isShortFollowupMessage(text) {
-  if (!text || typeof text !== "string" || text.length > MAX_NOISE_STRIP_CHARS) return false;
-  const cleaned = stripAgentNoise(text).trim();
-  if (!cleaned || cleaned.length > 96) return false;
-  if (cleaned.includes("```") || cleaned.includes("\n\n")) return false;
-
-  const compact = cleaned
-    .toLowerCase()
-    .replace(/^[.!?,;:，。！？、；：'"`~()[\]{}\s-]+|[.!?,;:，。！？、；：'"`~()[\]{}\s-]+$/g, "")
-    .trim();
-  if (!compact) return false;
-
-  const exactPatterns = /^(继续|接着|接着写|接着做|往下|往下写|好的|好|行|可以|没问题|对|是的|没错|照做|按这个来|按这个改|按你说的做|就这么改|开始吧|动手吧|改吧|修吧|试一下|再试一次|确认|同意|再来|ok|okay|k|yes|yep|yeah|sure|continue|go on|keep going|proceed|do it|go ahead|sounds good|looks good|lgtm|ship it|fix it|apply it|try again|next|please continue|yes please|go for it|run it)$/i;
-  if (exactPatterns.test(compact)) return true;
-
-  const prefixPatterns = /^(继续|好的|好，|行，|可以，|没问题，|按这个|照这个|就按|ok[, ]|okay[, ]|yes[, ]|sure[, ]|please continue|go ahead and|continue with)/i;
-  const wordCount = compact.split(/\s+/).filter(Boolean).length;
-  if (prefixPatterns.test(compact) && compact.length <= 48 && wordCount <= 10) {
-    return true;
-  }
-  return false;
-}
-
-/**
- * Detect whether the request is a context compaction / summarization turn (`/compact`).
- */
-export function isCompactionText(text) {
-  if (!text || typeof text !== "string") return false;
-  const sample = text.length > MAX_USER_TURN_CHARS ? capTextSlice(text, MAX_USER_TURN_CHARS) : text;
-  return (
-    /(?:^|\s)\/compact(?:\s|$)/i.test(sample) ||
-    /<compact_instruction\b/i.test(sample) ||
-    /Provide a detailed summary of the conversation so far/i.test(sample) ||
-    /Summarize the conversation so far/i.test(sample) ||
-    /Your task is to create a detailed summary of the conversation/i.test(sample)
-  );
 }
 
 function extractPartText(part) {
@@ -568,7 +528,7 @@ export function firstWords(body) {
 
 /**
  * The latest genuine user turns of the conversation the client resent, newest first:
- * `{ index, stamp, short }`. `index` is the item's position, so the body cut after it is the
+ * `{ index, stamp }`. `index` is the item's position, so the body cut after it is the
  * request that turn began with; `stamp` names the turn (`<index>:<hash>`) and stays the same as
  * the conversation grows, since history is only appended to. Scans back from the end and stops
  * after `max` turns, so a long conversation costs no more than its last few turns.
@@ -576,8 +536,7 @@ export function firstWords(body) {
 export function recentUserTurns(body, max = 6) {
   const items = getNormalizedItems(body);
   const turns = [];
-  let i = items.length - 1;
-  for (; i >= 0 && turns.length < max; i--) {
+  for (let i = items.length - 1; i >= 0 && turns.length < max; i--) {
     const item = items[i];
     if (!item || typeof item !== "object" || String(item.role || "").toLowerCase() !== "user") {
       continue;
@@ -587,12 +546,7 @@ export function recentUserTurns(body, max = 6) {
     turns.push({
       index: i,
       stamp: `${i}:${sha256Hex(info.userSaid.slice(0, MAX_FIRST_WORDS_HASH_CHARS)).slice(0, 16)}`,
-      short: isShortFollowupMessage(info.userSaid),
     });
-  }
-  // the conversation's opening turn is never a follow-up of anything
-  if (i < 0 && turns.length > 0) {
-    turns[turns.length - 1].short = false;
   }
   return turns;
 }
@@ -778,13 +732,6 @@ export function analyzeTurnState(body = {}, ctx = {}) {
     within = true;
   }
 
-  const isShortFollowup =
-    !within &&
-    Boolean(lastUserText) &&
-    (turn > 1 || Boolean(previousAssistantText) || Boolean(body?.previous_response_id)) &&
-    isShortFollowupMessage(lastUserText);
-
-  const isCompacting = isCompactionText(lastUserText);
   const fw = firstUserSaid
     ? sha256Hex(firstUserSaid.slice(0, MAX_FIRST_WORDS_HASH_CHARS)).slice(0, 24)
     : "";
@@ -801,8 +748,6 @@ export function analyzeTurnState(body = {}, ctx = {}) {
     previousAssistantText,
     hasAnyVisual,
     hasCurrentTurnVisual,
-    isShortFollowup,
-    isCompacting,
     firstWords: fw,
     sessionKey: computeSessionKey(body, ctx, fw),
   };
@@ -893,7 +838,6 @@ export function keepsEffort(
   const prevTokens = Number(sessionState.tokens || 0);
   const prevReqTokens = Number(sessionState.requestTokens || 0);
   const compacted =
-    Boolean(options?.isCompacting) ||
     (options?.hasExplicitEstimatedTokens &&
       prevTokens >= CACHE_WORTH_TOKENS &&
       currentTokens > 0 &&
@@ -906,8 +850,7 @@ export function keepsEffort(
     ageMs <= ttlMs &&
     (sessionState.cached === true ||
       prevTokens >= CACHE_WORTH_TOKENS ||
-      currentTokens >= CACHE_WORTH_TOKENS ||
-      options?.isShortFollowup === true);
+      currentTokens >= CACHE_WORTH_TOKENS);
 
   if (!isWarm) {
     return wantedEffort || "medium";
@@ -928,33 +871,11 @@ export function effectiveRealtimeLoop(facts = {}, sessionState = null, options =
 }
 
 /**
- * Detect whether a new user message clearly outgrows a lightweight tier model (`tier < 3.5`,
- * e.g. `claude-haiku-5-5`, `gpt-6-luna`, `gemini-3.8-flash-high`, `deepseek-v4.1-flash-free`, `grok-4.7`)
- * by requesting deep multi-module architecture, cross-runtime refactoring, or frontier debugging.
- */
-export function detectTierEscalationOutgrowth(text, currentSpec) {
-  if (!text || !currentSpec || (currentSpec.tier ?? 3.5) >= 3.5) {
-    return false;
-  }
-  const cleaned = stripAgentNoise(text);
-  if (!cleaned || isShortFollowupMessage(cleaned)) {
-    return false;
-  }
-  const hasHighRiskSignals =
-    /architecture|trade-?off|consensus|distributed|cap theorem|zero-downtime|migration|root cause|deadlock|race condition|memory corruption|heisenbug|formal verification|security audit|cryptograph|multi-runtime|cross-module|重构|架构|死锁|并发|根因|全链路|跨模块|分布式/i.test(
-      cleaned
-    );
-  const isLongComplexPrompt = cleaned.length >= 260 && (cleaned.match(/\n/g) || []).length >= 3;
-  return hasHighRiskSignals || isLongComplexPrompt;
-}
-
-/**
  * Evaluate whether the router should HOLD the current session's Provider/Model (`shouldHold: true`)
  * or execute intent routing to select/switch a Provider/Model (`shouldHold: false`).
  *
  * Hold reasons (`shouldHold: true`):
  *   - `"turn"`: mid-turn tool call / tool result loop (`within === true`)
- *   - `"followup"`: short user continuation nudge while session is active
  *   - `"cache"`: KV cache is worth holding (`>= 1024` tokens or `cached: true`) and still warm
  *   - `"session"`: `affinityMode === "session"` and model is healthy & within limits
  *   - `"realtime_loop"`: the session was routed as `realtime_loop` and is still within its cache TTL
@@ -972,6 +893,24 @@ export function detectTierEscalationOutgrowth(text, currentSpec) {
  *   - `"turn_mode"`: `affinityMode === "turn"` and request is a new user turn (`within === false`)
  *   - `"off"`: `affinityMode === "off"`
  */
+/**
+ * Whether the user now names something other than what the session runs (contract R3). A hold would hide that.
+ */
+function pinOverridesSession(sessionState, pins, options) {
+  if (!pins) return false;
+  if (pins.pinnedBundle && pins.pinnedBundle !== sessionState.pinnedBundle) return true;
+  let effort = pins.constraintEffort ? String(pins.constraintEffort).trim().toLowerCase() : null;
+  if (pins.constraintModel) {
+    const models = options.models || DEFAULT_MODELS;
+    const aliases = options.aliases || MODEL_ALIASES;
+    // Each row is its own model (contract R1): a session on a family row is not on the flagship it folds to, nor the other way round.
+    const running = healthKey(sessionState.target || sessionState.model, models, aliases);
+    if (healthKey(String(pins.constraintModel), models, aliases) !== running) return true;
+    effort = effort || resolveModel(String(pins.constraintModel), models, aliases).effort;
+  }
+  return Boolean(effort && effort !== sessionState.effort);
+}
+
 export function evaluateProviderContinuation(facts = {}, sessionState = null, options = {}) {
   const now = Number.isFinite(options.now) ? Number(options.now) : Date.now();
   const affinityMode = String(options.affinityMode || "cache").toLowerCase();
@@ -994,7 +933,11 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
     };
   }
 
-  const currentModel = canonicalModel(sessionState.model, options.aliases || MODEL_ALIASES);
+  const currentModel = canonicalModel(
+    sessionState.model,
+    options.aliases || MODEL_ALIASES,
+    options.models || DEFAULT_MODELS
+  );
   const { spec } = resolveModelSpec(
     currentModel,
     options.models || DEFAULT_MODELS,
@@ -1015,6 +958,17 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
     };
   }
 
+  if (pinOverridesSession(sessionState, options.pins, options)) {
+    return {
+      shouldHold: false,
+      why: "user_pin_override",
+      previousModel: currentModel,
+      previousEffort: sessionState.effort,
+      within: Boolean(facts.within),
+      turn: facts.turn || 1,
+    };
+  }
+
   // 2. Check candidate pool membership (if candidate list is explicitly provided)
   const candidateList = Array.isArray(options.availableModels)
     ? options.availableModels
@@ -1022,10 +976,11 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
       ? facts.candidateModels
       : [];
   if (candidateList.length > 0) {
-    const canonicalCandidates = candidateList.map((m) =>
-      canonicalModel(typeof m === "string" ? m : m?.model || m?.id || "", options.aliases)
+    const running = healthKey(sessionState.target || sessionState.model, options.models, options.aliases);
+    const candidateKeys = candidateList.map((m) =>
+      healthKey(typeof m === "string" ? m : m?.model || m?.id || "", options.models, options.aliases)
     );
-    if (!canonicalCandidates.includes(currentModel)) {
+    if (!candidateKeys.includes(running)) {
       return {
         shouldHold: false,
         why: "gone",
@@ -1038,21 +993,24 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
   }
 
   // 3. Check provider/model health
+  const runningName = sessionState.target || sessionState.model;
+  const failedModel = healthKey(runningName, options.models, options.aliases);
   const unhealthySet = new Set(
-    (options.unhealthyModels || []).map((m) => canonicalModel(m, options.aliases))
+    (options.unhealthyModels || []).map((m) => healthKey(m, options.models, options.aliases))
   );
   const storeHealthy =
     options.store && typeof options.store.isModelHealthy === "function"
-      ? options.store.isModelHealthy(currentModel, now)
+      ? options.store.isModelHealthy(runningName, now)
       : true;
   if (
     sessionState.healthy === false ||
     !storeHealthy ||
-    unhealthySet.has(currentModel)
+    unhealthySet.has(failedModel)
   ) {
     return {
       shouldHold: false,
       why: "provider_unhealthy",
+      failedModel,
       previousModel: currentModel,
       previousEffort: sessionState.effort,
       within: Boolean(facts.within),
@@ -1205,13 +1163,14 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
 
   const realtimeSession = sessionState.realtimeLoop === true && reqRealtimeLoopFact !== false;
 
-  // Tier escalation outgrowth: lightweight model (`tier < 3.5`) hit with a frontier/coupled task.
-  // The text heuristic stays out of a realtime session, which stays on its fast model.
+  // Tier escalation outgrowth: lightweight model (`tier < 3.5`) hit with a frontier/coupled task, as the caller's
+  // profile says. A realtime session stays on its fast model.
   if (
     affinityMode !== "strict" &&
     affinityMode !== "session" &&
-    (facts.demandsFrontierEscalation ||
-      (!realtimeSession && detectTierEscalationOutgrowth(facts.turnText || facts.lastUserText || "", spec)))
+    facts.demandsFrontierEscalation &&
+    !realtimeSession &&
+    (spec?.tier ?? 3.5) < 3.5
   ) {
     return {
       shouldHold: false,
@@ -1224,7 +1183,7 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
     };
   }
 
-  // Check context compaction (`/compact` or request token drop > 50% from warm state)
+  // Check context compaction (request token drop > 50% from warm state)
   const prevReqTokens = Number(sessionState.requestTokens || 0);
   const tokenDroppedByHalf =
     (facts.hasExplicitEstimatedTokens &&
@@ -1237,7 +1196,7 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
   if (
     affinityMode !== "strict" &&
     affinityMode !== "session" &&
-    (facts.isCompacting || tokenDroppedByHalf)
+    tokenDroppedByHalf
   ) {
     return {
       shouldHold: false,
@@ -1268,21 +1227,6 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
     ...options,
   });
   const withinCacheTtl = ageMs <= ttlMs;
-
-  // Short follow-up nudge ("继续", "ok go ahead", "lgtm") while session is still within TTL
-  if (facts.isShortFollowup && withinCacheTtl) {
-    return {
-      shouldHold: true,
-      why: "followup",
-      model: currentModel,
-      effort: sessionState.effort || "high",
-      provider: sessionState.provider || "",
-      previousModel: currentModel,
-      previousEffort: sessionState.effort || "high",
-      within: false,
-      turn: facts.turn || sessionState.turn || 1,
-    };
-  }
 
   // Warm KV cache hold (`tokens >= 1024` or `cached === true` within TTL)
   const cacheWorthHolding =
@@ -1418,7 +1362,6 @@ export class SessionContinuityStore {
     const prevReqTokens = Number(existing?.requestTokens || 0);
 
     const dropped =
-      Boolean(facts.isCompacting) ||
       (facts.hasExplicitEstimatedTokens &&
         prevTokens >= CACHE_WORTH_TOKENS &&
         estTokens > 0 &&
@@ -1466,6 +1409,9 @@ export class SessionContinuityStore {
         lastWhy: decision.why || "first",
         lastHeld: Boolean(decision.held),
         realtimeLoop: decision.realtimeLoop ?? existing?.realtimeLoop ?? false,
+        // What a later provider route of a held turn profiles with, and which pin the session is on.
+        profile: decision.profile ?? existing?.profile ?? null,
+        pinnedBundle: decision.pinnedBundle ?? existing?.pinnedBundle ?? null,
       },
       now
     );
@@ -1489,11 +1435,12 @@ export class SessionContinuityStore {
     const targetModel = canonicalModel(
       ctx?.model || existing?.model || reply?.model || ""
     );
+    const ranModel = healthKey(ctx?.model || existing?.target || existing?.model || reply?.model || "");
 
     if (isError) {
-      if (targetModel) {
+      if (ranModel) {
         this.markModelUnhealthy(
-          targetModel,
+          ranModel,
           ctx?.error || reply?.error?.message || `http_${status || "error"}`,
           now
         );
@@ -1540,8 +1487,8 @@ export class SessionContinuityStore {
     );
     const totalContext = inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens;
 
-    if (targetModel) {
-      this.markModelHealthy(targetModel);
+    if (ranModel) {
+      this.markModelHealthy(ranModel);
     }
 
     if (!key) return null;
@@ -1576,22 +1523,23 @@ export class SessionContinuityStore {
       row.conversation_id ||
       this.lastActiveSessionKey;
     const targetModel = canonicalModel(row.model || row.request_model || "");
+    const ranModel = healthKey(row.model || row.request_model || "");
     const isRejected =
       row.rejected === true ||
       Boolean(row.error) ||
       (Number(row.status) >= 400 && Number(row.status) < 600);
 
     if (isRejected) {
-      if (targetModel) {
+      if (ranModel) {
         this.markModelUnhealthy(
-          targetModel,
+          ranModel,
           row.error || row.reject_reason || `status_${row.status || "rejected"}`,
           now
         );
       }
       if (key && this.sessions.has(key)) {
         const existing = this.sessions.get(key);
-        if (!targetModel || existing.model === targetModel) {
+        if (!ranModel || healthKey(existing.target || existing.model) === ranModel) {
           this.set(key, { ...existing, healthy: false }, now);
         }
       }
@@ -1631,34 +1579,34 @@ export class SessionContinuityStore {
   }
 
   markModelUnhealthy(model, reason = "unhealthy", now = Date.now(), cooldownMs = UNHEALTHY_COOLDOWN_MS) {
-    const canonical = canonicalModel(model);
-    if (!canonical) return;
-    this.modelHealth.set(canonical, {
+    const key = healthKey(model);
+    if (!key) return;
+    this.modelHealth.set(key, {
       healthy: false,
       reason: String(reason || "unhealthy"),
       failedAt: now,
       until: now + cooldownMs,
     });
     for (const [k, state] of this.sessions.entries()) {
-      if (state.model === canonical) {
+      if (healthKey(state.target || state.model) === key) {
         this.sessions.set(k, { ...state, healthy: false });
       }
     }
   }
 
   markModelHealthy(model) {
-    const canonical = canonicalModel(model);
-    if (!canonical) return;
-    this.modelHealth.delete(canonical);
+    const key = healthKey(model);
+    if (!key) return;
+    this.modelHealth.delete(key);
   }
 
   isModelHealthy(model, now = Date.now()) {
-    const canonical = canonicalModel(model);
-    if (!canonical) return true;
-    const entry = this.modelHealth.get(canonical);
+    const key = healthKey(model);
+    if (!key) return true;
+    const entry = this.modelHealth.get(key);
     if (!entry) return true;
     if (entry.until && now > entry.until) {
-      this.modelHealth.delete(canonical);
+      this.modelHealth.delete(key);
       return true;
     }
     return entry.healthy !== false;

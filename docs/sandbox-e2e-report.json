@@ -686,7 +686,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-07T08:17:23.331Z",
+   "started_at": "2026-11-07T19:52:05.245Z",
    "operations": [
     {
      "name": "isolation",
@@ -715,7 +715,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 126 passed, 0 failed",
+       "name": "node --test: 129 passed, 0 failed",
        "ok": true
       },
       {
@@ -1125,7 +1125,7 @@
      "intent": "codex for an edit, Pi for read-and-report exploration, Claude (cc) for a review; each an exact catalog row with bypassPermissions, through to cleanup",
      "checks": [
       {
-       "name": "codex: the built-in engine chose codex (gpt-6.1-sol/low) with launcher mode full-access",
+       "name": "codex: the built-in engine chose codex (gpt-6-luna/high) with launcher mode full-access",
        "ok": true
       },
       {
@@ -1330,11 +1330,11 @@
     "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:13554/v1"
+    "scorer": "http://127.0.0.1:6289/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 126,
+     "pass": 129,
      "fail": 0
     },
     "python": {
@@ -1356,7 +1356,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-07T08:19:11.757Z",
+   "finished_at": "2026-11-07T19:53:05.520Z",
    "summary": {
     "operations": 28,
     "checks": 116,
