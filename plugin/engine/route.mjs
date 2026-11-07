@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {rankCandidates} from './allocator.mjs';
+import {isCandidatePinned, rankCandidates} from './allocator.mjs';
 import {PROFILE_INTEGERS, validateProfile} from './profiler.mjs';
 import {INTERACTION_STYLES, KIND_TRAITS, resolveModelSpec} from './catalog.mjs';
 
@@ -326,7 +326,8 @@ function isFastRequested(profile) {
 
 // ---- classifier prompt, model selection, validation & cache --------------------------------------------------------
 const canonicalOf = model => resolveModelSpec(model).canonical;
-// No route in AgentCompass, whose accounts have no such model; catalog.mjs keeps it off by default too. Cindy listing it does not turn it on.
+// No route in AgentCompass, whose accounts have no such model; catalog.mjs keeps it off by default too. Cindy listing it does not turn it on;
+// the user naming it does, as a bundle for it would run in AgentCompass when constrained to it.
 const NOT_ROUTED_MODELS = new Set(['gpt-5.3-codex-spark']);
 
 function normalizeTaskEvidence(input) {
@@ -777,11 +778,22 @@ export function routeTask(task, catalog, {
   config = null,
   cacheFile = null,
   useCache = true,
+  constraintModel = null,
+  pinnedModel = null,
+  constraintEffort = null,
 } = {}) {
   const explicitProfile = callerProfile ?? (task && typeof task === 'object' ? task.profile : null);
 
+  // A model or effort the caller named. The ranking holds a live loop to it; AgentCompass holds any task to it, so the routes below do too.
+  const pinModel = constraintModel || pinnedModel || null;
+  const pinEffort = constraintEffort ? String(constraintEffort).trim().toLowerCase() : null;
+  const pinned = pinModel || pinEffort ? {model: pinModel, effort: pinEffort} : null;
+  const pinnedInfo = pinned ? {pinned} : {};
+  const namesModel = (model, effort) => isCandidatePinned({model, effort}, canonicalOf(model), {constraintModel: pinModel});
+  const offeredEfforts = row => (row.efforts?.length ? row.efforts : [row.route.effort]);
+
   const listed = (catalog?.models || []).filter(row => HARNESS[row?.route?.agentKind] && row.route.providerId && row.route.model);
-  const isRouted = row => !NOT_ROUTED_MODELS.has(canonicalOf(row.route.model));
+  const isRouted = row => !NOT_ROUTED_MODELS.has(canonicalOf(row.route.model)) || offeredEfforts(row).some(effort => namesModel(row.route.model, effort));
   const runnable = listed.filter(isRouted);
   const notRouted = listed.filter(row => !isRouted(row)).map(row => row.route.model);
   const notRoutedInfo = notRouted.length ? {not_routed: notRouted} : {};
@@ -937,25 +949,28 @@ export function routeTask(task, catalog, {
     (codex.providerId ? providerId === codex.providerId : codexProviders.size === 1);
   const usage = row => matchesCodex(row.route.providerId) && codex.status !== 'unknown' ? codex : null;
 
-  const pool = new Map();
+  // The allocator takes the name Cindy lists and resolves it itself: routing folds some names into a newer model, while their speed data is their own.
+  // One connection is one account to it, with the efforts this row offers as its dispatch table, so a live loop steps down within the row.
+  const dispatchEfforts = {};
+  const candidateModels = [];
   for (const row of rows) {
-    const canonical = canonicalOf(row.route.model);
-    const spec = resolveModelSpec(canonical).spec;
-    const offered = (row.efforts?.length ? row.efforts : [row.route.effort]).filter(Boolean);
+    const harness = HARNESS[row.route.agentKind];
+    const spec = resolveModelSpec(row.route.model).spec;
+    const offered = offeredEfforts(row).filter(Boolean);
     const fallbackEffort = (spec.efforts || []).includes('high') ? 'high' : (spec.efforts || [])[0] || 'medium';
-    row._canonical = canonical;
+    row._canonical = canonicalOf(row.route.model);
     row._emptyEffort = !offered.length;
     row._efforts = offered.length ? offered : [fallbackEffort];
-    const entry = pool.get(canonical) || new Set();
-    row._efforts.forEach(e => entry.add(e));
-    pool.set(canonical, entry);
+    row._account = `${harness}/${row.route.providerId}`;
+    (dispatchEfforts[row._account] ||= {})[row.route.model] = row._efforts;
+    for (const effort of row._efforts) {
+      candidateModels.push({id: `${row._account}/${row.route.model}@${effort}`, account: row._account, harness, model: row.route.model, effort});
+    }
   }
-  const ranked = rankCandidates(profile, {candidateModels: [...pool].map(([model, efforts]) => ({model, efforts: [...efforts]}))});
-  const scores = new Map();
-  for (const r of ranked.ranking) {
-    scores.set(`${r.model}:${r.effort}`, r);
-    scores.set(`${r.canonicalModel}:${r.effort}`, r);
-  }
+  const ranked = rankCandidates(profile, {candidateModels, catalog: {dispatchEfforts}, constraintModel: pinModel, constraintEffort: pinEffort});
+  const scores = new Map(ranked.ranking.map(r => [r.id, r]));
+  // A candidate keeps its id on a live loop only; on any other task the id is model:effort, the same on every connection.
+  const scoreOf = (row, effort) => scores.get(profile.realtime_loop ? `${row._account}/${row.route.model}@${effort}` : `${row.route.model}:${effort}`);
   const kind = ranked.task.kind;
   const wantsFast = isFastRequested(profile);
 
@@ -963,9 +978,9 @@ export function routeTask(task, catalog, {
   for (const row of rows) {
     const harness = HARNESS[row.route.agentKind];
     const q = usage(row);
-    for (const effort of row._efforts) {
-      const scored = scores.get(`${row._canonical}:${effort}`);
-      if (!scored) continue;
+    for (const offeredEffort of row._efforts) {
+      const scored = scoreOf(row, offeredEffort);
+      if (!scored || (pinModel && !namesModel(row.route.model, scored.effort)) || (pinEffort && scored.effort !== pinEffort)) continue;
       let score = scored.score;
       const notes = [];
       if (q?.status === 'exhausted') {notes.push(`quota ${q.used_percent}% used`); score -= 1;}
@@ -975,12 +990,18 @@ export function routeTask(task, catalog, {
       const spec = resolveModelSpec(row._canonical).spec;
       const fast = wantsFast && harness === 'codex' && Boolean(row.supportsFastMode) && Boolean(spec.fast_capable) &&
         (q ? q.used_percent < 60 : false);
-      const launchEffort = row._emptyEffort ? (row.route.effort ?? '') : effort;
+      const launchEffort = row._emptyEffort ? (row.route.effort ?? '') : scored.effort;
       candidates.push({row, harness, effort: launchEffort, fast, score: Math.round(score * 10000) / 10000, components: scored.components, notes});
     }
   }
   candidates.sort((a, b) => b.score - a.score);
   const best = candidates[0];
+  // Why a candidate is out. Outside a live loop the ranking leaves a named model or effort to the loop above.
+  const exclusionsOf = c => [
+    ...c.excluded,
+    ...(!profile.realtime_loop && pinModel && !namesModel(c.model, c.effort) ? ['explicit model constraint'] : []),
+    ...(!profile.realtime_loop && pinEffort && c.effort !== pinEffort ? ['explicit effort constraint'] : []),
+  ].map(reason => `${c.model}@${c.effort}${c.realtime_stepped_from ? ` (stepped down from ${c.realtime_stepped_from})` : ''}: ${reason}`);
   if (!best) return {
     status: 'blocked',
     engine: 'builtin',
@@ -1000,9 +1021,13 @@ export function routeTask(task, catalog, {
       realtime_loop: profile.realtime_loop,
       ...classifierInfo,
       ...notRoutedInfo,
-      ...(profile.realtime_loop ? {excluded: [...new Set(ranked.allCandidates.flatMap(candidate => candidate.excluded))]} : {}),
+      ...pinnedInfo,
+      ...(skipped.length ? {cooling_down: skipped} : {}),
+      ...(profile.realtime_loop || pinned ? {excluded: [...new Set(ranked.allCandidates.flatMap(exclusionsOf))]} : {}),
     },
-    error: profile.realtime_loop
+    error: pinned
+      ? `No route Cindy offers is what was named (${[pinModel, pinEffort].filter(Boolean).join(', ')}) and meets the ${ranked.task.difficulty} ${kind} floor; nothing was started.`
+      : profile.realtime_loop
       ? `No effort Cindy offers is fast enough per turn for a live loop and meets the ${ranked.task.difficulty} ${kind} floor; nothing was started.`
       : `No model in the Cindy catalog meets the ${ranked.task.difficulty} ${kind} floor; nothing was started.`,
   };
@@ -1027,6 +1052,7 @@ export function routeTask(task, catalog, {
       components: best.components,
       wants_fast: wantsFast,
       ...notRoutedInfo,
+      ...pinnedInfo,
       quota: codex,
       quota_penalized_routes: candidates.filter(c => c.notes.length).length,
       ...(best.notes.length ? {warning: `every runnable route is short of quota (${best.notes.join(', ')}); it may stop early`} : {}),

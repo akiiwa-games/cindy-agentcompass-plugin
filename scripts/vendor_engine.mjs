@@ -1,10 +1,13 @@
 // Regenerates the vendored engine from a checkout of akiiwa-games/magpie-agentcompass-router:
-//   node scripts/vendor_engine.mjs <magpie checkout> <commit>
+//   node scripts/vendor_engine.mjs <magpie checkout> [commit]
+// It reads the commit, never the working tree or HEAD, so a checkout that is behind or has local changes gives the same files.
 // Each file is the source at that commit with a two-line header added and its relative imports renamed. Nothing else differs.
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+
+export const DEFAULT_COMMIT = '34448f9e9b82a2506fbda7481371e55526757c14';
 
 // plugin/engine/<name>.mjs: src/<source>.js
 export const VENDORED_SOURCES = {catalog: 'catalog', allocator: 'allocator', profiler: 'profiler-core', quota: 'quota', continuity: 'continuity'};
@@ -23,13 +26,17 @@ export function sourceText(vendored) {
   return renamed(body, name => `${VENDORED_SOURCES[name]}.js`);
 }
 
+const runGit = args => execFileSync('git', args, {encoding: 'utf8', maxBuffer: 1 << 26});
+
+export function vendorEngine(checkout, commit = DEFAULT_COMMIT, engine = fileURLToPath(new URL('../plugin/engine/', import.meta.url)), git = runGit) {
+  const full = git(['-C', checkout, 'rev-parse', '--verify', `${commit}^{commit}`]).trim();
+  for (const [name, source] of Object.entries(VENDORED_SOURCES)) {
+    fs.writeFileSync(path.join(engine, `${name}.mjs`), vendoredText(name, git(['-C', checkout, 'show', `${full}:src/${source}.js`]), full));
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [checkout, commit] = process.argv.slice(2);
-  if (!checkout || !commit) throw Error('usage: node scripts/vendor_engine.mjs <magpie checkout> <commit>');
-  const full = execFileSync('git', ['-C', checkout, 'rev-parse', '--verify', `${commit}^{commit}`], {encoding: 'utf8'}).trim();
-  const engine = fileURLToPath(new URL('../plugin/engine/', import.meta.url));
-  for (const [name, source] of Object.entries(VENDORED_SOURCES)) {
-    const text = execFileSync('git', ['-C', checkout, 'show', `${full}:src/${source}.js`], {encoding: 'utf8', maxBuffer: 1 << 26});
-    fs.writeFileSync(path.join(engine, `${name}.mjs`), vendoredText(name, text, full));
-  }
+  if (!checkout) throw Error('usage: node scripts/vendor_engine.mjs <magpie checkout> [commit]');
+  vendorEngine(checkout, commit);
 }

@@ -50,7 +50,8 @@ Cindy session ──ghost_call {tool:"roll", args:{task}}──▶ plugin/main.j
   split and self gates, the catalog scoring, the quota reading and fast mode; `catalog.mjs`, `profiler.mjs`, `allocator.mjs`, `quota.mjs` and
   `continuity.mjs` are the AgentCompass model catalog, profile schema validator and allocator as ported to
   [`magpie-agentcompass-router`](https://github.com/akiiwa-games/magpie-agentcompass-router) (MIT): each is its source at the commit in its header,
-  with only the header and import paths added by `scripts/vendor_engine.mjs`, and a test pins the digests. The router only calls the allocator with a
+  with only the header and import paths added by `node scripts/vendor_engine.mjs <magpie checkout> [commit]`, which reads that commit and never the working
+  tree or HEAD (the commit defaults to the pinned one), and a test pins the digests. The router only calls the allocator with a
   checked profile, never its keyword profiling. `classifier-cases.json` is the AgentCompass rubric and calibration set, unchanged.
 - `plugin/main.js`: the logic page. Requires the experimental tasks API, puts the classification to Cindy's quick-text channel when the
   built-in engine needs a live task profile, picks the one catalog route that exactly matches the routed
@@ -112,11 +113,18 @@ keyword, regex or length heuristics on the task text:
 - **an explicit `profile`** must give every field in the tool schema's `required` list, otherwise `invalid_caller_profile` and nothing starts;
   `profile: null` is the same as no profile.
   The external CLI classifies for itself and takes no profile: passing one answers `profile_not_supported_by_cli`.
-- **realtime_loop**: a live-loop task is scored on speed per turn as well, at the responsiveness floor of AgentCompass. A too-slow effort steps down
-  only to an effort Cindy offers for that route; when none is fast enough and capable enough, `roll` is `blocked` with reason `no_model_meets_floor`
-  and nothing starts.
-- **Spark**: `gpt-5.3-codex-spark` is never routed to, as in AgentCompass, even when Cindy lists it; `decision.not_routed` names it. Other models the
-  catalog leaves off by default stay routable when Cindy lists them.
+- **realtime_loop**: a live-loop task is scored on speed per turn as well, at the responsiveness floor of AgentCompass, using the speed data of the model
+  name Cindy lists (`claude-opus-4-8` is not as fast as the `claude-opus-5-5` routing scores it as; a name with no data of its own gets the default). A
+  too-slow effort steps down only to an effort that row offers; when none is fast enough and capable enough, `roll` is `blocked` with reason
+  `no_model_meets_floor`, `decision.excluded` gives each model and effort with its reason, and nothing starts.
+- **a named model or effort**: `routeTask` takes `constraintModel` or `pinnedModel` (`gpt-6-astra`, or `gpt-6-astra:high`) and `constraintEffort`, and holds
+  every task to them, as AgentCompass does with a constraint; only the caller can give them, never the task text, and `decision.pinned` records them. On a live
+  loop a named model stays even when too slow, without stepping down and with `components.realtime_slow_pin_warning`; an effort alone names no model to keep.
+  When nothing on offer matches, `roll` is `blocked` with `no_model_meets_floor`; nothing else stands in. The `roll` tool takes only `task` and `profile`, so
+  today a user in Cindy cannot name one.
+- **Spark**: `gpt-5.3-codex-spark` is not routed to, even when Cindy lists it, because AgentCompass has no such route; `decision.not_routed` names it. As in
+  AgentCompass, where a constraint keeps any bundle it names, naming it is the one way to run it: then it needs Cindy to list it, and has no speed data of its
+  own on a live loop. Other models the catalog leaves off by default stay routable when Cindy lists them.
 - **split**: when the profile has `multi_task: true`, `roll` returns `status: "split"` with `task_count`; nothing starts. Roll each task
   separately.
 - **self**: when the profile has `self: true` (or `delegate: false`), `roll` returns `status: "self"`; nothing starts.

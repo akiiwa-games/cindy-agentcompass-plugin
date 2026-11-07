@@ -658,7 +658,7 @@ test('m4 regression: cache key incorporates prompt/schema digest and structured 
 
   // Verify route.mjs calls rankCandidates with 2 arguments (profile, runtimeState) and no extra objective argument.
   const routeSrc = fs.readFileSync(new URL('../plugin/engine/route.mjs', import.meta.url), 'utf8');
-  assert.match(routeSrc, /rankCandidates\(profile,\s*\{candidateModels:/);
+  assert.match(routeSrc, /rankCandidates\(profile,\s*\{candidateModels,/);
 });
 
 // Static guard for the highest rule, on top of the behaviour tests (opposite profiles decide, same text). It follows task text by
@@ -917,12 +917,13 @@ const TEXT_CALL_EXCEPTIONS = {
       'for(constmonthofdesc(year))', 'for(constdayofdesc(month))', 'for(constnameoffiles)',
     ],
     "the catalog and the allocator's ranking": [
-      ['runnable.length', 2], ['notRouted.length', 2], '...newSet(ranked.allCandidates.flatMap(candidate=>candidate.excluded))', ['skipped.length', 2], 'row.efforts?.length', "(spec.efforts||[]).includes('high')", ['offered.length', 2],
-      'c.notes.length', 'candidates.filter(c=>c.notes.length).length', 'best.notes.length', 'candidates.slice(1,6)', ['newSet()', 3],
-      "newSet(rows.filter(r=>r.route.agentKind==='codex').map(r=>r.route.providerId))", ['for(constrowofrows)', 2], 'for(constrofranked.ranking)',
+      ['runnable.length', 2], ['notRouted.length', 2], '...newSet(ranked.allCandidates.flatMap(exclusionsOf))', ['skipped.length', 3], 'row.efforts?.length', "(spec.efforts||[]).includes('high')", ['offered.length', 2],
+      'c.notes.length', 'candidates.filter(c=>c.notes.length).length', 'best.notes.length', 'candidates.slice(1,6)', ['newSet()', 2],
+      "newSet(rows.filter(r=>r.route.agentKind==='codex').map(r=>r.route.providerId))", ['for(constrowofrows)', 2], 'for(constofferedEffortofrow._efforts)',
       'for(consteffortofrow._efforts)', "r.route.agentKind==='codex'", "codex.status!=='unknown'", "q?.status==='exhausted'", "q?.status==='high'",
       "harness==='pi'", "harness==='codex'",
     ],
+    "an effort the caller named, read as the allocator reads it": ['String(constraintEffort).trim()', 'String(constraintEffort).trim().toLowerCase()'],
     'a router status, the platform, or a Cindy failure code': [
       "'split'", "process.platform==='win32'", "process.platform==='darwin'", "reason==='classifier_rate_limited'",
     ],
@@ -1403,7 +1404,7 @@ test('Magpie sync: the vendored engine is the source at its commit, byte for byt
 test('Magpie sync: the allocator never profiles for itself: every validated profile has the depth it takes as a profile', () => {
   // rankCandidates only falls back to inferTaskProfile when reasoning_depth is falsy, and the task text is not handed to it either.
   assert.deepEqual(PROFILE_INTEGERS.reasoning_depth, [1, 4]);
-  assert.match(ownSource('plugin/engine/route.mjs'), /rankCandidates\(profile, \{candidateModels: /);
+  assert.match(ownSource('plugin/engine/route.mjs'), /rankCandidates\(profile, \{candidateModels, catalog: \{dispatchEfforts\}, constraintModel: pinModel, constraintEffort: pinEffort\}\)/);
 });
 
 const OK_QUOTA = {source: 'test', status: 'ok', used_percent: 10};
@@ -1471,6 +1472,157 @@ test('Magpie sync: Spark is off, as in AgentCompass, whose accounts have no such
   const fableRoute = routeTask('x', {models: [fable]}, {quota: OK_QUOTA, profile: makeProfile(), useCache: false});
   assert.deepEqual([fableRoute.status, fableRoute.route?.bundle.model], ['native', 'claude-fable-5-1']);
   assert.equal('not_routed' in fableRoute.decision, false);
+});
+
+const listedRow = (agentKind, providerId, model, efforts) => ({route: {agentKind, providerId, model, effort: efforts.at(-1), fastMode: false}, efforts, supportsFastMode: false});
+const easyProfile = overrides => makeProfile({reasoning_depth: 1, code_complexity: 1, error_cost: 1, realtime_loop: true, ...overrides});
+const routeRows = (rows, overrides, extra) => routeTask('x', {models: rows}, {quota: OK_QUOTA, profile: easyProfile(overrides), useCache: false, ...extra});
+const FULL = ['low', 'medium', 'high', 'max'];
+
+test('Review 9: a live loop reads the speed of the model Cindy lists, not of the one routing folds it into', () => {
+  // Measured too slow at every effort: routing folds it into claude-opus-5-5, whose low is fast.
+  const opus48 = routeRows([listedRow('cc', 'anthropic', 'claude-opus-4-8', FULL)]);
+  assert.deepEqual([opus48.status, opus48.decision.reason], ['blocked', 'no_model_meets_floor']);
+  assert.ok(opus48.decision.excluded.includes('claude-opus-4-8@high: responsiveness 0.05 below the realtime_loop floor 0.5 (too slow per turn for a live loop)'), JSON.stringify(opus48.decision.excluded));
+  // Its own curve has high at 0, claude-sonnet-5-5 has it at 0.70.
+  const sonnet46 = routeRows([listedRow('cc', 'anthropic', 'claude-sonnet-4-6', ['high'])]);
+  assert.deepEqual([sonnet46.status, sonnet46.decision.excluded],
+    ['blocked', ['claude-sonnet-4-6@high: responsiveness 0.00 below the realtime_loop floor 0.5 (too slow per turn for a live loop)']]);
+  // A flat curve: medium is as fast as its own low, where claude-opus-5-5 slows down with effort.
+  const opus46 = routeRows([listedRow('cc', 'anthropic', 'claude-opus-4-6', FULL)], {reasoning_depth: 2, code_complexity: 2, error_cost: 2});
+  assert.deepEqual([opus46.status, opus46.route?.bundle.model, opus46.route?.bundle.effort, opus46.decision.components?.responsiveness], ['native', 'claude-opus-4-6', 'medium', 0.853]);
+  // No speed data of their own: the default, not the curve of gpt-6.1-sol or gpt-6-astra.
+  for (const model of ['gpt-4o', 'o3']) {
+    const unmeasured = routeRows([listedRow('codex', 'openai', model, ['high'])]);
+    assert.deepEqual([unmeasured.status, unmeasured.route?.bundle.model, unmeasured.route?.bundle.effort], ['native', model, 'high'], JSON.stringify(unmeasured.decision));
+    assert.deepEqual([unmeasured.decision.components.responsiveness, unmeasured.decision.components.responsiveness_source], [0.52, 'default']);
+  }
+  // Any other task still scores on what routing folds it into, and launches the name Cindy listed.
+  for (const [model, canonical] of [['claude-opus-4-8', 'claude-opus-5-5'], ['gpt-4o', 'gpt-6.1-sol']]) {
+    const calm = routeRows([listedRow('cc', 'anthropic', model, ['high'])], {realtime_loop: false});
+    assert.deepEqual([calm.status, calm.route.bundle.model, calm.decision.canonical_model], ['native', model, canonical]);
+  }
+});
+
+test('Review 9: a live loop steps down only within the efforts that one row offers, and says why it refuses', () => {
+  const astra = efforts => listedRow('codex', 'openai-codex', 'gpt-6-astra', efforts);
+  const tooSlow = 'gpt-6-astra@high: responsiveness 0.00 below the realtime_loop floor 0.5 (too slow per turn for a live loop)';
+  const hard = {reasoning_depth: 3, code_complexity: 3, error_cost: 3};
+
+  const onlyHigh = routeRows([astra(['high'])]);
+  assert.deepEqual([onlyHigh.status, onlyHigh.decision.reason, onlyHigh.decision.excluded], ['blocked', 'no_model_meets_floor', [tooSlow]]);
+
+  const lowAndHigh = routeRows([astra(['low', 'high'])]);
+  assert.deepEqual([lowAndHigh.status, lowAndHigh.route?.bundle.effort, lowAndHigh.decision.alternatives], ['native', 'low', []]);
+  // low is too weak and high too slow: high only reaches low, and the refusal says so for both.
+  const lowAndHighHard = routeRows([astra(['low', 'high'])], hard);
+  assert.deepEqual([lowAndHighHard.status, lowAndHighHard.decision.reason], ['blocked', 'no_model_meets_floor']);
+  assert.deepEqual(lowAndHighHard.decision.excluded, [
+    'gpt-6-astra@low: ability 3.61 below the coupled floor 3.90',
+    'gpt-6-astra@low (stepped down from high): ability 3.61 below the coupled floor 3.90',
+  ]);
+
+  // Efforts stay with their connection: b has no medium however a does.
+  const connections = [listedRow('codex', 'a', 'gpt-6-astra', ['medium']), listedRow('codex', 'b', 'gpt-6-astra', ['high'])];
+  for (const rows of [connections, [...connections].reverse()]) {
+    const routed = routeRows(rows);
+    assert.deepEqual([routed.status, routed.route?.bundle.providerId, routed.route?.bundle.effort, routed.decision.alternatives], ['native', 'a', 'medium', []]);
+  }
+  const stranded = routeRows([listedRow('codex', 'a', 'gpt-6-astra', ['low']), listedRow('codex', 'b', 'gpt-6-astra', ['high'])], hard);
+  assert.deepEqual([stranded.status, stranded.decision.excluded], ['blocked', ['gpt-6-astra@low: ability 3.61 below the coupled floor 3.90', tooSlow]]);
+
+  // Whatever is on offer, a live route is one this row offers.
+  for (const efforts of [['medium', 'high'], ['high', 'max'], ['low'], ['medium'], ['low', 'medium', 'high', 'xhigh']]) {
+    for (const depth of [1, 2, 3]) {
+      const catalog = {models: [listedRow('codex', 'x', 'gpt-6.1-sol', efforts), listedRow('cc', 'y', 'claude-sonnet-5-5', efforts)]};
+      const routed = routeTask('x', catalog, {quota: OK_QUOTA, profile: easyProfile({reasoning_depth: depth}), useCache: false});
+      assert.ok(routed.status !== 'native' || inCatalog(routed, catalog), JSON.stringify(routed.route?.bundle));
+    }
+  }
+});
+
+test('Review 9: the vendoring script reads the commit it is given, by default the pinned one, never the working tree or HEAD', async () => {
+  const {vendorEngine, DEFAULT_COMMIT} = await import('../scripts/vendor_engine.mjs');
+  assert.equal(DEFAULT_COMMIT, MAGPIE_COMMIT);
+  const top = fs.mkdtempSync(path.join(os.tmpdir(), 'vendor-'));
+  try {
+    // A checkout whose working tree holds something else entirely.
+    fs.mkdirSync(path.join(top, 'checkout', 'src'), {recursive: true});
+    for (const source of Object.values(VENDORED_SOURCES)) fs.writeFileSync(path.join(top, 'checkout', 'src', `${source}.js`), 'export const from = "working tree";\n');
+    const engine = path.join(top, 'engine');
+    fs.mkdirSync(engine);
+    const calls = [];
+    const git = args => {
+      calls.push(args);
+      assert.equal(args[1], path.join(top, 'checkout'));
+      if (args[2] === 'rev-parse') return `${args[4].slice(0, -'^{commit}'.length).padEnd(40, '0')}\n`;
+      assert.equal(args[2], 'show');
+      return `import {q} from "./quota.js";\nexport const from = "${args[3]}";\n`;
+    };
+    vendorEngine(path.join(top, 'checkout'), 'abc1234', engine, git);
+    const full = 'abc1234'.padEnd(40, '0');
+    assert.deepEqual(calls[0].slice(2), ['rev-parse', '--verify', 'abc1234^{commit}']);
+    for (const [name, source] of Object.entries(VENDORED_SOURCES)) {
+      const text = fs.readFileSync(path.join(engine, `${name}.mjs`), 'utf8');
+      assert.equal(text, vendoredText(name, `import {q} from "./quota.js";\nexport const from = "${full}:src/${source}.js";\n`, full));
+      assert.ok(calls.some(args => args[2] === 'show' && args[3] === `${full}:src/${source}.js`), source);
+    }
+    calls.length = 0;
+    vendorEngine(path.join(top, 'checkout'), undefined, engine, git);
+    assert.deepEqual(calls[0].slice(2), ['rev-parse', '--verify', `${MAGPIE_COMMIT}^{commit}`]);
+    assert.ok(calls.every(args => !args.includes('HEAD')));
+    assert.match(fs.readFileSync(path.join(engine, 'allocator.mjs'), 'utf8').split('\n')[0], new RegExp(`at ${MAGPIE_COMMIT} `));
+  } finally {
+    fs.rmSync(top, {recursive: true, force: true});
+  }
+});
+
+test('Review 9: a named model or effort holds on every task, and a named Spark is the one way to run Spark, as in AgentCompass', () => {
+  const rows = [listedRow('codex', 'o', 'gpt-6-astra', ['low', 'medium', 'high', 'xhigh']), listedRow('codex', 'o', 'gpt-6.1-sol', ['low', 'medium', 'high', 'xhigh'])];
+  const spark = listedRow('codex', 'o', 'gpt-5.3-codex-spark', ['low', 'medium', 'high']);
+  for (const realtime_loop of [false, true]) {
+    const bundleOf = (extra, catalog = rows) => {
+      const routed = routeRows(catalog, {realtime_loop}, extra);
+      return routed.status === 'native' ? `${routed.route.bundle.model}@${routed.route.bundle.effort}` : routed.decision.reason;
+    };
+    assert.equal(bundleOf({}), 'gpt-6.1-sol@low', 'the unnamed winner, so the pins below are what changes it');
+    for (const name of ['constraintModel', 'pinnedModel']) {
+      assert.equal(bundleOf({[name]: 'gpt-6-astra'}), 'gpt-6-astra@low', name);
+      assert.equal(bundleOf({[name]: 'gpt-6-astra:medium'}), 'gpt-6-astra@medium', name);
+      assert.equal(bundleOf({[name]: 'gpt-5.3-codex-spark'}, [...rows, spark]), `gpt-5.3-codex-spark@${realtime_loop ? 'low' : 'medium'}`, name);
+    }
+    assert.equal(bundleOf({constraintModel: 'gpt-6-astra', constraintEffort: 'medium'}), 'gpt-6-astra@medium');
+    assert.equal(bundleOf({constraintModel: 'gpt-6-astra', constraintEffort: 'HIGH'}), 'gpt-6-astra@high', 'also when too slow for a live loop');
+
+    // Named Spark only: an unnamed one stays out, and naming something else does not let it in.
+    assert.equal(bundleOf({}, [...rows, spark]), 'gpt-6.1-sol@low');
+    assert.deepEqual(routeRows([...rows, spark], {realtime_loop}).decision.not_routed, ['gpt-5.3-codex-spark']);
+    assert.deepEqual(routeRows([...rows, spark], {realtime_loop}, {constraintModel: 'gpt-6-astra'}).decision.not_routed, ['gpt-5.3-codex-spark']);
+    const named = routeRows([spark], {realtime_loop}, {pinnedModel: 'gpt-5.3-codex-spark'});
+    assert.deepEqual([named.status, named.route?.bundle.model, 'not_routed' in named.decision], ['native', 'gpt-5.3-codex-spark', false]);
+    assert.equal(routeRows([spark], {realtime_loop}).decision.reason, 'no_runnable_model');
+
+    // Named but not on offer: nothing starts and nothing else stands in for it.
+    const missing = routeRows(rows, {realtime_loop}, {constraintModel: 'claude-opus-5-5'});
+    assert.deepEqual([missing.status, missing.decision.reason, missing.decision.pinned], ['blocked', 'no_model_meets_floor', {model: 'claude-opus-5-5', effort: null}]);
+    assert.match(missing.error, /claude-opus-5-5/);
+    assert.doesNotMatch(missing.error, /live loop/);
+    assert.ok(missing.decision.excluded.includes('gpt-6-astra@low: explicit model constraint'), JSON.stringify(missing.decision.excluded));
+    const noEffort = routeRows(rows, {realtime_loop}, {constraintModel: 'gpt-6-astra', constraintEffort: 'max'});
+    assert.deepEqual([noEffort.status, noEffort.decision.pinned], ['blocked', {model: 'gpt-6-astra', effort: 'max'}]);
+    assert.ok(noEffort.decision.excluded.includes('gpt-6-astra@low: explicit effort constraint'), JSON.stringify(noEffort.decision.excluded));
+  }
+  // A live loop keeps a named slow choice, with a warning and without stepping down; an unnamed one is out.
+  const slow = routeRows([rows[0]], {}, {constraintModel: 'gpt-6-astra', constraintEffort: 'high'});
+  assert.equal(slow.route?.bundle.effort, 'high');
+  assert.match(slow.decision.components.realtime_slow_pin_warning, /too slow per turn for a live loop\); kept per explicit user selection/);
+  assert.equal('effort_stepped_down_from' in slow.decision.components, false);
+  assert.equal(routeRows([listedRow('codex', 'o', 'gpt-6-astra', ['high'])], {}, {constraintEffort: 'high'}).status, 'blocked', 'an effort alone names no model to keep');
+  // Any other task: naming the effort alone picks among the models at it.
+  assert.equal(routeRows(rows, {realtime_loop: false}, {constraintEffort: 'high'}).route.bundle.effort, 'high');
+  // A cooling named route says so.
+  const cooled = routeRows(rows, {realtime_loop: false}, {constraintModel: 'gpt-6-astra', cooling: {[routeKey('codex', 'o', 'gpt-6-astra')]: {until: Date.now() + 60000, code: 'x'}}});
+  assert.deepEqual([cooled.status, cooled.decision.cooling_down?.[0].model], ['blocked', 'gpt-6-astra']);
 });
 
 test('m1: the documents state the limit and the first signal lost as they are measured', () => {
