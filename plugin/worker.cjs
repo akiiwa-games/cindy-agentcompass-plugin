@@ -169,10 +169,13 @@ function noteCreate(root, before, after, now=Date.now()) {
   atomic(cooldownFile(root), all);
 }
 // Classifier failures. Cindy chooses the quick-text model, so a retry cannot go elsewhere: it answers at once with the failure and
-// where to change the model, and asks the host again only after 30 s, doubling to 5 min; a classified task clears it. A malformed
-// answer may be that task's doing and must not hold up other tasks, so it cools only that task; any other failure is the channel's.
+// where to change the model, and asks the host again only after 30 s, doubling to 5 min; a classified task clears it. Only a failure
+// that says the channel itself cannot answer cools every task (no model to use, or not allowed); anything else may be that task's
+// doing (an INTERNAL or TIMEOUT from the provider, a malformed answer), so it cools only that task's text, in every session.
+// RATE_LIMITED is Cindy's limit on requests in flight and cools nothing.
 const CLASSIFIER_COOLDOWN_MS = 30000, CLASSIFIER_COOLDOWN_MAX_MS = 5*60000;
-const TASK_SCOPED_FAILURES = new Set(['classifier_bad_model_output', 'classifier_empty_output', 'invalid_classifier_output']);
+const CHANNEL_FAILURES = new Set(['classifier_no_candidate', 'classifier_permission_denied']);
+const UNRECORDED_FAILURES = new Set(['classifier_rate_limited']);
 const classifierCooldownFile = root => path.join(root, 'classifier-cooldowns.json');
 function classifierCooldowns(root) {
   try {
@@ -180,11 +183,34 @@ function classifierCooldowns(root) {
     return value && typeof value==='object' && !Array.isArray(value) ? value : {};
   } catch {return {};}
 }
-function classifierCooling(root, taskDigest, now=Date.now()) {
+// What decides the quick-text model, as far as the plugin can see it: a change ends every cooldown at once, since the failure was about
+// the old choice. The model on the plugin card has no API; Cindy keeps it in <app data>/owners/<owner>/ghost-errand-prefs.json under
+// `errand`, an undocumented file, so a change there is only noticed while that holds (`sessions` beside it changes all the time).
+function classifierChoice(mod, catalog) {
+  const cards=[];
+  for (const app of mod.cindyAppDirs(process.env, os.homedir())) {
+    let owners=[];
+    try {owners=fs.readdirSync(path.join(app, 'owners')).sort();} catch {}
+    for (const owner of owners) {
+      try {cards.push(JSON.parse(fs.readFileSync(path.join(app, 'owners', owner, 'ghost-errand-prefs.json'), 'utf8')).errand ?? null);} catch {}
+    }
+  }
+  let declared=null;
+  try {declared=JSON.parse(fs.readFileSync(path.join(__dirname, 'ghost.json'), 'utf8')).cindy?.oneshotModel ?? null;} catch {}
+  return digest(JSON.stringify([declared, cards, (catalog?.models || []).map(row => row?.route)]));
+}
+// A clock moved back is capped here and kept, so the five minutes run out; capping each read alone would never end the wait.
+function classifierCooling(root, taskDigest, choice, now=Date.now()) {
   const all=classifierCooldowns(root);
+  let changed=false;
+  for (const [key, entry] of Object.entries(all)) {
+    if (entry?.choice!==choice) {delete all[key];changed=true;}
+    else if (entry.until>now+CLASSIFIER_COOLDOWN_MAX_MS) {entry.until=now+CLASSIFIER_COOLDOWN_MAX_MS;changed=true;}
+  }
+  if (changed) atomic(classifierCooldownFile(root), all);
   return [all.channel, all['task:'+taskDigest]].find(entry => entry && entry.until>now) || null;
 }
-function noteClassifierOutcome(root, taskDigest, result, now=Date.now()) {
+function noteClassifierOutcome(root, taskDigest, result, choice, now=Date.now()) {
   const all=classifierCooldowns(root);
   if (result.profile_source!=='unavailable') {
     if (!all.channel && !all['task:'+taskDigest]) return;
@@ -192,12 +218,13 @@ function noteClassifierOutcome(root, taskDigest, result, now=Date.now()) {
     delete all['task:'+taskDigest];
   } else {
     const reason=result.decision?.reason || 'classifier_failed';
-    const key=TASK_SCOPED_FAILURES.has(reason) ? 'task:'+taskDigest : 'channel';
+    if (UNRECORDED_FAILURES.has(reason)) return;
+    const key=CHANNEL_FAILURES.has(reason) ? 'channel' : 'task:'+taskDigest;
     const old=all[key];
-    const failures=old && now-old.until<=CLASSIFIER_COOLDOWN_MAX_MS ? old.failures+1 : 1;
+    const failures=old?.choice===choice && now-old.until<=CLASSIFIER_COOLDOWN_MAX_MS ? old.failures+1 : 1;
     all[key]={until:now+Math.min(CLASSIFIER_COOLDOWN_MS*2**(failures-1), CLASSIFIER_COOLDOWN_MAX_MS), failures, reason,
-      error:result.error, model:result.classifier_model || null};
-    for (const [other, entry] of Object.entries(all)) if (now-entry.until>CLASSIFIER_COOLDOWN_MAX_MS) delete all[other];
+      error:result.error, model:result.classifier_model || null, choice};
+    for (const [other, entry] of Object.entries(all)) if (!entry || now-entry.until>CLASSIFIER_COOLDOWN_MAX_MS) delete all[other];
   }
   atomic(classifierCooldownFile(root), all);
 }
@@ -225,11 +252,11 @@ async function builtin(input, catalog, dir, root, conf = {}, extra = {}) {
       return blocked;
     }
     classification = {...clf, calibration_cases: pending.calibrationCases};
-  } else if (extra.classifyViaHost && extra.profile === undefined) {
+  } else if (extra.classifyViaHost && extra.profile == null) {
     const req = mod.prepareClassifierRequest(input, {config: conf, cacheFile});
     if (!req.cached) {
-      const refused = req.overLimitBy ? mod.classifierTaskTooLongRoute(req) :
-        classifierCooling(root, taskDigest) ? mod.classifierCoolingRoute(classifierCooling(root, taskDigest)) : null;
+      const cooling = req.overLimitBy ? null : classifierCooling(root, taskDigest, classifierChoice(mod, catalog));
+      const refused = req.overLimitBy ? mod.classifierTaskTooLongRoute(req) : cooling ? mod.classifierCoolingRoute(cooling) : null;
       if (refused) {
         writeDiag(path.join(dir, 'router.stdout.json'), JSON.stringify(refused, null, 2));
         return refused;
@@ -248,7 +275,7 @@ async function builtin(input, catalog, dir, root, conf = {}, extra = {}) {
     classification,
   });
   // Only a classification this plugin asked for can come to here, so only that can fill the shared cache or touch the record.
-  if (classification) try {noteClassifierOutcome(root, taskDigest, result);} catch {}
+  if (classification) try {noteClassifierOutcome(root, taskDigest, result, classifierChoice(mod, catalog));} catch {}
   writeDiag(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
   if (result.status === 'blocked') {
     if (result.decision?.reason === 'no_runnable_model') throw Error(result.error);
@@ -299,7 +326,7 @@ async function external(command, task, ctx, dir, timeoutMs=110000) {
 async function route(conf, task, ctx, dir, catalog, root, extra = {}) {
   const found=conf.engine==='cli' && !conf.command ? discover() : null;
   if (conf.engine==='cli' && (conf.command || found)) {
-    if (extra.profile!==undefined) return {status:'blocked', engine:'cli', profile:null, profile_source:'unavailable',
+    if (extra.profile!=null) return {status:'blocked', engine:'cli', profile:null, profile_source:'unavailable',
       decision:{reason:'profile_not_supported_by_cli', profile_source:'unavailable'},
       error:'The configured AgentCompass CLI classifies the task itself and takes no profile; the profile was not used and nothing was started.',
       next_action:'Call roll without `profile`, or remove the CLI configuration (router.json, or {"engine":"cli"} in config.json) to use the built-in engine.'};

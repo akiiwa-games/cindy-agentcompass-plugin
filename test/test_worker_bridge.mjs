@@ -70,7 +70,8 @@ function rpc(p, requests, env = {}) {
   const proc = spawnSync(process.execPath, [path.join(p.out, 'worker.cjs')], {
     input: requests.map(r => JSON.stringify({jsonrpc: '2.0', ...r}) + '\n').join(''),
     env: {...process.env, PASEO_AGENT_ID: 'stale-paseo', HC_TERMINAL_ID: 'stale-terminal', ROUTER_CINDY_CONTEXT: 'stale',
-          HOME: p.home, USERPROFILE: p.home, CODEX_HOME: path.join(p.home, '.codex'), PATH: only([]), ...env},
+          HOME: p.home, USERPROFILE: p.home, CODEX_HOME: path.join(p.home, '.codex'),
+          APPDATA: path.join(p.home, 'AppData'), XDG_CONFIG_HOME: path.join(p.home, 'AppData'), PATH: only([]), ...env},
     encoding: 'utf8', timeout: 30000, maxBuffer: 64 * 1024 * 1024,
   });
   assert.equal(proc.status, 0, proc.stderr);
@@ -514,9 +515,9 @@ test('R1: a failed classification cools the channel: the retry answers at once w
 
   // A consecutive failure doubles the wait.
   expireClassifierCooldowns(p);
-  classifyWith(p, 'Second failure.', id => refusedBy('classifier_rate_limited', id));
+  classifyWith(p, 'Second failure.', id => refusedBy('classifier_permission_denied', id));
   const doubled = classifierCooldownsOf(p).channel;
-  assert.deepEqual([doubled.reason, doubled.failures], ['classifier_rate_limited', 2]);
+  assert.deepEqual([doubled.reason, doubled.failures], ['classifier_permission_denied', 2]);
   assert.ok(Math.abs(doubled.until - Date.now() - 60000) < 5000);
 
   // A classified task clears it.
@@ -652,4 +653,123 @@ test('R3: a task of more than 15,000 characters is classified whole; one that ca
   // The same task with a complete explicit profile does not need the channel at all, up to Cindy's own send limit.
   const [explicit] = rpc(p, [prepare(p, 'x'.repeat(20000), 4, CATALOG, withProfile())]);
   assert.equal(explicit.result.router.status, 'native');
+});
+
+const askAgain = (p, task, context = ctx(p.root)) => rpc(p, [{id: 1, method: 'prepare', params: {task, catalog: CATALOG, classifyViaHost: true, context}}])[0];
+const stateOf = reply => [reply.result.state, reply.result.router?.decision?.reason ?? null];
+
+test('A1: a model answer without self or wants_fast starts nothing and cools only that task', () => {
+  for (const field of ['self', 'wants_fast']) {
+    const p = plugin(codex, 0, 'none');
+    const {[field]: _, ...without} = makeProfile();
+    const reply = classifyWith(p, 'What is a mutex?', id => ({classification: {ok: true, attemptId: id, model: QUICK_MODEL, rawOutput: JSON.stringify(without)}}));
+    assert.deepEqual(stateOf(reply), ['blocked', 'invalid_classifier_output'], field);
+    assert.match(reply.result.router.error, new RegExp(`missing required field.*${field}`));
+    assert.deepEqual(Object.keys(classifierCooldownsOf(p)).map(key => key.split(':')[0]), ['task']);
+  }
+});
+
+test('a1: profile:null means no profile: the built-in engine asks Cindy, and the configured CLI does not refuse it', () => {
+  const p = plugin(codex, 0, 'none');
+  const [ask] = rpc(p, [prepare(p, 'Add a retry to the fetcher.', 1, CATALOG, {classifyViaHost: true, profile: null})]);
+  assert.equal(ask.result.state, 'classify', JSON.stringify(ask.result.router?.decision));
+  const cli = plugin(codex, 0, 'plugin');
+  const [routed] = rpc(cli, [prepare(cli, 'Add a retry to the fetcher.', 1, CATALOG, {classifyViaHost: true, profile: null})]);
+  assert.equal(routed.result.state, 'prepared', JSON.stringify(routed.result.router?.decision));
+  assert.equal(cli.routerCalls(), 1);
+});
+
+test('a2: INTERNAL, TIMEOUT and the like cool only the task that caused them, in every session; other tasks in any session still ask Cindy', () => {
+  for (const reason of ['classifier_internal', 'classifier_timeout', 'classifier_invalid_params', 'classifier_error']) {
+    const p = plugin(codex, 0, 'none');
+    const poison = 'A task the provider refuses to answer.';
+    assert.equal(classifyWith(p, poison, id => refusedBy(reason, id)).result.router.decision.reason, reason);
+    assert.deepEqual(Object.keys(classifierCooldownsOf(p)).map(key => key.split(':')[0]), ['task'], reason);
+    assert.deepEqual(stateOf(askAgain(p, poison)), ['blocked', 'classifier_cooling_down'], reason);
+    assert.deepEqual(stateOf(askAgain(p, poison, {...ctx(p.root), session_id: 'other-session'})), ['blocked', 'classifier_cooling_down'], 'the same text, another session');
+    assert.equal(askAgain(p, 'A healthy task.').result.state, 'classify', reason);
+    assert.equal(askAgain(p, 'Another healthy task.', {...ctx(p.root), session_id: 'other-session'}).result.state, 'classify', reason);
+  }
+});
+
+test('a2: only a channel failure cools every task; RATE_LIMITED cools nothing and says what it is; a cooling answer says how long and what else works', () => {
+  for (const reason of ['classifier_no_candidate', 'classifier_permission_denied']) {
+    const p = plugin(codex, 0, 'none');
+    classifyWith(p, 'First task.', id => refusedBy(reason, id));
+    assert.deepEqual(Object.keys(classifierCooldownsOf(p)), ['channel'], reason);
+    const cooling = askAgain(p, 'A different task.', {...ctx(p.root), session_id: 'other-session'});
+    assert.deepEqual(stateOf(cooling), ['blocked', 'classifier_cooling_down'], reason);
+    assert.match(cooling.result.router.next_action, /\d+ s/);
+    assert.match(cooling.result.router.next_action, /`profile`/);
+  }
+  const p = plugin(codex, 0, 'none');
+  const limited = classifyWith(p, 'Task during a burst.', id => refusedBy('classifier_rate_limited', id));
+  assert.equal(limited.result.router.decision.reason, 'classifier_rate_limited');
+  assert.doesNotMatch(limited.result.router.next_action, /Pick another model/);
+  assert.match(limited.result.router.next_action, /roll again/);
+  assert.equal(fs.existsSync(path.join(p.stateHome, 'classifier-cooldowns.json')), false, 'a limit on requests in flight says nothing about the model');
+  assert.equal(askAgain(p, 'Task during a burst.').result.state, 'classify');
+});
+
+test('a2: changing the plugin card, oneshotModel or the catalog ends a cooldown at once; nothing else in the settings does', () => {
+  const prefsFile = p => {
+    const dir = path.join(process.platform === 'darwin' ? path.join(p.home, 'Library', 'Application Support') : path.join(p.home, 'AppData'), 'CindyGlobal', 'owners', '0123456789abcdef0123');
+    fs.mkdirSync(dir, {recursive: true});
+    return path.join(dir, 'ghost-errand-prefs.json');
+  };
+  const failed = p => {
+    classifyWith(p, 'First task.', id => refusedBy('classifier_no_candidate', id));
+    assert.deepEqual(stateOf(askAgain(p, 'Second task.')), ['blocked', 'classifier_cooling_down']);
+  };
+
+  const card = plugin(codex, 0, 'none');
+  const file = prefsFile(card);
+  fs.writeFileSync(file, JSON.stringify({errand: {agentcompass: {model: 'bad-model', agentKind: 'codex'}}, sessions: {}}));
+  failed(card);
+  // The sessions map of the same file changes on its own and says nothing about the model.
+  fs.writeFileSync(file, JSON.stringify({errand: {agentcompass: {model: 'bad-model', agentKind: 'codex'}}, sessions: {agentcompass: 'session-1'}}));
+  assert.deepEqual(stateOf(askAgain(card, 'Second task.')), ['blocked', 'classifier_cooling_down']);
+  fs.writeFileSync(file, JSON.stringify({errand: {agentcompass: {model: 'good-model', agentKind: 'codex'}}, sessions: {agentcompass: 'session-1'}}));
+  assert.equal(askAgain(card, 'Second task.').result.state, 'classify', 'the card changed');
+  assert.deepEqual(classifierCooldownsOf(card), {});
+
+  // A task's own cooldown too: a slower model may have been its trouble.
+  const slow = plugin(codex, 0, 'none');
+  classifyWith(slow, 'A long question.', id => refusedBy('classifier_timeout', id));
+  assert.deepEqual(stateOf(askAgain(slow, 'A long question.')), ['blocked', 'classifier_cooling_down']);
+  fs.writeFileSync(prefsFile(slow), JSON.stringify({errand: {agentcompass: {model: 'quick-model'}}}));
+  assert.equal(askAgain(slow, 'A long question.').result.state, 'classify');
+
+  const declared = plugin(codex, 0, 'none');
+  failed(declared);
+  const manifest = path.join(declared.out, 'ghost.json');
+  const parsed = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+  fs.writeFileSync(manifest, JSON.stringify({...parsed, cindy: {...parsed.cindy, oneshotModel: 'codex/gpt-6.1-sol'}}));
+  assert.equal(askAgain(declared, 'Second task.').result.state, 'classify', 'oneshotModel changed');
+
+  const signedIn = plugin(codex, 0, 'none');
+  failed(signedIn);
+  const wider = {...CATALOG, models: [...CATALOG.models, {route: {agentKind: 'cc', providerId: 'anthropic', model: 'claude-sonnet-5-5', effort: 'high', fastMode: false}, efforts: ['high'], supportsFastMode: false}]};
+  const [after] = rpc(signedIn, [prepare(signedIn, 'Second task.', 1, wider, {classifyViaHost: true})]);
+  assert.equal(after.result.state, 'classify', 'a new connection in the catalog');
+});
+
+test('a3: a cooldown never waits more than 5 minutes, and a clock moved back does not hold it for longer', () => {
+  const p = plugin(codex, 0, 'none');
+  classifyWith(p, 'First task.', id => refusedBy('classifier_no_candidate', id));
+  const file = path.join(p.stateHome, 'classifier-cooldowns.json');
+  const moved = classifierCooldownsOf(p);
+  moved.channel.until = Date.now() + 30 * 24 * 3600 * 1000;
+  fs.writeFileSync(file, JSON.stringify(moved));
+  const cooling = askAgain(p, 'Second task.');
+  assert.deepEqual(stateOf(cooling), ['blocked', 'classifier_cooling_down']);
+  assert.ok(cooling.result.router.cooldown.retry_after_seconds <= 300, String(cooling.result.router.cooldown.retry_after_seconds));
+  // Kept, so the five minutes run out: capping each read alone would hold it for the whole 30 days.
+  assert.ok(classifierCooldownsOf(p).channel.until <= Date.now() + 300000);
+  expireClassifierCooldowns(p);
+  for (let i = 0; i < 6; i++) {
+    classifyWith(p, `Failure ${i}.`, id => refusedBy('classifier_no_candidate', id));
+    assert.ok(classifierCooldownsOf(p).channel.until <= Date.now() + 300000, `failure ${i}`);
+    expireClassifierCooldowns(p);
+  }
 });

@@ -722,7 +722,7 @@ test('R1 & R4: every structured refusal of the quick-text channel blocks with it
     assert.equal(result.profile_source,'unavailable');
     assert.equal(result.decision.reason,'classifier_'+code.toLowerCase());
     assert.match(result.error,new RegExp('host says '+code));
-    assert.match(result.next_action,/plugin card/);
+    assert.match(result.next_action,code==='RATE_LIMITED' ? /roll again/ : /plugin card/);
     assert.equal(f.workerCreates(),0);
     assert.equal(f.records.size,0,'no receipt');
   }
@@ -822,4 +822,13 @@ test('M5 & r5: a complete caller profile asks Cindy nothing; an incomplete one s
     assert.deepEqual(f.oneshots(),[]);
     assert.equal(f.workerCreates(),0);
   }
+});
+
+test('a1: roll with profile:null classifies the task like a roll with no profile',async()=>{
+  clearClassifierCache();
+  const f=classifierFixture();
+  const res=(await f.send('roll',{task:'Add a retry to the fetcher.',profile:null})).result;
+  assert.equal(f.oneshots().length,1,JSON.stringify(res));
+  assert.equal(res.status,'running',JSON.stringify(res.decision));
+  assert.equal(f.records.get(res.operation).router.decision.profile_source,'classifier');
 });

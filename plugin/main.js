@@ -314,7 +314,7 @@
     for (const [op,mem] of memory) if (mem.createRejected) await tryPersist(msg,op,mem);
     // The catalog the built-in engine routes over: exactly what this Cindy can run now.
     const rawCatalog=await cindy.tasks.models();
-    const initExtra={classifyViaHost:true,...(msg.args.profile!==undefined ? {profile:msg.args.profile} : {})};
+    const initExtra={classifyViaHost:true,...(msg.args.profile!=null ? {profile:msg.args.profile} : {})};
     let prepared=await writePrepare(msg,msg.args.task,rawCatalog,initExtra);
     if (prepared.state==='classify' && prepared.classifier) {
       const classification=await runClassifier(prepared.classifier,msg.callId);

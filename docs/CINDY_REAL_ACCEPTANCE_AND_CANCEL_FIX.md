@@ -6,7 +6,7 @@ real-acceptance report and the cancel-fix notes). The plugin now lives only in t
 ## What the plugin is now
 
 - **Zero dependency.** `plugin/` installs from the market as is. Routing runs in the plugin's own Node worker with the built-in
-  AgentCompass engine (`plugin/engine/`): the split and self gates, the AgentCompass profiler and allocator over the live
+  AgentCompass engine (`plugin/engine/`): the split and self gates, the classifier profile and the AgentCompass allocator over the live
   `tasks.models()` catalog, Codex quota telemetry and fast mode. Nothing else has to be installed: no AgentCompass, no Python, no npm
   package, no network service.
 - **Classification through Cindy's quick-text channel.** Task profiles come only from a model or an explicit `profile`. The logic page makes
@@ -15,8 +15,8 @@ real-acceptance report and the cancel-fix notes). The plugin now lives only in t
   account (`xd`), OpenAI, xAI and Anthropic API-key connections; when none can serve it, `roll` is blocked until a model is available or the
   caller passes a complete `profile`. Declaring `cindy.text` also means that Cindy stops every tool of the plugin at a Setup card until it is signed
   in to a Cindy account ([evidence](sandbox-real-e2e/README.md)). The channel takes one prompt of at most 32,768 characters with no context field, so a long task costs
-  calibration cases (47 up to about 3,800 characters, 6 at 15,000; recorded in `decision.classifier_calibration_cases`) and one that cannot
-  fit is refused, never cut. The README has the details.
+  calibration cases (47 up to about 6,200 characters, 21 at 15,000, rare decisions kept longest; recorded in `decision.classifier_calibration_cases`) and one
+  that cannot fit (about 19,700 characters once JSON-escaped) is refused, never cut. The README has the details.
 - **Two engines.** The external `agentcompass roll` is used only when the user asks for it: a `router.json` (written by
   `scripts/build_plugin.py`, or placed in `~/.agent-compass/cindy-plugin/`) binds one install, and `config.json` with
   `{"engine":"cli"}` uses the CLI found on `PATH` or in `~/.local/bin`. When that CLI is not installed the built-in engine routes and the
