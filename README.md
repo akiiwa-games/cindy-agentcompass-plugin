@@ -6,9 +6,21 @@ profiles the task, decides whether it should be split, done in the session itsel
 fast mode from the models this Cindy can actually run, starts that route as an ordinary Cindy task, checks that Cindy really runs what
 was routed, and collects the task's final message. Every delegated child task is created with `bypassPermissions` (Claude) or `full-access` (Codex, Pi) in the parent session's project directory regardless of the parent session's own mode, and the built-in router reads the tail of local Codex session logs (`~/.codex` and Cindy's `codex-home`) for quota.
 
-Installing it from the plugin market is enough. It needs nothing else on the machine: no AgentCompass install, no Python, no network
-service and no npm dependency. A machine that does have the AgentCompass CLI can switch the plugin over to it (see
-[Engines](#engines)).
+Installing it from the plugin market is enough, once Cindy is signed in to a Cindy account (see the next section). It needs nothing else on the
+machine: no AgentCompass install, no Python, no network service and no npm dependency. A machine that does have the AgentCompass CLI can switch the
+plugin over to it (see [Engines](#engines)).
+
+## A Cindy account is required
+
+**Sign in to a Cindy account before using this plugin.** While Cindy is signed out, every tool of the plugin, `roll`, `status`, `stop` and `cleanup`
+alike, stops at a Setup card ("AI 模型服务", with 打开模型设置 and 取消). Cancelling answers `SETUP_CANCELLED` and the plugin does not run at all, even with
+an explicit `profile`. Codex, Claude and Grok sign-ins do not count, even when Cindy's agents run on them. This was measured on real Cindy 0.1.121
+([evidence](docs/sandbox-real-e2e/README.md)).
+
+The cause is on Cindy's side and the plugin cannot opt out: the live classifier needs `cindy.text` in the manifest, and Cindy requires its own
+account for any plugin that declares a `cindy` capability, on every tool. Two things there do not line up
+([draft upstream issue](docs/sandbox-real-e2e/upstream-issue-draft.md)): the card speaks of image or video capabilities although this plugin only uses
+text, and `ghosts.setupStatus` answers `ready: true` while `ghost_call` is stopped.
 
 ## How it works
 
@@ -60,8 +72,8 @@ keyword, regex or length heuristics on the task text:
   `cindy.text: ["oneshot"]`): one model request with no Agent, no tools, no task and no session, so nothing appears in the task list. It
   spends the user's model quota, including when the answer is `split` or `self`. **Cindy chooses the model**: the one picked on the plugin
   card, else the manifest's `oneshotModel` (this plugin sets none), else the auxiliary chain in Cindy settings. The plugin cannot name it and
-  learns it from the answer (`classifier_model`). A machine whose only sign-in is a Claude subscription has no quick-text model unless the
-  user adds one: Cindy runs this channel on its xd, OpenAI and xAI connections.
+  learns it from the answer (`classifier_model`). Cindy runs this channel on its Cindy account (`xd`), OpenAI, xAI and Anthropic API-key
+  connections; a Claude subscription adds no quick-text model.
 - **the prompt**: the AgentCompass `SCORER_PROMPT`, then `plugin/engine/classifier-cases.json` (the AgentCompass file
   `skills/agent-compass/references/classifier-cases.json`, unchanged: route definitions, rubric, 47 calibration cases), the schema, and last the whole
   task inside an `untrusted_task_evidence` JSON envelope with prompt-injection rules. The answer is validated against `TASK_PROFILE_SCHEMA`
@@ -71,7 +83,7 @@ keyword, regex or length heuristics on the task text:
   task and the instructions share it. The rubric and route definitions always go whole; calibration cases take what is left, whole ones only, in
   an order fixed by the case file alone (live kinds first, one of each kind before any second), never by what the task says. All 47 fit a task
   of up to about 3,800 characters; 35 at 6,000, 20 at 10,000, 6 at 15,000, 1 at 17,000. `decision.classifier_calibration_cases` records
-  `{included, total}`. A task that does not fit with no cases left (about 17,400 characters once JSON-escaped) is refused with
+  `{included, total}`. A task that does not fit with no cases left (about 17,300 characters once JSON-escaped) is refused with
   `task_too_long_for_classifier`, never cut; give it an explicit `profile`.
 - **when the classifier is unavailable**: on any failure the built-in engine **never** falls back to keyword profiling. It returns
   `status: "blocked"` with `profile_source: "unavailable"`, a `decision.reason` of `classifier_<Cindy's code>` (`classifier_no_candidate`,

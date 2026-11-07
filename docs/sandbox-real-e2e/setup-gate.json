@@ -1,0 +1,53 @@
+{
+  "conclusion": "A user who is not signed in to a Cindy account is stopped at the Setup card on every tool of this plugin. The plugin does not run at all.",
+  "host": {
+    "product": "Cindy",
+    "version": "0.1.121",
+    "installer": "cindy-0.1.121-win32-x64-global.exe",
+    "sha256": "6c8e485e4a200a5d41930dc74c3fbadcf23180bb1d886c3cda3b8a5ff056894b",
+    "where": "disposable Windows Sandbox guest",
+    "cindy_account": "not signed in (sidebar shows 未登录)",
+    "model_login": "Codex only, refresh token removed. A Pi agent on chatgpt/gpt-6.1-sol replies normally."
+  },
+  "card": {
+    "title": "AgentCompass 设置",
+    "item": "AI 模型服务",
+    "text": "使用插件声明的图片或视频能力前，需要先连接可用的模型服务",
+    "buttons": ["打开模型设置", "取消"],
+    "screenshot": "setup-card.png"
+  },
+  "calls_from_a_real_agent": [
+    {"tool": "roll", "args": "task only", "card": true},
+    {"tool": "roll", "args": "task and a complete caller profile", "card": true},
+    {"tool": "stop", "args": {"operation": "no-such-operation"}, "card": true},
+    {"tool": "cleanup", "args": {"operation": "no-such-operation"}, "card": true},
+    {"tool": "status", "args": {"operation": "no-such-operation"}, "card": true}
+  ],
+  "answer_after_cancel_every_time": {"ok": false, "errorCode": "SETUP_CANCELLED", "message": "用户取消了插件设置，本次调用未执行。"},
+  "plugin_ran": false,
+  "guest_state_after_the_calls": {"ops": [], "cooldowns": null, "cache_entries": 0, "state_files": [], "plugin_state_dir_exists": false},
+  "upstream_inconsistencies": {
+    "card_text": "The card speaks of image or video capabilities. The plugin declares only cindy.text: [\"oneshot\"].",
+    "setup_status": {"call": "electronAPI.ghosts.setupStatus('agentcompass')", "answer": {"ready": true, "missingGroups": [], "reauth": []}, "while": "ghost_call is stopped at the card"}
+  },
+  "source_at_v0.1.121": {
+    "matches": "apps/desktop/src/main/cindy-brain/ghostHostSetupRequirements.ts:27-31: any manifest with a cindy capability needs client_config:model-provider",
+    "probe": "apps/desktop/src/main/model-access/readiness.ts:11-13: canUseCindyGateway and a stored xd secret",
+    "capability": "apps/desktop/src/main/appCapabilities.ts:31: canUseCindyGateway is true only in cloud mode, committed after auth verifies a real membership",
+    "gate": "apps/desktop/src/main/mcp-integrations/ghost.ts:2171: ensureReady runs for every tool of ghost_call",
+    "main_branch_on_2026-11-07": "readiness.ts and ghostHostSetupRequirements.ts have the same logic"
+  },
+  "attempt_to_pass_the_gate_with_a_placeholder_xd": {
+    "what": "electronAPI.safeStorageStore('api_key', <placeholder>) in this guest, the storage key of the xd secret",
+    "stored": true,
+    "result": "The gate still stopped roll at the same card, because the session is not in cloud mode. The placeholder was removed again.",
+    "removed": {"success": true, "still_present": false},
+    "gate_not_passed": true
+  },
+  "other_ways_past_the_gate_checked": {
+    "electron_fuses": {"wire": "010011011", "RunAsNode": "off", "NodeOptions": "off", "NodeCliInspect": "off", "EmbeddedAsarIntegrity": "on", "OnlyLoadFromAsar": "on"},
+    "meaning": "The packaged build refuses an inspector and a patched app.asar. Getting past the gate without a real sign-in would mean re-signing or faking Cindy's account service. That was not done.",
+    "script_channel": "apps/desktop/src/main/scheduler-host/script-capability-broker.ts: only for trusted XD plugins",
+    "devCall": "registered only in unpackaged builds"
+  }
+}
