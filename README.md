@@ -217,7 +217,7 @@ else runs for real: the market install with nothing else on the machine; the bui
 `split`, `self`, fast mode and quota moves from real Codex telemetry files; the external `agentcompass roll` when opted in, and the
 built-in fallback when the CLI is missing; concurrent rolls across sessions, a forged `session_context`, 12 message pages, a 2.6 MB reply,
 stop to a confirmed `cancelled` state, archive and `manual_cleanup_required` cleanup, drafts that fail verification, and PR #274
-review cases 1, 2, 5, 6 and 7 end to end (all seven are unit-tested). Set `AGENTCOMPASS_CHECKOUT` to an AgentCompass checkout for the CLI scenarios (default `../route_manager`). The latest
+review cases 1, 2, 5, 6 and 7 end to end (all seven are unit-tested). Set `AGENTCOMPASS_CHECKOUT` to an AgentCompass checkout for the CLI scenarios (default `../route_manager`, next to the repository or, from a git worktree, next to its main checkout). The latest
 Windows and Linux runs are in [docs/sandbox-e2e-report.json](docs/sandbox-e2e-report.json), with every scenario's input and host record
 under `docs/sandbox-artifacts/`; machine paths are replaced by `<sandbox>`, `<repo>`, `<home>` and similar names.
 

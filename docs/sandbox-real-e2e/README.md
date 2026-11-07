@@ -20,9 +20,9 @@ Not covered on real Cindy, in any sign-in configuration:
 
 What covers these instead, with a fake host and not real Cindy:
 
-- `npm run test:sandbox` on Windows, 115/115, rerun on 2026-11-07 after the fifth-review fixes;
-- `npm run test:sandbox:linux`, 115/115, last run on 2026-11-07 before the third-, fourth- and fifth-review fixes, not rerun since;
-- `npm test`: 112/112 Node tests and 8 Python tests, none skipped; it compares the case file with `test/fixtures/agentcompass/` by itself.
+- `npm run test:sandbox` on Windows, 115/115, rerun on 2026-11-07 after the sixth-review fixes;
+- `npm run test:sandbox:linux`, 115/115, rerun on 2026-11-07 after the sixth-review fixes;
+- `npm test`: 114/114 Node tests and 8 Python tests, none skipped; it compares the case file with `test/fixtures/agentcompass/` by itself.
 
 They show the plugin's logic against the host contract as read from Cindy's source. They do not show that real Cindy behaves that way.
 

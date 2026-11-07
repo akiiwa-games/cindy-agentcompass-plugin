@@ -31,6 +31,9 @@ import {
   validateCallerProfile,
   validateClassifierProfile,
 } from '../plugin/engine/route.mjs';
+import {defaultCheckout} from '../scripts/default-checkout.mjs';
+
+const OWN_REPO = fileURLToPath(new URL('..', import.meta.url));
 
 const REAL = JSON.parse(fs.readFileSync(new URL('./fixtures/cindy-0.1.121-catalog.json', import.meta.url), 'utf8'));
 // The same catalog with a Claude connection signed in, in the row shape Cindy uses for every harness.
@@ -542,14 +545,9 @@ test('a5: `npm test` itself compares the case file: the fixture is the AgentComp
     assert.ok(WORK_KINDS.includes(row.expected_profile.work_kind), row.id);
     for (const column of Object.keys(row.expected_profile)) assert.ok(column in TASK_PROFILE_SCHEMA.properties, `${row.id}: ${column}`);
   }
-  // Same lookup as test/sandbox-e2e.mjs: the variable, a sibling of this repository, a sibling of its main checkout.
-  const repo = fileURLToPath(new URL('..', import.meta.url));
-  const dotGit = path.join(repo, '.git');
-  const main = fs.existsSync(dotGit) && fs.statSync(dotGit).isFile()
-    ? /^gitdir:\s*(.+?)[\\/]\.git[\\/]worktrees[\\/]/i.exec(fs.readFileSync(dotGit, 'utf8').trim())?.[1] : null;
-  const source = [process.env.AGENTCOMPASS_CHECKOUT, path.join(repo, '..', 'route_manager'), main && path.resolve(main, '..', 'route_manager')]
-    .filter(Boolean).map(dir => path.join(dir, 'skills', 'agent-compass', 'references', 'classifier-cases.json')).find(file => fs.existsSync(file));
-  if (source) assert.equal(text(source), fixture, `the fixture follows ${source}`);
+  // Same lookup as test/sandbox-e2e.mjs.
+  const source = path.join(process.env.AGENTCOMPASS_CHECKOUT || defaultCheckout(OWN_REPO), 'skills', 'agent-compass', 'references', 'classifier-cases.json');
+  if (fs.existsSync(source)) assert.equal(text(source), fixture, `the fixture follows ${source}`);
   else t.diagnostic('no AgentCompass checkout here: compared with the fixture only');
 });
 
@@ -1278,6 +1276,40 @@ test('rule 1 of the AgentCompass prompt is back whole: inputs inlined or public 
 });
 
 const groupedNumber = number => number.toLocaleString('en-US');
+test('m1, sixth review: what the tests read at the top of the repository is copied into the Linux sandbox', () => {
+  const copied = /for part in ([^;]+); do cp -r "\$REPO\/\$part"/.exec(ownSource('test/run-linux-sandbox.sh'))[1].split(' ');
+  const sources = fs.readdirSync(new URL('.', import.meta.url)).filter(name => /\.(mjs|py)$/.test(name)).map(name => [name, ownSource(`test/${name}`)]);
+  // Not .git: the sandbox has none, and defaultCheckout, which reads it, gets its checkout from the variable there.
+  for (const name of fs.readdirSync(OWN_REPO).filter(name => name !== '.git' && !copied.includes(name))) {
+    const read = new RegExp(`['"](\\.\\./)?${name.replace(/\W/g, '\\$&')}['"/]`);
+    for (const [file, source] of sources) assert.doesNotMatch(source, read, `${file} reads ${name}, which test/run-linux-sandbox.sh does not copy`);
+  }
+});
+
+test('m1, sixth review: the default AgentCompass checkout is found from a git worktree, and the Linux launcher uses it', () => {
+  const top = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-checkout-'));
+  try {
+    const main = path.join(top, 'projects', 'plugin');
+    const worktree = path.join(top, 'worktrees', 'x', 'plugin');
+    const nextToMain = path.join(top, 'projects', 'route_manager');
+    const nextToWorktree = path.join(top, 'worktrees', 'x', 'route_manager');
+    fs.mkdirSync(path.join(main, '.git'), {recursive: true});
+    fs.mkdirSync(worktree, {recursive: true});
+    fs.writeFileSync(path.join(worktree, '.git'), `gitdir: ${main.split(path.sep).join('/')}/.git/worktrees/x\n`);
+    assert.equal(defaultCheckout(worktree), nextToWorktree, 'none there: the name it would have');
+    fs.mkdirSync(nextToMain);
+    assert.equal(defaultCheckout(worktree), nextToMain);
+    assert.equal(defaultCheckout(main), nextToMain);
+    fs.mkdirSync(nextToWorktree);
+    assert.equal(defaultCheckout(worktree), nextToWorktree, 'its own sibling first');
+  } finally {
+    fs.rmSync(top, {recursive: true, force: true});
+  }
+  const launcher = ownSource('scripts/run-linux-sandbox.mjs');
+  assert.match(launcher, /AGENTCOMPASS_CHECKOUT_SRC: linux\(process\.env\.AGENTCOMPASS_CHECKOUT \|\| defaultCheckout\(repo\)\)/);
+  assert.match(ownSource('test/sandbox-e2e.mjs'), /process\.env\.AGENTCOMPASS_CHECKOUT \|\| defaultCheckout\(REPO\)/);
+});
+
 test('m1: the documents state the limit and the first signal lost as they are measured', () => {
   let limit = 0;
   for (let low = 1, high = ONESHOT_PROMPT_LIMIT; low <= high;) {

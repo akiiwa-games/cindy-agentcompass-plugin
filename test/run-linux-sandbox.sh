@@ -5,7 +5,7 @@
 #   wsl -d docker-desktop -- sh /mnt/host/<drive>/<path>/cindy-agentcompass-plugin/test/run-linux-sandbox.sh
 #
 #   CINDY_SANDBOX_CACHE       directory holding the two runtime archives below (downloaded with wget when missing)
-#   AGENTCOMPASS_CHECKOUT_SRC AgentCompass source checkout (default: ../route_manager next to this repository)
+#   AGENTCOMPASS_CHECKOUT_SRC AgentCompass source checkout (default: ../route_manager next to this repository; scripts/run-linux-sandbox.mjs also finds it from a git worktree)
 #   CINDY_SANDBOX             tmpfs work directory, removed on exit (default: /run/cindy-sandbox)
 set -eu
 
@@ -36,7 +36,7 @@ tar -xzf "$CACHE/$NODE_TGZ" -C "$SANDBOX/runtime/node" --strip-components=1
 tar -xzf "$CACHE/$PY_TGZ" -C "$SANDBOX/runtime"
 cp -r "$CHECKOUT_SRC/agentcompass" "$CHECKOUT_SRC/skills" "$CHECKOUT_SRC/pyproject.toml" "$SANDBOX/AgentCompass/"
 find "$SANDBOX/AgentCompass" -name __pycache__ -type d -prune -exec rm -rf {} +
-for part in package.json plugin scripts test docs; do cp -r "$REPO/$part" "$SANDBOX/plugin-repo/"; done
+for part in package.json README.md plugin scripts test docs; do cp -r "$REPO/$part" "$SANDBOX/plugin-repo/"; done
 
 NODE=$SANDBOX/runtime/node/bin/node
 PY=$SANDBOX/runtime/python/bin/python3

@@ -16,7 +16,7 @@
      "ok": true,
      "result": {
       "status": "send_rejected",
-      "operation": "b5a85226760727a92ddf10f4d188bf923ff90f69",
+      "operation": "7e4f2718e99d6212a96519eeee04d023c9b1abf6",
       "taskId": "task-1",
       "runId": null,
       "task_id": "task-1",
@@ -32,7 +32,7 @@
        "ghost_id": "agentcompass",
        "tool": "cleanup",
        "args": {
-        "operation": "b5a85226760727a92ddf10f4d188bf923ff90f69"
+        "operation": "7e4f2718e99d6212a96519eeee04d023c9b1abf6"
        }
       },
       "next_action": "No input was accepted. Cleanup archives or hands back the draft."
@@ -49,7 +49,7 @@
      "ok": true,
      "result": {
       "status": "send_rejected",
-      "operation": "b5a85226760727a92ddf10f4d188bf923ff90f69",
+      "operation": "7e4f2718e99d6212a96519eeee04d023c9b1abf6",
       "taskId": "task-1",
       "task_id": "task-1",
       "executed": false,
@@ -61,7 +61,7 @@
        "ghost_id": "agentcompass",
        "tool": "cleanup",
        "args": {
-        "operation": "b5a85226760727a92ddf10f4d188bf923ff90f69"
+        "operation": "7e4f2718e99d6212a96519eeee04d023c9b1abf6"
        }
       },
       "next_action": "No input was accepted. Cleanup archives or hands back the draft."
@@ -78,7 +78,7 @@
      "ok": true,
      "result": {
       "status": "cleaned",
-      "operation": "b5a85226760727a92ddf10f4d188bf923ff90f69",
+      "operation": "7e4f2718e99d6212a96519eeee04d023c9b1abf6",
       "taskId": "task-1",
       "task_id": "task-1"
      }
@@ -98,7 +98,7 @@
   },
   {
    "name": "create",
-   "requestKey": "b5a85226760727a92ddf10f4d188bf923ff90f69:create",
+   "requestKey": "7e4f2718e99d6212a96519eeee04d023c9b1abf6:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6.1-sol",
@@ -112,7 +112,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "b5a85226760727a92ddf10f4d188bf923ff90f69:send",
+   "requestKey": "7e4f2718e99d6212a96519eeee04d023c9b1abf6:send",
    "chars": 437
   },
   {
@@ -137,7 +137,7 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 29083,
+   "chars": 28428,
    "expectJson": true,
    "callId": "call-1"
   }
@@ -155,7 +155,7 @@
  ],
  "sent": [],
  "prepared": {
-  "operation": "b5a85226760727a92ddf10f4d188bf923ff90f69",
+  "operation": "7e4f2718e99d6212a96519eeee04d023c9b1abf6",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -294,7 +294,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [d8fb79cb]\nFIXTURE-SCENARIO: ok review2-rejected\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [1a87cba7]\nFIXTURE-SCENARIO: ok review2-rejected\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>/work dir",
   "mappings": [],
   "attempts": 1

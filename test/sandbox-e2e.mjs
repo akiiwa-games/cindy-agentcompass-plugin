@@ -11,7 +11,7 @@
 // not AgentCompass, would run the worker). Real-host evidence is docs/CINDY_REAL_ACCEPTANCE_AND_CANCEL_FIX.md.
 //
 // Environment:
-//   AGENTCOMPASS_CHECKOUT   AgentCompass source checkout (default: ../route_manager next to this repository)
+//   AGENTCOMPASS_CHECKOUT   AgentCompass source checkout (default: ../route_manager next to this repository, or next to its main checkout from a git worktree)
 //   AGENTCOMPASS_PYTHON     Python 3.11+ that runs it (default: python3, then python)
 //   CINDY_SANDBOX_ROOT      new directory for the isolated home (default: a fresh temporary directory)
 //   CINDY_SANDBOX_REPORT    report path (default: <sandbox>/report/sandbox-e2e-report.json)
@@ -25,25 +25,11 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawn, spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {defaultCheckout} from '../scripts/default-checkout.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WIN = process.platform === 'win32';
-function resolveDefaultCheckout() {
-  const sibling = path.join(REPO, '..', 'route_manager');
-  if (fs.existsSync(sibling)) return sibling;
-  try {
-    const dotGit = path.join(REPO, '.git');
-    if (fs.existsSync(dotGit) && fs.statSync(dotGit).isFile()) {
-      const m = /^gitdir:\s*(.+?)[\\/]\.git[\\/]worktrees[\\/]/i.exec(fs.readFileSync(dotGit, 'utf8').trim());
-      if (m) {
-        const mainSibling = path.resolve(m[1], '..', 'route_manager');
-        if (fs.existsSync(mainSibling)) return mainSibling;
-      }
-    }
-  } catch { /* ignore */ }
-  return sibling;
-}
-const CHECKOUT = path.resolve(process.env.AGENTCOMPASS_CHECKOUT || resolveDefaultCheckout());
+const CHECKOUT = path.resolve(process.env.AGENTCOMPASS_CHECKOUT || defaultCheckout(REPO));
 const ROOT = path.resolve(process.env.CINDY_SANDBOX_ROOT || fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-sandbox-')));
 const LABEL = process.env.CINDY_SANDBOX_LABEL || process.platform;
 const SESSION = 'cindy-session-1';

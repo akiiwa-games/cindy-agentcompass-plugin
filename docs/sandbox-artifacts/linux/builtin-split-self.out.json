@@ -346,25 +346,25 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 29079,
+   "chars": 28424,
    "expectJson": true,
    "callId": "call-1"
   },
   {
    "kind": "oneshot_text",
-   "chars": 29029,
+   "chars": 28374,
    "expectJson": true,
    "callId": "call-2"
   },
   {
    "kind": "oneshot_text",
-   "chars": 29019,
+   "chars": 28364,
    "expectJson": true,
    "callId": "call-3"
   },
   {
    "kind": "oneshot_text",
-   "chars": 28986,
+   "chars": 28331,
    "expectJson": true,
    "callId": "call-4"
   }
