@@ -207,7 +207,8 @@ Windows and Linux runs are in [docs/sandbox-e2e-report.json](docs/sandbox-e2e-re
 under `docs/sandbox-artifacts/`; machine paths are replaced by `<sandbox>`, `<repo>`, `<home>` and similar names.
 
 The real Cindy 0.1.121 run in [docs/real-cindy-0.1.121/](docs/real-cindy-0.1.121/acceptance.json), with every tool call and answer, predates the
-quick-text classifier. Its acceptance on real Cindy is tracked in [docs/sandbox-real-e2e/](docs/sandbox-real-e2e/README.md).
+quick-text classifier. The classifier itself has not been covered on real Cindy, because that needs a Cindy account sign-in; only the fake-host suites
+above and `npm test` cover it. See [docs/sandbox-real-e2e/](docs/sandbox-real-e2e/README.md).
 
 ## How AgentCompass fits with the other hosts
 

@@ -1,13 +1,38 @@
 # Real Cindy acceptance of the quick-text classifier
 
-Status on 2026-11-07: **classification is not accepted on real Cindy.** Every plugin tool stops at Cindy's Setup gate unless Cindy is signed in to a
-Cindy account, and this run has no such account. The fake-host suites (`npm run test:sandbox`, `npm run test:sandbox:linux`) are regression tests,
-not this acceptance.
+Conclusion on 2026-11-07:
 
-## Conclusion so far: the Setup gate
+1. **Setup gate, measured on real Cindy 0.1.121: a user who is not signed in to a Cindy account is stopped on every tool of this plugin.**
+2. **The classification chain is not covered on real Cindy, because that needs a Cindy account sign-in.** The user chose not to sign in for this run.
+   Nothing below is a result of the classifier on real Cindy.
 
-**A user who is not signed in to a Cindy account is stopped on every tool of this plugin.** Evidence: [setup-gate.json](setup-gate.json),
-[setup-card.png](setup-card.png).
+## What is and is not covered
+
+Not covered on real Cindy, in any sign-in configuration:
+
+- the default route returning valid JSON with `profile_source: "classifier"`, and which model Cindy actually used;
+- the realtime-loop task and the "write a ticket-grabbing script" counterexample;
+- a task over 15,000 characters being classified, and one over about 17,300 being refused;
+- `blocked` when the classifier is unavailable, including `NO_CANDIDATE`, and the cooldown record and hint after a failure;
+- no leftovers in the task list;
+- the `split` and `self` gates deciding from the profile, and a caller `profile` running through;
+- a Codex + Claude + Grok configuration and a Claude-only configuration: only the Codex login was ever copied into the guest, and only to reach the gate.
+
+What covers these instead, with a fake host and not real Cindy:
+
+- `npm run test:sandbox` on Windows, 115/115, rerun on 2026-11-07 for this conclusion;
+- `npm run test:sandbox:linux`, 115/115, last run on 2026-11-07 before the documentation-only commits, not rerun;
+- `npm test`: 82/82 Node tests and 8 Python tests with `AGENTCOMPASS_CHECKOUT` set.
+
+They show the plugin's logic against the host contract as read from Cindy's source. They do not show that real Cindy behaves that way.
+
+To cover it later: sign in to a Cindy account in a disposable guest and run the items above. A signed-in account brings a default model on the Cindy AI
+gateway, which this run could not reach, so natural `NO_CANDIDATE` will be rare; pin the plugin card to an unavailable model to reach `blocked`. The driving
+scripts were scratch files and are not kept.
+
+## The Setup gate
+
+Evidence: [setup-gate.json](setup-gate.json), [setup-card.png](setup-card.png).
 
 | Call from a real agent (Pi on `chatgpt/gpt-6.1-sol`, signed out of Cindy) | Result |
 | --- | --- |
@@ -46,7 +71,8 @@ Cindy or faking its account service. That was not done.
 - Zero-configuration probe before start: no `agentcompass`, `python` or `node` on `PATH`, no `~/.agent-compass` ([zero-config-probe.json](zero-config-probe.json)).
 - Cindy started with its own "skip login". It downloads 0.1.128 in the background (`getUpdateStatus`: `ready`) and `autoRelaunchOnIdle` is `false`; a forced
   restart stays on 0.1.121.
-- Credentials: a copy of the Codex login, `refresh_token` emptied so that the host's login cannot be rotated away. Cindy accepted it. It stayed in the guest.
+- Credentials: a copy of the Codex login only, `refresh_token` emptied so that the host's login cannot be rotated away. Cindy accepted it. The guest has been
+  destroyed with it.
 - Install: `ghost_forge_pack` and `ghost_forge_install` from a real agent. The consent dialog lists the quick-text channel ([install-consent.png](install-consent.png)).
 
 ## Other findings on real 0.1.121
