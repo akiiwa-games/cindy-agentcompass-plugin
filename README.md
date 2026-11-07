@@ -86,8 +86,8 @@ keyword, regex or length heuristics on the task text:
   an order computed from the fields of the case file alone (`calibrationCaseOrder`), never from what the task says: the `multi_task` case, a live case
   paired with a counterexample that writes or fixes code, one case of each `reasoning_depth` rarest first, then the other pairs (a live case never goes in
   without its counterexample), the rest of the rarest depths, and one of each `work_kind` in turn. All 47 fit a task of up to about 6,200 characters;
-  33 at 10,000, 21 at 15,000, 10 at 17,000, 6 at 18,000. Every one of those signals is there up to about 18,250 characters; above that they go in reverse
-  order (a live pair at about 18,900, `multi_task` at about 19,350, depth 4 last). `decision.classifier_calibration_cases` records `{included, total}`. A task
+  33 at 10,000, 21 at 15,000, 10 at 17,000, 6 at 18,000. Every one of those signals is there up to about 18,250 characters; above that, whatever still fits goes in, in that
+  order, so depth 3 goes first, a live pair at about 18,900, `multi_task` at about 19,350 and depth 4 last. `decision.classifier_calibration_cases` records `{included, total}`. A task
   that does not fit with no cases left (about 19,700 characters once JSON-escaped) is refused with `task_too_long_for_classifier`, never cut; give it
   an explicit `profile`.
 - **when the classifier is unavailable**: on any failure the built-in engine **never** falls back to keyword profiling. It returns
