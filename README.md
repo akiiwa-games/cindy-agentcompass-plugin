@@ -47,9 +47,11 @@ Cindy session ──ghost_call {tool:"roll", args:{task}}──▶ plugin/main.j
   `plugin/assets/icon.png` (from `scripts/make_icon.mjs`) and `en`, `zh-CN`, `ja`, `ko` resources in `plugin/locales/`, as the official
   plugin repository requires.
 - `plugin/engine/`: the built-in router. `route.mjs` holds the live model classifier prompt/schema/validator/cache, the profile-driven
-  split and self gates, the catalog scoring, the quota reading and fast mode; `catalog.mjs`, `profiler.mjs` and `allocator.mjs` are the
-  AgentCompass model catalog, profile schema validator and allocator (MIT, vendored); `classifier-cases.json` is the AgentCompass rubric and
-  calibration set, unchanged.
+  split and self gates, the catalog scoring, the quota reading and fast mode; `catalog.mjs`, `profiler.mjs`, `allocator.mjs`, `quota.mjs` and
+  `continuity.mjs` are the AgentCompass model catalog, profile schema validator and allocator as ported to
+  [`magpie-agentcompass-router`](https://github.com/akiiwa-games/magpie-agentcompass-router) (MIT): each is its source at the commit in its header,
+  with only the header and import paths added by `scripts/vendor_engine.mjs`, and a test pins the digests. The router only calls the allocator with a
+  checked profile, never its keyword profiling. `classifier-cases.json` is the AgentCompass rubric and calibration set, unchanged.
 - `plugin/main.js`: the logic page. Requires the experimental tasks API, puts the classification to Cindy's quick-text channel when the
   built-in engine needs a live task profile, picks the one catalog route that exactly matches the routed
   harness/connection/model/effort/fast setting, creates and checks the draft, sends the full prompt once, and collects results.
@@ -110,6 +112,11 @@ keyword, regex or length heuristics on the task text:
 - **an explicit `profile`** must give every field in the tool schema's `required` list, otherwise `invalid_caller_profile` and nothing starts;
   `profile: null` is the same as no profile.
   The external CLI classifies for itself and takes no profile: passing one answers `profile_not_supported_by_cli`.
+- **realtime_loop**: a live-loop task is scored on speed per turn as well, at the responsiveness floor of AgentCompass. A too-slow effort steps down
+  only to an effort Cindy offers for that route; when none is fast enough and capable enough, `roll` is `blocked` with reason `no_model_meets_floor`
+  and nothing starts.
+- **Spark**: `gpt-5.3-codex-spark` is never routed to, as in AgentCompass, even when Cindy lists it; `decision.not_routed` names it. Other models the
+  catalog leaves off by default stay routable when Cindy lists them.
 - **split**: when the profile has `multi_task: true`, `roll` returns `status: "split"` with `task_count`; nothing starts. Roll each task
   separately.
 - **self**: when the profile has `self: true` (or `delegate: false`), `roll` returns `status: "self"`; nothing starts.
@@ -219,7 +226,8 @@ built-in fallback when the CLI is missing; concurrent rolls across sessions, a f
 stop to a confirmed `cancelled` state, archive and `manual_cleanup_required` cleanup, drafts that fail verification, and PR #274
 review cases 1, 2, 5, 6 and 7 end to end (all seven are unit-tested). Set `AGENTCOMPASS_CHECKOUT` to an AgentCompass checkout for the CLI scenarios (default `../route_manager`, next to the repository or, from a git worktree, next to its main checkout). The latest
 Windows and Linux runs are in [docs/sandbox-e2e-report.json](docs/sandbox-e2e-report.json), with every scenario's input and host record
-under `docs/sandbox-artifacts/`; machine paths are replaced by `<sandbox>`, `<repo>`, `<home>` and similar names.
+under `docs/sandbox-artifacts/`; machine paths are replaced by `<sandbox>`, `<repo>`, `<home>` and similar names. `npm run test:sandbox:linux` updates its
+part itself; `npm run test:sandbox` writes only to its sandbox unless `CINDY_REPORT_MERGE_INTO` names that file, and its artifacts are then copied by hand.
 
 The real Cindy 0.1.121 run in [docs/real-cindy-0.1.121/](docs/real-cindy-0.1.121/acceptance.json), with every tool call and answer, predates the
 quick-text classifier. The classifier itself has not been covered on real Cindy, because that needs a Cindy account sign-in; only the fake-host suites

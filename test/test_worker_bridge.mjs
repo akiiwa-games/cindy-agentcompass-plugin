@@ -471,7 +471,7 @@ test('m2 & m4 regression: config.json validation matches README (timeout 100..65
   fs.rmSync(path.join(p.stateHome, 'config.json'), {force: true});
   const minimalOnlyCatalog = {
     models: [
-      {route: {agentKind: 'pi', providerId: 'openai', model: 'chatgpt/gpt-5.3-codex-spark', effort: 'minimal', fastMode: false}, efforts: ['minimal'], supportsFastMode: false},
+      {route: {agentKind: 'pi', providerId: 'openai', model: 'chatgpt/gpt-6-luna', effort: 'minimal', fastMode: false}, efforts: ['minimal'], supportsFastMode: false},
     ],
   };
   const [floorBlocked] = rpc(p, [prepare(p, 'Prove formal distributed consensus safety.', 1, minimalOnlyCatalog, withProfile({

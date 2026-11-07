@@ -33,6 +33,9 @@ import {
   validateClassifierProfile,
 } from '../plugin/engine/route.mjs';
 import {CASE_FILE, defaultCheckout, findCheckout} from '../scripts/default-checkout.mjs';
+import {VENDORED_SOURCES, sourceText, vendoredText} from '../scripts/vendor_engine.mjs';
+import {resolveModelSpec} from '../plugin/engine/catalog.mjs';
+import {PROFILE_INTEGERS} from '../plugin/engine/profiler.mjs';
 
 const OWN_REPO = fileURLToPath(new URL('..', import.meta.url));
 
@@ -437,12 +440,12 @@ test('visual_analysis, computer_use, realtime_loop passthrough, multi-Codex quot
   assert.equal(emptyEffort.status, 'native');
   assert.equal(emptyEffort.route.bundle.effort, '', 'preserves empty effort on launch route');
 
-  const sparkOnlyCatalog = {models: [REAL.models.at(-1)]};
-  const sparkAlgo = routeWithProfile('Implement a standalone algorithm.', {work_kind: 'self_contained_code', reasoning_depth: 2, code_complexity: 2}, sparkOnlyCatalog);
-  assert.equal(sparkAlgo.status, 'native', 'all host-offered efforts are ranked when static alias efforts do not overlap');
-  assert.equal(sparkAlgo.route.bundle.effort, 'xhigh');
-  const sparkRoutine = routeWithProfile('Batch rename foo to bar in all filenames.', {work_kind: 'bounded_bulk_work', reasoning_depth: 1, code_complexity: 1}, sparkOnlyCatalog);
-  assert.equal(sparkRoutine.route.bundle.effort, 'minimal', 'with no alias catalog.mjs resolves Spark to gpt-6.1-sol, whose minimal effort clears the routine floor');
+  const sparseEffortCatalog = {models: [{route: {agentKind: 'pi', providerId: 'openai', model: 'chatgpt/gpt-6.1-sol', effort: 'xhigh', fastMode: false}, efforts: ['minimal', 'xhigh']}]};
+  const sparseAlgo = routeWithProfile('Implement a standalone algorithm.', {work_kind: 'self_contained_code', reasoning_depth: 2, code_complexity: 2}, sparseEffortCatalog);
+  assert.equal(sparseAlgo.status, 'native', 'all host-offered efforts are ranked when static alias efforts do not overlap');
+  assert.equal(sparseAlgo.route.bundle.effort, 'xhigh');
+  const sparseRoutine = routeWithProfile('Batch rename foo to bar in all filenames.', {work_kind: 'bounded_bulk_work', reasoning_depth: 1, code_complexity: 1}, sparseEffortCatalog);
+  assert.equal(sparseRoutine.route.bundle.effort, 'minimal', 'minimal clears the routine floor on gpt-6.1-sol');
 
   const lunaOnlyCatalog = {models: [REAL.models.find(r => r.route.model === 'gpt-6-luna')]};
   const lunaDebug = routeWithProfile('Fix translation.py.', {work_kind: 'debug_review', reasoning_depth: 2, code_complexity: 2, context_scale: 2, hallucination_risk: 3}, lunaOnlyCatalog);
@@ -633,11 +636,11 @@ test('m4 regression: cache key incorporates prompt/schema digest and structured 
   assert.match(structuredPrompt, /"context":\s*"service-a"/);
   assert.match(structuredPrompt, /"notes":\s*"keep backwards compat"/);
 
-  // When no catalog model meets the capability floor (e.g. spark minimal-only on a frontier direction_reasoning task),
+  // When no catalog model meets the capability floor (e.g. a minimal-only model on a frontier direction_reasoning task),
   // routeTask returns a structured blocked result with decision.reason === 'no_model_meets_floor' and never throws.
-  const minimalSparkCatalog = {
+  const minimalOnlyCatalog = {
     models: [
-      {route: {agentKind: 'pi', providerId: 'openai', model: 'chatgpt/gpt-5.3-codex-spark', effort: 'minimal', fastMode: false}, efforts: ['minimal'], supportsFastMode: false},
+      {route: {agentKind: 'pi', providerId: 'openai', model: 'chatgpt/gpt-6-luna', effort: 'minimal', fastMode: false}, efforts: ['minimal'], supportsFastMode: false},
     ],
   };
   const floorBlocked = routeWithProfile('Prove convergence of the distributed consensus protocol.', {
@@ -648,7 +651,7 @@ test('m4 regression: cache key incorporates prompt/schema digest and structured 
     context_scale: 3,
     hallucination_risk: 3,
     error_cost: 3,
-  }, minimalSparkCatalog);
+  }, minimalOnlyCatalog);
   assert.equal(floorBlocked.status, 'blocked');
   assert.equal(floorBlocked.decision.reason, 'no_model_meets_floor');
   assert.equal(floorBlocked.decision.work_kind, 'direction_reasoning');
@@ -878,6 +881,7 @@ const TEXT_CALL_EXCEPTIONS = {
       "newSet(['low','medium','high'])", "newSet(['unknown','low','normal','high'])", "newSet(['1','2','3','>3'])", 'newSet(INTERACTION_STYLES)',
       'Object.entries(PROFILE_INTEGERS)', "newSet(['exploration_analysis','research_packet','web_research','text_in_text_out'])",
       'Object.keys(KIND_TRAITS)', "newSet(['context_scale','divergence','local_only','realtime_loop'])", 'newSet(CLASSIFIER_REQUIRED_KEYS)',
+      "newSet(['gpt-5.3-codex-spark'])",
       "newSet([...ALLOWED_PROFILE_KEYS,'delegate'])", "k!=='other_or_mixed'", "k!=='dot_execution'", "key!=='reason'",
       'for(const[field,[min,max]]ofPROFILE_INTEGER_ENTRIES)',
       "for(constflagof['needs_visual','needs_gui','local_only','realtime_loop','multi_task','self','wants_fast','delegate'])",
@@ -913,7 +917,7 @@ const TEXT_CALL_EXCEPTIONS = {
       'for(constmonthofdesc(year))', 'for(constdayofdesc(month))', 'for(constnameoffiles)',
     ],
     "the catalog and the allocator's ranking": [
-      ['runnable.length', 2], ['skipped.length', 2], 'row.efforts?.length', "(spec.efforts||[]).includes('high')", ['offered.length', 2],
+      ['runnable.length', 2], ['notRouted.length', 2], '...newSet(ranked.allCandidates.flatMap(candidate=>candidate.excluded))', ['skipped.length', 2], 'row.efforts?.length', "(spec.efforts||[]).includes('high')", ['offered.length', 2],
       'c.notes.length', 'candidates.filter(c=>c.notes.length).length', 'best.notes.length', 'candidates.slice(1,6)', ['newSet()', 3],
       "newSet(rows.filter(r=>r.route.agentKind==='codex').map(r=>r.route.providerId))", ['for(constrowofrows)', 2], 'for(constrofranked.ranking)',
       'for(consteffortofrow._efforts)', "r.route.agentKind==='codex'", "codex.status!=='unknown'", "q?.status==='exhausted'", "q?.status==='high'",
@@ -1036,7 +1040,7 @@ test('r3: the static scan catches every reviewed variant, walks all own files, a
   assert.deepEqual(findTaskTextHeuristics('await node(msg,"prepare",{task,catalog}); const operation=digest(id+task);'), []);
 
   const pluginDir = fileURLToPath(new URL('../plugin/', import.meta.url));
-  const vendored = new Set(['engine/allocator.mjs', 'engine/catalog.mjs', 'engine/profiler.mjs']);
+  const vendored = new Set(['engine/allocator.mjs', 'engine/catalog.mjs', 'engine/continuity.mjs', 'engine/profiler.mjs', 'engine/quota.mjs']);
   const own = fs.readdirSync(pluginDir, {recursive: true}).map(rel => String(rel).split(path.sep).join('/'))
     .filter(rel => /\.(?:js|cjs|mjs)$/.test(rel) && !vendored.has(rel));
   assert.deepEqual(own.sort(), ['engine/route.mjs', 'main.js', 'worker.cjs'], 'a new source file is scanned too: name it here');
@@ -1373,6 +1377,100 @@ test('m1, seventh review: a5 goes without a checkout only when there is none: on
     fs.rmSync(top, {recursive: true, force: true});
   }
   assert.match(ownSource('test/sandbox-e2e.mjs'), /env: \{AGENTCOMPASS_PYTHON: python\.exe, AGENTCOMPASS_CHECKOUT: CHECKOUT\}/, 'the sandbox names its checkout to the unit tests');
+});
+
+// akiiwa-games/magpie-agentcompass-router at this commit, src/<source>.js. To update: run scripts/vendor_engine.mjs, then these digests.
+const MAGPIE_COMMIT = '34448f9e9b82a2506fbda7481371e55526757c14';
+const MAGPIE_SHA256 = {
+  catalog: '14afd3ed09560d05a76e501df3621365a73e7d5edc9e619e2168233f0c15811b',
+  allocator: '7a02250ca7ea943639d580b512fefc7e258aa28763521a365f5bf0ca00dd0c51',
+  profiler: 'a70912f3ff60f15277f8751742f2150ae3f1740399fc547fcaea6cb1fb61a6d1',
+  quota: 'a6bf8b615bcfebbf2090731a766def085b6f2f61cb5111ce4076109ffc74f2a4',
+  continuity: '7d0d2549822d8aa3ae5210787606c5a0bedb54435f8320c187e0171fddea2a77',
+};
+
+test('Magpie sync: the vendored engine is the source at its commit, byte for byte but for the header and the import paths', () => {
+  assert.deepEqual(Object.keys(VENDORED_SOURCES).sort(), Object.keys(MAGPIE_SHA256).sort());
+  for (const [name, digest] of Object.entries(MAGPIE_SHA256)) {
+    const vendored = ownSource(`plugin/engine/${name}.mjs`).replace(/\r\n/g, '\n');
+    const source = sourceText(vendored);
+    assert.equal(crypto.createHash('sha256').update(source).digest('hex'), digest, name);
+    assert.equal(vendoredText(name, source, MAGPIE_COMMIT), vendored, `${name}: only the header and import paths`);
+    assert.ok(vendored.split('\n')[0].includes(`src/${VENDORED_SOURCES[name]}.js at ${MAGPIE_COMMIT} `), name);
+  }
+});
+
+test('Magpie sync: the allocator never profiles for itself: every validated profile has the depth it takes as a profile', () => {
+  // rankCandidates only falls back to inferTaskProfile when reasoning_depth is falsy, and the task text is not handed to it either.
+  assert.deepEqual(PROFILE_INTEGERS.reasoning_depth, [1, 4]);
+  assert.match(ownSource('plugin/engine/route.mjs'), /rankCandidates\(profile, \{candidateModels: /);
+});
+
+const OK_QUOTA = {source: 'test', status: 'ok', used_percent: 10};
+const liveProfile = overrides => makeProfile({work_kind: 'general_implementation', reasoning_depth: 1, code_complexity: 3, realtime_loop: true, ...overrides});
+const realRow = model => REAL.models.find(row => row.route.model === model);
+
+test('Magpie sync: the vendored validator keeps realtime_loop, so route.mjs no longer restores it', () => {
+  for (const validate of [validateClassifierProfile, validateCallerProfile]) {
+    assert.equal(validate(liveProfile()).realtime_loop, true);
+    assert.equal(validate(liveProfile({realtime_loop: false})).realtime_loop, false);
+    assert.throws(() => validate(liveProfile({realtime_loop: 'yes'})), /realtime_loop/);
+  }
+  assert.doesNotMatch(ownSource('plugin/engine/route.mjs'), /normalized\.realtime_loop\s*=/);
+});
+
+test('Magpie sync: a live loop trades effort for speed among what Cindy offers; any other task routes as before', () => {
+  const live = routeTask('x', REAL, {quota: OK_QUOTA, profile: liveProfile(), useCache: false});
+  const calm = routeTask('x', REAL, {quota: OK_QUOTA, profile: liveProfile({realtime_loop: false}), useCache: false});
+  assert.deepEqual([live.status, calm.status], ['native', 'native']);
+  assert.deepEqual([live.route.bundle.effort, calm.route.bundle.effort], ['medium', 'high']);
+  assert.ok(live.decision.components.responsiveness >= 0.5, JSON.stringify(live.decision.components));
+  assert.equal('responsiveness' in calm.decision.components, false, 'no responsiveness outside a live loop');
+  assert.equal(live.decision.realtime_loop, true);
+  const row = REAL.models.find(candidate => candidate.route.model === live.route.bundle.model && candidate.route.providerId === live.route.bundle.providerId);
+  assert.ok(row.efforts.includes(live.route.bundle.effort), 'an effort this row offers');
+
+  // Only the too-slow effort on offer: stepping down would launch something Cindy did not offer, so nothing starts.
+  const astra = realRow('gpt-6-astra');
+  const onlyHigh = {models: [{...astra, efforts: ['high'], route: {...astra.route, effort: 'high'}}]};
+  const stuck = routeTask('x', onlyHigh, {quota: OK_QUOTA, profile: liveProfile(), useCache: false});
+  assert.deepEqual([stuck.status, stuck.decision.reason], ['blocked', 'no_model_meets_floor']);
+  assert.match(stuck.error, /live loop/);
+  const slow = routeTask('x', {models: [{...astra, efforts: ['high', 'max']}]}, {quota: OK_QUOTA, profile: liveProfile(), useCache: false});
+  assert.deepEqual([slow.status, slow.decision.reason], ['blocked', 'no_model_meets_floor']);
+  assert.ok(slow.decision.excluded.some(reason => /responsiveness .* below the realtime_loop floor/.test(reason)), JSON.stringify(slow.decision.excluded));
+  assert.equal(routeTask('x', onlyHigh, {quota: OK_QUOTA, profile: liveProfile({realtime_loop: false}), useCache: false}).route.bundle.effort, 'high');
+  // Nothing fits at any effort: the refusal outside a live loop says what it always said.
+  const luna = realRow('gpt-6-luna');
+  const tooHard = routeTask('x', {models: [{...luna, efforts: ['minimal'], route: {...luna.route, effort: 'minimal'}}]}, {quota: OK_QUOTA, profile: makeProfile({work_kind: 'direction_reasoning', reasoning_depth: 4, code_complexity: 3, context_scale: 3, divergence: 3, hallucination_risk: 3, error_cost: 3}), useCache: false});
+  assert.deepEqual([tooHard.status, tooHard.decision.reason], ['blocked', 'no_model_meets_floor']);
+  assert.doesNotMatch(tooHard.error, /live loop/);
+  assert.equal('excluded' in tooHard.decision, false);
+});
+
+test('Magpie sync: Spark is off, as in AgentCompass, whose accounts have no such model: Cindy listing it starts nothing on it', () => {
+  const spark = realRow('chatgpt/gpt-5.3-codex-spark');
+  assert.ok(spark, 'the real catalog lists Spark');
+  assert.equal(resolveModelSpec('gpt-5.3-codex-spark').spec.disabled_by_default, true);
+  for (const realtime_loop of [false, true]) {
+    for (const work_kind of ['exploration_analysis', 'general_implementation', 'bounded_bulk_work']) {
+      for (const reasoning_depth of [1, 2]) {
+        const routed = routeTask('x', REAL, {quota: OK_QUOTA, profile: makeProfile({work_kind, reasoning_depth, code_complexity: 0, realtime_loop}), useCache: false});
+        assert.equal(routed.status === 'native' && /spark/.test(routed.route.bundle.model), false, JSON.stringify(routed.route?.bundle));
+        assert.ok(routed.status !== 'native' || routed.decision.not_routed.includes(spark.route.model), 'the decision says it was left out');
+      }
+    }
+  }
+  const only = routeTask('x', {models: [spark]}, {quota: OK_QUOTA, profile: makeProfile(), useCache: false});
+  assert.deepEqual([only.status, only.decision.reason, only.decision.not_routed], ['blocked', 'no_runnable_model', [spark.route.model]]);
+  assert.match(only.error, /gpt-5\.3-codex-spark/);
+  assert.doesNotMatch(only.error, /no Claude, Codex or Pi model/);
+  // The other models the catalog leaves off by default are AgentCompass routes or were routable already: Fable stays one.
+  const fable = {route: {agentKind: 'cc', providerId: 'anthropic', model: 'claude-fable-5-1', effort: 'high', fastMode: false}, efforts: ['high']};
+  assert.equal(resolveModelSpec('claude-fable-5-1').spec.disabled_by_default, true);
+  const fableRoute = routeTask('x', {models: [fable]}, {quota: OK_QUOTA, profile: makeProfile(), useCache: false});
+  assert.deepEqual([fableRoute.status, fableRoute.route?.bundle.model], ['native', 'claude-fable-5-1']);
+  assert.equal('not_routed' in fableRoute.decision, false);
 });
 
 test('m1: the documents state the limit and the first signal lost as they are measured', () => {

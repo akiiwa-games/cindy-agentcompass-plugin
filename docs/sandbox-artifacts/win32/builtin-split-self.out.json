@@ -49,6 +49,7 @@
        "needs_visual": false,
        "needs_gui": false,
        "local_only": true,
+       "realtime_loop": false,
        "interaction_style": "engineering",
        "expected_hours": 0.5,
        "hours_confidence": "medium",
@@ -56,7 +57,6 @@
        "reason": "two independent tasks",
        "multi_task": true,
        "task_count": "2",
-       "realtime_loop": false,
        "self": false,
        "wants_fast": false
       },
@@ -75,6 +75,7 @@
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
+        "realtime_loop": false,
         "interaction_style": "engineering",
         "expected_hours": 0.5,
         "hours_confidence": "medium",
@@ -82,7 +83,6 @@
         "reason": "two independent tasks",
         "multi_task": true,
         "task_count": "2",
-        "realtime_loop": false,
         "self": false,
         "wants_fast": false
        },
@@ -122,6 +122,7 @@
        "needs_visual": false,
        "needs_gui": false,
        "local_only": true,
+       "realtime_loop": false,
        "interaction_style": "engineering",
        "expected_hours": 0.5,
        "hours_confidence": "medium",
@@ -129,7 +130,6 @@
        "reason": "three independent tasks",
        "multi_task": true,
        "task_count": "3",
-       "realtime_loop": false,
        "self": false,
        "wants_fast": false
       },
@@ -148,6 +148,7 @@
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
+        "realtime_loop": false,
         "interaction_style": "engineering",
         "expected_hours": 0.5,
         "hours_confidence": "medium",
@@ -155,7 +156,6 @@
         "reason": "three independent tasks",
         "multi_task": true,
         "task_count": "3",
-        "realtime_loop": false,
         "self": false,
         "wants_fast": false
        },
@@ -194,6 +194,7 @@
        "needs_visual": false,
        "needs_gui": false,
        "local_only": true,
+       "realtime_loop": false,
        "interaction_style": "engineering",
        "expected_hours": 0.5,
        "hours_confidence": "medium",
@@ -201,7 +202,6 @@
        "reason": "conceptual question for current session",
        "multi_task": false,
        "task_count": "1",
-       "realtime_loop": false,
        "self": true,
        "wants_fast": false
       },
@@ -220,6 +220,7 @@
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
+        "realtime_loop": false,
         "interaction_style": "engineering",
         "expected_hours": 0.5,
         "hours_confidence": "medium",
@@ -227,7 +228,6 @@
         "reason": "conceptual question for current session",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "self": true,
         "wants_fast": false
        },
@@ -266,6 +266,7 @@
        "needs_visual": false,
        "needs_gui": false,
        "local_only": true,
+       "realtime_loop": false,
        "interaction_style": "engineering",
        "expected_hours": 0.5,
        "hours_confidence": "medium",
@@ -273,7 +274,6 @@
        "reason": "explicitly requested direct answer in current session",
        "multi_task": false,
        "task_count": "1",
-       "realtime_loop": false,
        "self": true,
        "wants_fast": false
       },
@@ -292,6 +292,7 @@
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
+        "realtime_loop": false,
         "interaction_style": "engineering",
         "expected_hours": 0.5,
         "hours_confidence": "medium",
@@ -299,7 +300,6 @@
         "reason": "explicitly requested direct answer in current session",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "self": true,
         "wants_fast": false
        },
@@ -346,25 +346,25 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 29079,
+   "chars": 28424,
    "expectJson": true,
    "callId": "call-1"
   },
   {
    "kind": "oneshot_text",
-   "chars": 29029,
+   "chars": 28374,
    "expectJson": true,
    "callId": "call-2"
   },
   {
    "kind": "oneshot_text",
-   "chars": 29019,
+   "chars": 28364,
    "expectJson": true,
    "callId": "call-3"
   },
   {
    "kind": "oneshot_text",
-   "chars": 28986,
+   "chars": 28331,
    "expectJson": true,
    "callId": "call-4"
   }

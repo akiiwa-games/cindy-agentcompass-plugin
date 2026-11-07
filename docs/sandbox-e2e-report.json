@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-07T06:08:16.476Z",
+   "started_at": "2026-11-07T06:51:37.330Z",
    "operations": [
     {
      "name": "isolation",
@@ -33,7 +33,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 115 passed, 0 failed",
+       "name": "node --test: 120 passed, 0 failed",
        "ok": true
       },
       {
@@ -648,11 +648,11 @@
     "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:37415/v1"
+    "scorer": "http://127.0.0.1:37777/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 115,
+     "pass": 120,
      "fail": 0
     },
     "python": {
@@ -674,7 +674,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-07T06:08:47.435Z",
+   "finished_at": "2026-11-07T06:52:07.335Z",
    "summary": {
     "operations": 28,
     "checks": 116,
@@ -686,7 +686,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-06T20:27:18.223Z",
+   "started_at": "2026-11-07T06:49:42.329Z",
    "operations": [
     {
      "name": "isolation",
@@ -715,7 +715,11 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 81 passed, 0 failed",
+       "name": "node --test: 120 passed, 0 failed",
+       "ok": true
+      },
+      {
+       "name": "the unit tests compared the case file with this checkout",
        "ok": true
       },
       {
@@ -1326,11 +1330,11 @@
     "agentcompass_version": "0.4.1",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:9130/v1"
+    "scorer": "http://127.0.0.1:6406/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 81,
+     "pass": 120,
      "fail": 0
     },
     "python": {
@@ -1352,11 +1356,11 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-06T20:28:24.103Z",
+   "finished_at": "2026-11-07T06:51:23.705Z",
    "summary": {
     "operations": 28,
-    "checks": 115,
-    "passed": 115,
+    "checks": 116,
+    "passed": 116,
     "failed": 0,
     "artifacts": "<sandbox>\\report\\cindy"
    }
@@ -1372,8 +1376,8 @@
   },
   "win32": {
    "operations": 28,
-   "checks": 115,
-   "passed": 115,
+   "checks": 116,
+   "passed": 116,
    "failed": 0,
    "artifacts": "<sandbox>\\report\\cindy"
   }

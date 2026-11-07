@@ -326,6 +326,8 @@ function isFastRequested(profile) {
 
 // ---- classifier prompt, model selection, validation & cache --------------------------------------------------------
 const canonicalOf = model => resolveModelSpec(model).canonical;
+// No route in AgentCompass, whose accounts have no such model; catalog.mjs keeps it off by default too. Cindy listing it does not turn it on.
+const NOT_ROUTED_MODELS = new Set(['gpt-5.3-codex-spark']);
 
 function normalizeTaskEvidence(input) {
   if (typeof input === 'string') return {objective: input};
@@ -453,7 +455,6 @@ function withTaskCountBucket(raw) {
 
 function normalizedProfile(raw) {
   const normalized = validateProfile(raw);
-  normalized.realtime_loop = raw.realtime_loop;
   normalized.self = raw.self === true || raw.delegate === false;
   normalized.wants_fast = typeof raw.wants_fast === 'boolean' ? raw.wants_fast : normalized.urgency === 'high';
   return normalized;
@@ -779,7 +780,11 @@ export function routeTask(task, catalog, {
 } = {}) {
   const explicitProfile = callerProfile ?? (task && typeof task === 'object' ? task.profile : null);
 
-  const runnable = (catalog?.models || []).filter(row => HARNESS[row?.route?.agentKind] && row.route.providerId && row.route.model);
+  const listed = (catalog?.models || []).filter(row => HARNESS[row?.route?.agentKind] && row.route.providerId && row.route.model);
+  const isRouted = row => !NOT_ROUTED_MODELS.has(canonicalOf(row.route.model));
+  const runnable = listed.filter(isRouted);
+  const notRouted = listed.filter(row => !isRouted(row)).map(row => row.route.model);
+  const notRoutedInfo = notRouted.length ? {not_routed: notRouted} : {};
 
   let profile = null;
   let profileSource = 'unavailable';
@@ -904,8 +909,11 @@ export function routeTask(task, catalog, {
         profile_source: profileSource,
         classifier_model: classifierModel,
         realtime_loop: profile.realtime_loop,
+        ...notRoutedInfo,
       },
-      error: 'Cindy reports no Claude, Codex or Pi model. Sign in to one in Cindy, then roll again; nothing was started.',
+      error: notRouted.length
+        ? `Cindy reports only ${notRouted.join(', ')}, which AgentCompass does not route to. Sign in to another Claude, Codex or Pi model in Cindy, then roll again; nothing was started.`
+        : 'Cindy reports no Claude, Codex or Pi model. Sign in to one in Cindy, then roll again; nothing was started.',
     };
   }
 
@@ -991,8 +999,12 @@ export function routeTask(task, catalog, {
       classifier_model: classifierModel,
       realtime_loop: profile.realtime_loop,
       ...classifierInfo,
+      ...notRoutedInfo,
+      ...(profile.realtime_loop ? {excluded: [...new Set(ranked.allCandidates.flatMap(candidate => candidate.excluded))]} : {}),
     },
-    error: `No model in the Cindy catalog meets the ${ranked.task.difficulty} ${kind} floor; nothing was started.`,
+    error: profile.realtime_loop
+      ? `No effort Cindy offers is fast enough per turn for a live loop and meets the ${ranked.task.difficulty} ${kind} floor; nothing was started.`
+      : `No model in the Cindy catalog meets the ${ranked.task.difficulty} ${kind} floor; nothing was started.`,
   };
   const route = best.row.route;
   const bundle = {provider: best.harness, harness: best.harness, account: route.providerId, providerId: route.providerId,
@@ -1014,6 +1026,7 @@ export function routeTask(task, catalog, {
       score: best.score,
       components: best.components,
       wants_fast: wantsFast,
+      ...notRoutedInfo,
       quota: codex,
       quota_penalized_routes: candidates.filter(c => c.notes.length).length,
       ...(best.notes.length ? {warning: `every runnable route is short of quota (${best.notes.join(', ')}); it may stop early`} : {}),
