@@ -1113,7 +1113,7 @@ export function routeTask(task, catalog, {
   };
   const excludedRows = rows.filter(row => accountOf(row)?.dispatchable === false);
   const activeRows = rows.filter(row => accountOf(row)?.dispatchable !== false);
-  if (!activeRows.length) {
+  const accountsUnavailable = () => {
     const reasons = [...new Set(excludedRows.map(row => {
       const acc = accountOf(row);
       return `${acc.key}: ${acc.state}${acc.reason ? ` (${acc.reason})` : ''}`;
@@ -1121,13 +1121,15 @@ export function routeTask(task, catalog, {
     return {
       status: 'blocked',
       engine: 'builtin',
+      reason: 'accounts_unavailable',
       profile,
       profile_source: profileSource,
       classifier_model: classifierModel,
       realtime_loop: profile.realtime_loop,
       read_only_review: profile.read_only_review,
+      ...accountDecisionInfo,
       decision: {
-        reason: 'account_unavailable',
+        reason: 'accounts_unavailable',
         profile,
         profile_source: profileSource,
         classifier_model: classifierModel,
@@ -1143,52 +1145,57 @@ export function routeTask(task, catalog, {
       error: `All candidate accounts are unavailable (${reasons.join('; ')}); refusing to dispatch to an inactive or failing account. Nothing was started.`,
       next_action: 'Fix the account subscription, sign-in, or usage telemetry in Cindy (Pi routes sharing the same provider account are excluded too; it recovers automatically after the next healthy Codex session log in Cindy, or by removing its entry in quota-state.json), then roll again. Nothing was started.',
     };
-  }
+  };
+  if (!activeRows.length) return accountsUnavailable();
   const usage = row => matchesCodex(row.route.providerId) && codex.status !== 'unknown' ? codex : null;
 
   // The allocator takes the name Cindy lists and resolves it itself: routing folds some names into a newer model, while their speed data is their own.
   // One connection is one account to it, with the efforts this row offers as its dispatch table, so a live loop steps down within the row.
-  const dispatchEfforts = {};
-  const candidateModels = [];
-  for (const row of activeRows) {
-    const harness = HARNESS[row.route.agentKind];
-    const spec = resolveModelSpec(row.route.model).spec;
-    const offered = offeredEfforts(row).filter(Boolean);
-    const fallbackEffort = (spec.efforts || []).includes('high') ? 'high' : (spec.efforts || [])[0] || 'medium';
-    row._canonical = canonicalOf(row.route.model);
-    row._emptyEffort = !offered.length;
-    row._efforts = offered.length ? offered : [fallbackEffort];
-    row._account = `${harness}/${row.route.providerId}`;
-    (dispatchEfforts[row._account] ||= {})[row.route.model] = row._efforts;
-    for (const effort of row._efforts) {
-      candidateModels.push({id: `${row._account}/${row.route.model}@${effort}`, account: row._account, harness, model: row.route.model, effort});
+  const scorePool = activeRows => {
+    const dispatchEfforts = {};
+    const candidateModels = [];
+    for (const row of activeRows) {
+      const harness = HARNESS[row.route.agentKind];
+      const spec = resolveModelSpec(row.route.model).spec;
+      const offered = offeredEfforts(row).filter(Boolean);
+      const fallbackEffort = (spec.efforts || []).includes('high') ? 'high' : (spec.efforts || [])[0] || 'medium';
+      row._canonical = canonicalOf(row.route.model);
+      row._emptyEffort = !offered.length;
+      row._efforts = offered.length ? offered : [fallbackEffort];
+      row._account = `${harness}/${row.route.providerId}`;
+      (dispatchEfforts[row._account] ||= {})[row.route.model] = row._efforts;
+      for (const effort of row._efforts) {
+        candidateModels.push({id: `${row._account}/${row.route.model}@${effort}`, account: row._account, harness, model: row.route.model, effort});
+      }
     }
-  }
-  const ranked = rankCandidates(profile, {candidateModels, catalog: {dispatchEfforts}, constraintModel: pinModel, constraintEffort: pinEffort});
-  const scores = new Map(ranked.ranking.map(r => [r.id, r]));
-  const scoreOf = (row, effort) => scores.get(`${row._account}/${row.route.model}@${effort}`);
-  const kind = ranked.task.kind;
-  const wantsFast = isFastRequested(profile);
+    const ranked = rankCandidates(profile, {candidateModels, catalog: {dispatchEfforts}, constraintModel: pinModel, constraintEffort: pinEffort});
+    const scores = new Map(ranked.ranking.map(r => [r.id, r]));
+    const scoreOf = (row, effort) => scores.get(`${row._account}/${row.route.model}@${effort}`);
+    const kind = ranked.task.kind;
+    const wantsFast = isFastRequested(profile);
 
-  const candidates = [];
-  for (const row of activeRows) {
-    const harness = HARNESS[row.route.agentKind];
-    const q = usage(row);
-    const acc = accountOf(row);
-    for (const offeredEffort of row._efforts) {
-      const scored = scoreOf(row, offeredEffort);
-      if (!scored || (pinModel && !namesModel(row.route.model, scored.effort)) || (pinEffort && scored.effort !== pinEffort)) continue;
-      let score = scored.score;
-      const notes = [];
-      if (q?.status === 'exhausted') {notes.push(`quota ${q.used_percent}% used`); score -= 1;}
-      else if (q?.status === 'high') {score -= 0.1 * (q.used_percent - 80) / 15; notes.push(`quota ${q.used_percent}% used`);}
-      const spec = resolveModelSpec(row._canonical).spec;
-      const fast = wantsFast && harness === 'codex' && Boolean(row.supportsFastMode) && Boolean(spec.fast_capable) &&
-        (q && acc?.state !== ACCOUNT_STATES.USAGE_FAILING ? q.used_percent < 60 : false);
-      const launchEffort = row._emptyEffort ? (row.route.effort ?? '') : scored.effort;
-      candidates.push({row, harness, effort: launchEffort, fast, score: Math.round(score * 10000) / 10000, components: scored.components, notes});
+    const candidates = [];
+    for (const row of activeRows) {
+      const harness = HARNESS[row.route.agentKind];
+      const q = usage(row);
+      const acc = accountOf(row);
+      for (const offeredEffort of row._efforts) {
+        const scored = scoreOf(row, offeredEffort);
+        if (!scored || (pinModel && !namesModel(row.route.model, scored.effort)) || (pinEffort && scored.effort !== pinEffort)) continue;
+        let score = scored.score;
+        const notes = [];
+        if (q?.status === 'exhausted') {notes.push(`quota ${q.used_percent}% used`); score -= 1;}
+        else if (q?.status === 'high') {score -= 0.1 * (q.used_percent - 80) / 15; notes.push(`quota ${q.used_percent}% used`);}
+        const spec = resolveModelSpec(row._canonical).spec;
+        const fast = wantsFast && harness === 'codex' && Boolean(row.supportsFastMode) && Boolean(spec.fast_capable) &&
+          (q && acc?.state !== ACCOUNT_STATES.USAGE_FAILING ? q.used_percent < 60 : false);
+        const launchEffort = row._emptyEffort ? (row.route.effort ?? '') : scored.effort;
+        candidates.push({row, harness, effort: launchEffort, fast, score: Math.round(score * 10000) / 10000, components: scored.components, notes});
+      }
     }
-  }
+    return {ranked, kind, wantsFast, candidates};
+  };
+  const {ranked, kind, wantsFast, candidates} = scorePool(activeRows);
   // One model at one effort on two harnesses: the AgentCompass harness order picks one. It is no part of a score, so it moves no other model.
   const modelEffort = c => `${c.row.route.model.slice(c.row.route.model.lastIndexOf('/') + 1)}@${c.effort}`;
   const firstSeen = new Map();
@@ -1196,6 +1203,7 @@ export function routeTask(task, catalog, {
   const harnessOrder = c => ((c.harness === 'pi') === PI_FIRST.has(kind) ? 0 : 1);
   candidates.sort((a, b) => b.score - a.score || firstSeen.get(modelEffort(a)) - firstSeen.get(modelEffort(b)) || harnessOrder(a) - harnessOrder(b));
   const best = candidates[0];
+  if (!best && !pinned && excludedRows[0] && scorePool(excludedRows).candidates[0]) return accountsUnavailable();
   // Why a candidate is out. Outside a live loop the ranking leaves a named model or effort to the loop above.
   const exclusionsOf = c => [
     ...c.excluded,

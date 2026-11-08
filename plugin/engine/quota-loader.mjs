@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/quota-loader.js at 6834bc0dbf054e6f08b28a483e3dffdd9d04f662 (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/quota-loader.js at 539a0110fc5d30e7036aab1612fa02ff7201ebfd (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate with scripts/vendor_engine.mjs rather than edit.
 /**
  * Explicit Quota Snapshot Loader for Bun (`magpie.hooks` & `/v1/systemone`)

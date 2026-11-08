@@ -842,7 +842,8 @@ test('Step 2 & 3 regression: read_only_review with nonzero code_complexity, inac
     `${JSON.stringify({timestamp: now.toISOString(), payload: {rate_limits: {plan_type: 'Free × 2', secondary: {used_percent: 10, resets_at: Math.floor((now.getTime() + 86400000) / 1000)}}}})}\n`,
   );
   const [blockedAccount] = rpc(p, [prepare(p, 'Fix util.py', 1, CATALOG, withProfile())]);
-  assert.deepEqual(stateOf(blockedAccount), ['blocked', 'account_unavailable'], JSON.stringify(blockedAccount));
+  assert.deepEqual(stateOf(blockedAccount), ['blocked', 'accounts_unavailable'], JSON.stringify(blockedAccount));
+  assert.equal(blockedAccount.result.router.reason, 'accounts_unavailable');
   assert.equal(blockedAccount.result.router.decision.accounts[0].state, 'plan_inactive');
   assert.equal(blockedAccount.result.router.decision.accounts[0].dispatchable, false);
   assert.equal(receipts(p).length, 0, 'a blocked account check writes no prepared receipt');
@@ -864,6 +865,16 @@ test('Step 2 & 3 regression: read_only_review with nonzero code_complexity, inac
   }
   fs.writeFileSync(quotaStatePath, JSON.stringify(persisted, null, 2));
   const [expiredCorrupt] = rpc(p, [prepare(p, 'Fix corrupt-6h.py', 3, CATALOG, withProfile())]);
-  assert.deepEqual(stateOf(expiredCorrupt), ['blocked', 'account_unavailable']);
+  assert.deepEqual(stateOf(expiredCorrupt), ['blocked', 'accounts_unavailable']);
+  assert.equal(expiredCorrupt.result.router.reason, 'accounts_unavailable');
   assert.equal(expiredCorrupt.result.router.decision.accounts[0].dispatchable, false);
+
+  // External CLI returning structured accounts_unavailable is preserved as a blocked router result with actionable guidance.
+  const cliBlocked = plugin({status: 'blocked', error: 'accounts_unavailable'}, 2);
+  const [cliReply] = rpc(cliBlocked, [prepare(cliBlocked, 'x')]);
+  assert.deepEqual(stateOf(cliReply), ['blocked', 'accounts_unavailable'], JSON.stringify(cliReply));
+  assert.equal(cliReply.result.router.reason, 'accounts_unavailable');
+  assert.match(cliReply.result.router.error, /All candidate accounts are unavailable/);
+  assert.match(cliReply.result.router.next_action, /roll again/);
+  assert.equal(receipts(cliBlocked).length, 0);
 });

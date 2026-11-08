@@ -41,8 +41,9 @@ import {
 } from '../plugin/engine/route.mjs';
 import {CASE_FILE, defaultCheckout, findCheckout} from '../scripts/default-checkout.mjs';
 import {VENDORED_SOURCES, sourceText, vendoredText} from '../scripts/vendor_engine.mjs';
-import {rankCandidates} from '../plugin/engine/allocator.mjs';
+import {rankCandidates, selectBestRoute} from '../plugin/engine/allocator.mjs';
 import {resolveModelSpec} from '../plugin/engine/catalog.mjs';
+import {STICK_KEEP_MS, SessionContinuityStore, evaluateProviderContinuation} from '../plugin/engine/continuity.mjs';
 import {PROFILE_INTEGERS} from '../plugin/engine/profiler.mjs';
 
 const OWN_REPO = fileURLToPath(new URL('..', import.meta.url));
@@ -972,6 +973,7 @@ const TEXT_CALL_EXCEPTIONS = {
     "the worker's answer: a state or a router status": [
       "['self','split','launched','blocked'].includes(record.router?.status)", "'split'", "prepared.state==='classify'",
       "prepared.router?.status!=='native'", "prepared.state==='prepared'", "prepared.state==='blocked'",
+      "reason==='accounts_unavailable'", "router.error!=='accounts_unavailable'",
     ],
     "what the host reports: capabilities, the catalog, runs, messages' roles, error codes": [
       'caps.operations?.includes(op)', 'binding.length', 'row.efforts?.includes(effort)', 'matches.length', '(awaitallRuns(task.taskId)).length',
@@ -1002,7 +1004,8 @@ const TEXT_CALL_EXCEPTIONS = {
     "the router's answer: a status, a source or a decision reason": [
       "['self','split'].includes(result.status)", "'split'", "result.engine==='builtin'", "result.profile_source!=='unavailable'",
       ["result.status==='blocked'", 2], "result.decision?.reason==='no_runnable_model'", "result.decision?.reason==='no_model_meets_floor'",
-      "result.decision?.reason==='account_unavailable'", "result.profile_source==='unavailable'", ["result.status==='classify'", 2], "result.status==='native'",
+      "result.decision?.reason==='accounts_unavailable'", "reason==='accounts_unavailable'", "result.error!=='accounts_unavailable'",
+      "result.profile_source==='unavailable'", ["result.status==='classify'", 2], "result.status==='native'",
     ],
     'receipts, cooldown records and child processes': [
       "['prepared','create_rejected'].includes(old.state)", 'newSet()', "newSet(['ROUTE_UNAVAILABLE','UNSUPPORTED_CAPABILITY','PERMISSION_DENIED'])",
@@ -1408,14 +1411,14 @@ test('m1, seventh review: a5 goes without a checkout only when there is none: on
 });
 
 // akiiwa-games/magpie-agentcompass-router at this commit, src/<source>.js. To update: run scripts/vendor_engine.mjs, then these digests.
-const MAGPIE_COMMIT = '6834bc0dbf054e6f08b28a483e3dffdd9d04f662';
+const MAGPIE_COMMIT = '539a0110fc5d30e7036aab1612fa02ff7201ebfd';
 const MAGPIE_SHA256 = {
   catalog: '177d2c1d1fb2d6927a4124d647ec61349e4deb999fd12bd9e80f56619bc6b5ec',
-  allocator: 'f56a68270429279771ee85f073b0cf7345dc9c5a92f02114a956e62970f7bbf1',
+  allocator: 'fd61ba8ce6f44613c65be8a2e54ed652e28568408ac504a4b3ed38679d5bf63e',
   profiler: 'f24da094a43caffe3130f7ab8521a2ec54bf55c65d61afc4121ed6c9fd1a0928',
-  quota: 'dffadee006903890cb3b3f681dab7bf74bfcd401152be2d34327b4f4fea8f33c',
+  quota: '6cf4cdf96eacd067d139d919b0ff68dd3fda2a53ec00eacdfa47a5d88262fe54',
   'quota-loader': '63910970a5b7e30625431f6417ee257588e4c07e4827deed4ab760bfc5690ebb',
-  continuity: '1f09d06a2f2a8ed43af3e16c57a7f103e4ae9aad36fbf5f99dc255e41d7776eb',
+  continuity: 'bc15f09838a01f5dfed36f42be7f5265a0c64130c39804bcfb1f4ae6fc839b7e',
 };
 
 test('Magpie sync: the vendored engine is the source at its commit, byte for byte but for the header and the import paths', () => {
@@ -1993,7 +1996,7 @@ test('Step 3 regression: plan normalization matches full name before stripping t
     // At NOW + 6h: 6h elapsed since first seen -> dispatchable: false -> blocked on REAL, rerouted to Claude on WITH_CLAUDE.
     const sixHourNow = NOW + 6 * 3600 * 1000;
     const blockedCorrupt = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: corruptHome}, stateFile, now: sixHourNow, profile: makeProfile()});
-    assert.deepEqual([blockedCorrupt.status, blockedCorrupt.decision.reason], ['blocked', 'account_unavailable']);
+    assert.deepEqual([blockedCorrupt.status, blockedCorrupt.reason, blockedCorrupt.decision.reason], ['blocked', 'accounts_unavailable', 'accounts_unavailable']);
     assert.equal(blockedCorrupt.decision.accounts[0].state, 'usage_failing');
     assert.equal(blockedCorrupt.decision.accounts[0].dispatchable, false);
     assert.ok(blockedCorrupt.decision.warnings.some(w => /usage_failing, excluded from dispatch/.test(w)), JSON.stringify(blockedCorrupt.decision.warnings));
@@ -2030,7 +2033,7 @@ test('Step 3 regression: plan normalization matches full name before stripping t
     );
     fs.utimesSync(freeFile, freshDate, freshDate);
     const freeRoute = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: freeHome}, stateFile, now: NOW, profile: makeProfile()});
-    assert.deepEqual([freeRoute.status, freeRoute.decision.reason], ['blocked', 'account_unavailable']);
+    assert.deepEqual([freeRoute.status, freeRoute.reason, freeRoute.decision.reason], ['blocked', 'accounts_unavailable', 'accounts_unavailable']);
     assert.equal(freeRoute.decision.accounts[0].state, 'plan_inactive');
     assert.equal(freeRoute.decision.accounts[0].dispatchable, false);
 
@@ -2071,7 +2074,7 @@ test('Step 3 regression: plan normalization matches full name before stripping t
     const warnings = quotaAccountWarnings(accountsSnapshot, NOW);
     assert.equal(warnings.length, 2);
     const allExcluded = routeTask('Fix util.py', WITH_CLAUDE, {accounts: accountsSnapshot, now: NOW, profile: makeProfile()});
-    assert.deepEqual([allExcluded.status, allExcluded.decision.reason], ['blocked', 'account_unavailable']);
+    assert.deepEqual([allExcluded.status, allExcluded.reason, allExcluded.decision.reason], ['blocked', 'accounts_unavailable', 'accounts_unavailable']);
     assert.equal(allExcluded.decision.warnings.length, 2);
 
     // 7. M2 regression: malformed quota-state.json / score-cache.json shapes (e.g. {"entries":null}, null, []) are treated as empty state and never throw.
@@ -2114,7 +2117,7 @@ test('Step 3 regression: plan normalization matches full name before stripping t
     const freshFreeDate = new Date(NOW - 3600 * 1000);
     fs.utimesSync(earlierFreeFile, freshFreeDate, freshFreeDate);
     const m3FreshFree = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: fallbackHome}, stateFile, now: NOW, profile: makeProfile()});
-    assert.deepEqual([m3FreshFree.status, m3FreshFree.decision.reason], ['blocked', 'account_unavailable']);
+    assert.deepEqual([m3FreshFree.status, m3FreshFree.reason, m3FreshFree.decision.reason], ['blocked', 'accounts_unavailable', 'accounts_unavailable']);
     assert.equal(m3FreshFree.decision.accounts[0].state, 'plan_inactive');
     assert.equal(m3FreshFree.decision.accounts[0].dispatchable, false);
     assert.match(m3FreshFree.next_action, /Pi routes sharing the same provider account/);
@@ -2158,4 +2161,60 @@ test('Review minors regression: classifier reason >240 chars is truncated to 300
   const routeSrc = ownSource('plugin/engine/route.mjs');
   assert.match(routeSrc, /without its CRITICAL RULES 2-7:/);
   assert.doesNotMatch(routeSrc, /without its CRITICAL RULES 2-5:/);
+});
+
+test('Magpie 539a011: accounts_unavailable refusal, SessionContinuityStore.get({keepExpired}), and session/strict vs cache replay hold', () => {
+  const now = Date.parse('2026-11-08T00:00:00Z');
+  const allUnavailableQuotas = {
+    'claude:main': {provider: 'claude', account: 'main', plan: 'Max ×20', http_status: 401, error: 'HTTP 401 unauthorized'},
+    'codex:main': {provider: 'codex', account: 'main', plan: 'free', status: 'plan_inactive'},
+  };
+  const coupledProfile = makeProfile({reasoning_depth: 3, code_complexity: 3, context_scale: 2, hallucination_risk: 2, error_cost: 3});
+  const sel = selectBestRoute(coupledProfile, {
+    candidateModels: ['claude/claude-opus-5-5', 'claude/claude-sonnet-5-5', 'codex/gpt-6-astra'],
+    quotas: allUnavailableQuotas,
+    now,
+  });
+  assert.equal(sel.ok, false);
+  assert.equal(sel.blocked, true);
+  assert.equal(sel.error, 'accounts_unavailable');
+  assert.equal(sel.refusal, 'accounts_unavailable: every candidate account is unavailable');
+
+  // In routeTask, if an active account only offers a model below the coupled floor while a capable account is unavailable, routeTask returns accounts_unavailable.
+  const mixedCatalog = {
+    models: [
+      ...REAL.models,
+      {route: {agentKind: 'cc', providerId: 'anthropic', model: 'claude-haiku-5-5', effort: 'high', fastMode: false}, efforts: ['low', 'medium', 'high'], supportsFastMode: false},
+    ],
+  };
+  const mixedBlocked = routeTask('Audit distributed lock manager', mixedCatalog, {
+    accounts: {
+      'codex/openai': {provider: 'codex', account: 'openai', plan: 'pro', status: 'usage_failing', error: 'corrupt snapshot', failing_since: new Date(now - 7 * 3600 * 1000).toISOString()},
+      'claude/anthropic': {provider: 'claude', account: 'anthropic', plan: 'pro', status: 'ready', used: 20},
+    },
+    now,
+    profile: coupledProfile,
+  });
+  assert.deepEqual([mixedBlocked.status, mixedBlocked.reason, mixedBlocked.decision.reason], ['blocked', 'accounts_unavailable', 'accounts_unavailable']);
+  assert.match(mixedBlocked.next_action, /Fix the account subscription, sign-in, or usage telemetry in Cindy/);
+
+  // SessionContinuityStore.get({keepExpired: true}) returns the expired state while deleting it from the store.
+  const store = new SessionContinuityStore();
+  store.recordRequest('sess-1', {model: 'claude-opus-5-5', effort: 'high', provider: 'claude', profile: coupledProfile}, {turn: 1, estimatedInputTokens: 2000}, now);
+  assert.equal(store.get('sess-1', now + 1000)?.model, 'claude-opus-5-5');
+  const expiredState = store.get('sess-1', now + STICK_KEEP_MS + 1000, {keepExpired: true});
+  assert.equal(expiredState?.model, 'claude-opus-5-5');
+  assert.equal(store.get('sess-1', now + STICK_KEEP_MS + 2000, {keepExpired: true}), null);
+
+  // Replayed state (ageKnown: false) is held across turns in session/strict modes, and only within a tool loop in cache mode.
+  const replayed = {model: 'claude-opus-5-5', effort: 'high', provider: 'claude', tokens: 4000, cached: true, updatedAt: now, ageKnown: false, profile: coupledProfile};
+  const nextTurnFacts = {turn: 2, estimatedInputTokens: 4000, within: false};
+  const loopFacts = {turn: 2, estimatedInputTokens: 4000, within: true};
+  assert.equal(evaluateProviderContinuation(nextTurnFacts, replayed, {affinityMode: 'cache', now: now + 60000}).shouldHold, false);
+  assert.equal(evaluateProviderContinuation(loopFacts, replayed, {affinityMode: 'cache', now: now + 60000}).shouldHold, true);
+  for (const mode of ['session', 'strict']) {
+    const held = evaluateProviderContinuation(nextTurnFacts, replayed, {affinityMode: mode, now: now + 60000});
+    assert.equal(held.shouldHold, true, mode);
+    assert.equal(held.why, mode);
+  }
 });

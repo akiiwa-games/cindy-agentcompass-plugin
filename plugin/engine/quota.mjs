@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/quota.js at 6834bc0dbf054e6f08b28a483e3dffdd9d04f662 (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/quota.js at 539a0110fc5d30e7036aab1612fa02ff7201ebfd (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate with scripts/vendor_engine.mjs rather than edit.
 /**
  * AgentCompass Subscription Quota, Opportunity Cost & Pre-Reset Sprint Economics
@@ -1355,6 +1355,7 @@ export function evaluateAccountQuotaForModel(
       kind,
       state: accountEntry.state,
       eligible: false,
+      accountUnavailable: true,
       excluded: [`${accountEntry.key}: ${accountEntry.state}: ${accountEntry.reason}`],
       opportunity_cost: 0.0,
       reset_bonus: 0.0,
@@ -1551,6 +1552,7 @@ export function evaluateModelQuota(
     const allWarnings = [...new Set(normalized.flatMap((e) => e.warnings || []))];
     return {
       eligible: false,
+      accountUnavailable: true,
       warnings: allWarnings,
       excluded: expiredPool.map((e) => `${e.key}: ${e.state}: ${e.reason}`),
       account: expiredPool[0].key,
@@ -1594,6 +1596,7 @@ export function evaluateModelQuota(
   if (eligibleAccounts.length === 0) {
     return {
       eligible: false,
+      accountUnavailable: evaluations.length > 0 && evaluations.every((e) => e.accountUnavailable === true),
       warnings,
       excluded: evaluations.flatMap((e) => e.excluded),
       account: evaluations[0]?.account || null,

@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/allocator.js at 6834bc0dbf054e6f08b28a483e3dffdd9d04f662 (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/allocator.js at 539a0110fc5d30e7036aab1612fa02ff7201ebfd (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate with scripts/vendor_engine.mjs rather than edit.
 /**
  * AgentCompass Core Pure Intent & Multi-Dimensional Capability Allocator
@@ -1608,6 +1608,7 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
   }
 
   // Subscription quota, safety margin, opportunity cost & pre-reset sprint evaluation (at stepped-down effort)
+  const nonQuotaExcludedCount = excluded.length;
   const quotaEval = taskCtx.quotas
     ? evaluateModelQuota(
         rawModel,
@@ -1858,6 +1859,11 @@ export function evaluateCandidate(candidate, taskCtx, catalog = {}) {
   // Too slow and nothing else: what a model-only pin may still keep at its fastest effort.
   if (tooSlow && excluded.length === 1) {
     out.too_slow = true;
+  }
+  if (nonQuotaExcludedCount > 0) {
+    out.non_quota_excluded = true;
+  } else if (quotaEval && !quotaEval.eligible && quotaEval.accountUnavailable === true) {
+    out.account_unavailable = true;
   }
 
   return out;
@@ -2365,7 +2371,13 @@ export function rankCandidates(profileInput, options = {}) {
     .filter((c) => !expanded.includes(c))
     .map((c) => {
       const row = evaluateCandidate(c, taskCtx, catalog);
-      return { ...row, eligible: false, excluded: [whenFailure(c, taskCtx), ...row.excluded] };
+      return {
+        ...row,
+        eligible: false,
+        non_quota_excluded: true,
+        account_unavailable: false,
+        excluded: [whenFailure(c, taskCtx), ...row.excluded],
+      };
     });
 
   return {
@@ -2721,11 +2733,24 @@ function rowsThePinNames(result) {
   return result.allCandidates.filter((c) => !c.excluded.some(notTheOne));
 }
 
+const ACCOUNTS_UNAVAILABLE_REFUSAL = "accounts_unavailable: every candidate account is unavailable";
+
+function allCandidatesAccountUnavailable(result) {
+  const all = result.allCandidates;
+  if (!Array.isArray(all) || all.length === 0) return false;
+  const capable = all.filter((c) => !c.non_quota_excluded);
+  return capable.length > 0 && capable.every((c) => c.account_unavailable === true);
+}
+
 /** What a client hears when a route is refused: what it pinned, a code, one sentence. The pool and its quotas stay in the local log. */
 function refusalOf(result) {
   const { pin } = result;
   const label = pinLabel(pin);
-  if (!label) return "no_route: no candidate can serve this request";
+  if (!label) {
+    return allCandidatesAccountUnavailable(result)
+      ? ACCOUNTS_UNAVAILABLE_REFUSAL
+      : "no_route: no candidate can serve this request";
+  }
   const matching = rowsThePinNames(result);
   if (matching.length === 0) return `pin_not_in_pool: ${label} is not among the candidates`;
   // Health belongs to a model: a row left out by its effort says nothing here, and an effort pin has no model to blame.
@@ -2784,10 +2809,12 @@ export function selectBestRoute(taskOrProfile, options = {}) {
     ...poolNameWarnings(options, models, aliases),
     ...new Set((result.accounts || []).flatMap((a) => a.warnings)),
   ];
+  const refusal = top ? null : refusalOf(result);
   return {
     ok: Boolean(top),
     blocked: !top,
-    refusal: top ? null : refusalOf(result),
+    ...(refusal === ACCOUNTS_UNAVAILABLE_REFUSAL ? { error: "accounts_unavailable" } : {}),
+    refusal,
     targetModel: top ? top.model : null,
     canonicalModel: top ? top.canonicalModel : null,
     targetEffort: top ? top.effort : "high",

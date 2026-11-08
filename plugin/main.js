@@ -253,18 +253,39 @@
     };
   }
   function accountNotice(record) {
-    const src=record?.router?.decision || record?.router;
-    const list=Array.isArray(src?.warnings) ? src.warnings : [];
-    const warnings=src?.warning ? [...list,src.warning] : list;
-    const accounts=Array.isArray(src?.accounts) ? src.accounts.map(a=>({
+    const dec=record?.router?.decision, top=record?.router;
+    const list=Array.isArray(dec?.warnings) ? dec.warnings : Array.isArray(top?.warnings) ? top.warnings : [];
+    const warn=dec?.warning || top?.warning;
+    const warnings=warn ? [...list,warn] : list;
+    const raw=Array.isArray(dec?.accounts) ? dec.accounts : Array.isArray(top?.accounts) ? top.accounts : [];
+    const accounts=raw.map(a=>({
       key:a.key,provider:a.provider,account:a.account,plan:a.plan,state:a.state,dispatchable:a.dispatchable,
       ...(a.reason ? {reason:a.reason} : {}),
       ...(a.failing_since ? {failing_since:a.failing_since} : {}),
-    })) : [];
+    }));
     return {
       ...(warnings[0] ? {warnings} : {}),
       ...(accounts[0] ? {accounts} : {}),
     };
+  }
+  function routerAnswer(record) {
+    const router=record?.router || {};
+    const reason=router.reason || router.error_code || router.decision?.reason || router.error || null;
+    if (reason==='accounts_unavailable') {
+      return {
+        ...router,
+        status:'blocked',
+        reason:'accounts_unavailable',
+        ...accountNotice(record),
+        decision:{...(router.decision || {}),reason:'accounts_unavailable'},
+        error:router.error && router.error!=='accounts_unavailable'
+          ? router.error
+          : 'All candidate accounts are unavailable; refusing to dispatch to an inactive or failing account. Nothing was started.',
+        next_action:router.next_action ||
+          'Fix the account subscription, sign-in, or usage telemetry in Cindy (Pi routes sharing the same provider account are excluded too; it recovers automatically after the next healthy Codex session log in Cindy, or by removing its entry in quota-state.json), then roll again. Nothing was started.',
+      };
+    }
+    return {...router,...accountNotice(record)};
   }
   function unconfirmed(record,operation) {
     const why={unknown_create:'Cindy may have created the draft, but its answer never arrived. Inspect the Cindy task list; nothing is created again.',
@@ -287,7 +308,7 @@
       if (UNCONFIRMED.has(record.state)) return unconfirmed(record,operation);
       if (['blocked','send_rejected'].includes(record.state)) return {status:record.state,operation,taskId:record.taskId || null,
         task_id:record.taskId || null,executed:false,error:record.error || null,...accountNotice(record),...draftOutcome(record,operation)};
-      if (record.state==='prepared' && ['self','split','launched','blocked'].includes(record.router?.status)) return {operation,...record.router};
+      if (record.state==='prepared' && ['self','split','launched','blocked'].includes(record.router?.status)) return {operation,...routerAnswer(record)};
       return {status:record.state,operation,...accountNotice(record),next_tool:next('status',operation),
         cause:'No Cindy task was started for this operation yet.'};
     }
@@ -340,7 +361,7 @@
     }
     const operation=prepared.operation;
     // self, split, blocked or a router-side launch: the router's own answer, not a Cindy task.
-    if (prepared.router?.status!=='native' && (prepared.state==='prepared' || prepared.state==='blocked')) return prepared.router;
+    if (prepared.router?.status!=='native' && (prepared.state==='prepared' || prepared.state==='blocked')) return routerAnswer(prepared);
     return await exclusive('op\0'+operation,async()=>{
       let record=await loadRecord(msg,operation);
       if (record.state!=='prepared' || record.createRejected) return await collect(msg,operation,await reconcile(msg,operation,record));

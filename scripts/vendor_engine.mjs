@@ -7,7 +7,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
-export const DEFAULT_COMMIT = '6834bc0dbf054e6f08b28a483e3dffdd9d04f662';
+export const DEFAULT_COMMIT = '539a0110fc5d30e7036aab1612fa02ff7201ebfd';
 
 // plugin/engine/<name>.mjs: src/<source>.js
 export const VENDORED_SOURCES = {catalog: 'catalog', allocator: 'allocator', profiler: 'profiler-core', quota: 'quota', 'quota-loader': 'quota-loader', continuity: 'continuity'};

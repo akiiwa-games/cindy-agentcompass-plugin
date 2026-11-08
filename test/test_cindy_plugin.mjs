@@ -963,3 +963,85 @@ test('M1 regression: native roll and status returns surface warnings and compact
     fs.rmSync(dir,{recursive:true,force:true});
   }
 });
+
+test('all candidate accounts unavailable: roll returns accounts_unavailable, surfaces failing accounts in accounts/warnings, and provides actionable next_action',async()=>{
+  clearClassifierCache();
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cindy-accounts-unavail-'));
+  try {
+    const stateFile=path.join(dir,'quota-state.json');
+    const corruptHome=path.join(dir,'corrupt');
+    const day=path.join(corruptHome,'sessions','2026','11','07');
+    fs.mkdirSync(day,{recursive:true});
+    const corruptFile=path.join(day,'rollout-1.jsonl');
+    const now=Date.parse('2026-11-07T00:00:00Z');
+    fs.writeFileSync(corruptFile,'{"payload":{"rate_limits":BROKEN_JSON\n');
+    fs.utimesSync(corruptFile,new Date(now-60000),new Date(now-60000));
+
+    // Seed first-seen failure at `now`, then roll at `now + 6h` when the sole account (codex/openai) is excluded.
+    const fSeed=classifierFixture({routeOptions:{env:{CODEX_HOME:corruptHome},stateFile,now}});
+    assert.equal((await fSeed.send('roll',{task:'Seed initial corrupt reading'})).result.status,'running');
+
+    clearClassifierCache();
+    const sixHourNow=now+6*3600*1000;
+    const fBlocked=classifierFixture({routeOptions:{env:{CODEX_HOME:corruptHome},stateFile,now:sixHourNow}});
+    const blocked=(await fBlocked.send('roll',{task:'Fix bug when all accounts are unavailable'})).result;
+    assert.equal(blocked.status,'blocked');
+    assert.equal(blocked.reason,'accounts_unavailable');
+    assert.equal(blocked.decision?.reason,'accounts_unavailable');
+    assert.equal(fBlocked.workerCreates(),0,'nothing was started when all accounts are unavailable');
+    assert.equal(blocked.accounts?.[0]?.key,'codex/openai');
+    assert.equal(blocked.accounts?.[0]?.state,'usage_failing');
+    assert.equal(blocked.accounts?.[0]?.dispatchable,false);
+    assert.equal(blocked.accounts?.[0]?.failing_since,new Date(now).toISOString());
+    assert.match(blocked.accounts?.[0]?.reason || '',/usage reading failing.*corrupt rate-limit snapshot/);
+    assert.ok(Array.isArray(blocked.warnings) && blocked.warnings.some(w=>/codex\/openai: usage_failing, excluded from dispatch/.test(w)),JSON.stringify(blocked.warnings));
+    assert.match(blocked.error,/All candidate accounts are unavailable/);
+    assert.match(blocked.next_action,/quota-state\.json/);
+    assert.match(blocked.next_action,/roll again/);
+
+    // Multi-account catalog where every account is unavailable (usage_failing past 6h + auth_failed) -> roll returns accounts_unavailable with both in accounts.
+    clearClassifierCache();
+    const withClaude={models:[...realCatalog.models,
+      {route:{agentKind:'cc',providerId:'anthropic',model:'claude-sonnet-5-5',effort:'high',fastMode:false},efforts:['low','medium','high','max'],supportsFastMode:false}]};
+    const accountsSnapshot={
+      'codex/openai':{provider:'codex',account:'openai',plan:'pro',status:'usage_failing',error:'corrupt rate-limit snapshot',failing_since:new Date(now).toISOString()},
+      'claude/anthropic':{provider:'claude',account:'anthropic',plan:'Max ×20',http_status:401,error:'HTTP 401 unauthorized'},
+    };
+    const fMulti=classifierFixture({catalog:withClaude,routeOptions:{accounts:accountsSnapshot,now:sixHourNow}});
+    const multiBlocked=(await fMulti.send('roll',{task:'Fix bug with all accounts failing'})).result;
+    assert.deepEqual([multiBlocked.status,multiBlocked.reason,multiBlocked.decision?.reason],['blocked','accounts_unavailable','accounts_unavailable']);
+    assert.equal(multiBlocked.accounts?.length,2);
+    assert.deepEqual(multiBlocked.accounts.map(a=>[a.key,a.state,a.dispatchable]),[
+      ['codex/openai','usage_failing',false],
+      ['claude/anthropic','auth_failed',false],
+    ]);
+    assert.equal(multiBlocked.warnings?.length,2);
+    assert.match(multiBlocked.next_action,/Fix the account subscription, sign-in, or usage telemetry in Cindy/);
+
+    // Bare structured code from a router (`error: 'accounts_unavailable'`) is translated by code (not text matching) into user-facing error + next_action.
+    const fBare=fixture({
+      prepared:{
+        parent:ctx.session_id,
+        state:'blocked',
+        bundle:null,
+        prompt:'',
+        router:{
+          status:'blocked',
+          error:'accounts_unavailable',
+          accounts:[{key:'codex/openai',provider:'codex',account:'openai',plan:'pro',state:'usage_failing',dispatchable:false,reason:'reading failed for 6.0h'}],
+          warnings:['codex/openai: usage_failing, excluded from dispatch: reading failed for 6.0h'],
+        },
+        mappings:[],
+      },
+    });
+    const bareRes=(await fBare.send('roll',{task:'x'})).result;
+    assert.deepEqual([bareRes.status,bareRes.reason,bareRes.decision?.reason],['blocked','accounts_unavailable','accounts_unavailable']);
+    assert.equal(bareRes.accounts?.[0]?.state,'usage_failing');
+    assert.equal(bareRes.accounts?.[0]?.dispatchable,false);
+    assert.notEqual(bareRes.error,'accounts_unavailable');
+    assert.match(bareRes.error,/All candidate accounts are unavailable/);
+    assert.match(bareRes.next_action,/roll again/);
+  } finally {
+    fs.rmSync(dir,{recursive:true,force:true});
+  }
+});

@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/continuity.js at 6834bc0dbf054e6f08b28a483e3dffdd9d04f662 (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/continuity.js at 539a0110fc5d30e7036aab1612fa02ff7201ebfd (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate with scripts/vendor_engine.mjs rather than edit.
 /**
  * Session Affinity, Turn-Loop Lock, Cache-Temperature Hold & Monotonic Effort Ratchet.
@@ -847,6 +847,7 @@ export function keepsEffort(
       currentTokens < prevReqTokens * COMPACTION_DROP_RATIO);
   const isWarm =
     !compacted &&
+    sessionState.ageKnown !== false &&
     ageMs <= ttlMs &&
     (sessionState.cached === true ||
       prevTokens >= CACHE_WORTH_TOKENS ||
@@ -889,7 +890,8 @@ export function effectiveRealtimeLoop(facts = {}, sessionState = null, options =
  *   - `"outgrown"`: current token count exceeds 95% of the model's `context_window`
  *   - `"capability_outgrown"`: new turn requires visual/GUI/frontier capability the current model lacks
  *   - `"compacted"`: conversation was `/compact`-ed (token count dropped > 50%)
- *   - `"cold"`: KV cache TTL expired (`now - updatedAt > coldAfterMs`) or cache < 1024 tokens
+ *   - `"cold"`: KV cache TTL expired (`now - updatedAt > coldAfterMs`) or cache < 1024 tokens, or the state has no
+ *     age (`ageKnown: false`, decided again from the history), so no TTL-gated hold applies
  *   - `"turn_mode"`: `affinityMode === "turn"` and request is a new user turn (`within === false`)
  *   - `"off"`: `affinityMode === "off"`
  */
@@ -1226,7 +1228,9 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
     ...sessionState,
     ...options,
   });
-  const withinCacheTtl = ageMs <= ttlMs;
+  // A state decided again from the history (`ageKnown: false`) has no age, so it is never within a TTL
+  const ageKnown = sessionState.ageKnown !== false;
+  const withinCacheTtl = ageKnown && ageMs <= ttlMs;
 
   // Warm KV cache hold (`tokens >= 1024` or `cached === true` within TTL)
   const cacheWorthHolding =
@@ -1268,7 +1272,7 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
     why: "cold",
     previousModel: currentModel,
     previousEffort: sessionState.effort,
-    ageMs,
+    ageMs: ageKnown ? ageMs : null,
     ttlMs,
     within: false,
     turn: facts.turn || 1,
@@ -1298,7 +1302,7 @@ export class SessionContinuityStore {
     }
   }
 
-  get(sessionKey, now = Date.now()) {
+  get(sessionKey, now = Date.now(), { keepExpired = false } = {}) {
     if (!sessionKey) return null;
     let resolvedKey = sessionKey;
     let state = this.sessions.get(resolvedKey);
@@ -1313,7 +1317,7 @@ export class SessionContinuityStore {
     if (!state) return null;
     if (state.updatedAt && now - state.updatedAt > STICK_KEEP_MS) {
       this.sessions.delete(resolvedKey);
-      return null;
+      return keepExpired ? state : null;
     }
     return state;
   }
@@ -1393,7 +1397,7 @@ export class SessionContinuityStore {
       sessionKey,
       {
         model: decision.model || existing?.model || "",
-        // the model as routed (`upstream/claude-opus-5-5`); `model` is kept canonical
+        // `target` keeps the model as routed (`upstream/claude-opus-5-5`); `set` stores `model` canonical
         target: decision.model || existing?.target || "",
         effort: decision.effort || existing?.effort || "medium",
         provider: decision.provider ?? existing?.provider ?? "",

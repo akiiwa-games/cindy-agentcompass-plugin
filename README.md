@@ -147,8 +147,9 @@ keyword, regex or length heuristics on the task text:
   so the retry goes elsewhere (`route-cooldowns.json` in the state directory; the decision lists `cooling_down`). A task created on
   the route clears it. When every runnable route is cooling down, the roll still routes and warns (`cooldown_warning`).
 - **blocked**: a catalog with no Claude, Codex or Pi model (`no_runnable_model`), an unavailable/failed classifier without a caller profile,
-  every candidate account excluded (`account_unavailable`), or no route that meets the task's floor (`no_model_meets_floor`), is refused
-  (`status: "blocked"`); nothing is guessed.
+  every capable candidate account excluded (`accounts_unavailable`), or no route that meets the task's floor (`no_model_meets_floor`), is
+  refused (`status: "blocked"`); nothing is guessed. On `accounts_unavailable`, `roll` returns `reason: "accounts_unavailable"`,
+  `decision.reason: "accounts_unavailable"`, the failing/excluded `accounts` and `warnings`, a clear `error`, and an actionable `next_action`.
 
 Every decision is saved with the receipt (`router.stdout.json`): `profile_source` (`"classifier"`, `"caller"` or `"unavailable"`),
 `classifier_model`, `realtime_loop`, `profile`, chosen route, score components, alternatives and quota.
