@@ -39,6 +39,7 @@ function fixture(options={}) {
           streams.delete(key);
           catalog=JSON.parse(list.join(''));
         }
+        if (typeof params.task!=='string' || !params.task.trim()) return {ok:false,message:'Task is empty'};
         calls.push(['prepare',{task:params.task,catalog}]);
         if (options.prepareGate) await options.prepareGate(params.task,params.context);
         const operation=opOf(params.context.session_id,params.task);
@@ -628,6 +629,7 @@ function classifierFixture(options={}) {
     node:{request:async ({method,params})=>{
       calls.push(['node',method]);
       if (method==='prepare') {
+        if (typeof params.task!=='string' || !params.task.trim()) return {ok:false,message:'Task is empty'};
         const operation=opOf(params.context.session_id,params.task);
         const old=records.get(operation);
         if (old && !['prepared','create_rejected'].includes(old.state)) return {ok:true,result:{operation,...structuredClone(old)}};
@@ -916,6 +918,47 @@ test('M1 regression: native roll and status returns surface warnings and compact
     const roll3=(await f3.send('roll',{task:'Fix bug in m1-short-quota.py'})).result;
     assert.equal(roll3.status,'running');
     assert.ok(Array.isArray(roll3.warnings) && roll3.warnings.some(w=>/every runnable route is short of quota/.test(w)),JSON.stringify(roll3));
+
+    // 4. Empty task returns Task is empty without the unrelated "Check plugin permissions, task directory and exact account mapping" suffix.
+    for (const emptyTask of ['','   \n\t ']) {
+      const emptyReply=await f1.send('roll',{task:emptyTask});
+      assert.equal(emptyReply.ok,false);
+      assert.equal(emptyReply.errorCode,'ROUTER_BLOCKED');
+      assert.equal(emptyReply.message,'Task is empty');
+      assert.doesNotMatch(emptyReply.message,/Check plugin permissions, task directory and exact account mapping/);
+    }
+
+    // 5. preSendError and draft mismatch blocked returns also include accountNotice (warnings, warning and accounts).
+    clearClassifierCache();
+    const fPreSend=classifierFixture({routeOptions:{env:{CODEX_HOME:corruptHome},stateFile,now}});
+    const badDirReply=(await fPreSend.send('roll',{task:'Fix bug in m1-presend.py'},{...ctx,workdir:'D:/another-project'})).result;
+    assert.equal(badDirReply.status,'blocked');
+    assert.ok(Array.isArray(badDirReply.warnings) && badDirReply.warnings.some(w=>/codex\/openai: usage_failing/.test(w)),JSON.stringify(badDirReply));
+    assert.equal(badDirReply.accounts?.[0]?.key,'codex/openai');
+
+    const fSaveBeforeSend=fixture({
+      saveFails:r=>r.state==='sending',
+      prepared:{
+        parent:ctx.session_id,
+        state:'prepared',
+        bundle:{provider:'codex',account:'codex',harness:'codex',model:'gpt-test',effort:'high',modeId:'full-access'},
+        prompt:PROMPT,
+        router:{
+          status:'native',
+          decision:{
+            warnings:['codex/openai: usage_failing: test'],
+            warning:'every runnable route is short of quota',
+            accounts:[{key:'codex/openai',provider:'codex',account:'openai',plan:'pro',state:'usage_failing',dispatchable:true}],
+          },
+        },
+        mappings:[],
+      },
+    });
+    const preSendBlocked=(await fSaveBeforeSend.send('roll',{task:'x'})).result;
+    assert.equal(preSendBlocked.status,'blocked');
+    assert.equal(preSendBlocked.receipt_saved,false);
+    assert.deepEqual([...preSendBlocked.warnings],['codex/openai: usage_failing: test','every runnable route is short of quota']);
+    assert.deepEqual(structuredClone(preSendBlocked.accounts),[{key:'codex/openai',provider:'codex',account:'openai',plan:'pro',state:'usage_failing',dispatchable:true}]);
   } finally {
     fs.rmSync(dir,{recursive:true,force:true});
   }

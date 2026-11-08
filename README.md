@@ -83,7 +83,7 @@ keyword, regex or length heuristics on the task text:
   with every constraint and every description but the six the rubric covers (`context_scale`, `divergence`, `local_only`, `realtime_loop`, `wants_fast`, `read_only_review`), and last the
   whole task inside an `untrusted_task_evidence` JSON envelope with prompt-injection rules. The answer is validated against `TASK_PROFILE_SCHEMA` with every
   field required, so one without `self`, `wants_fast` or `read_only_review` is `invalid_classifier_output` and starts nothing (including `realtime_loop` and `expected_hours` in
-  `0.05..24`). `task_count` is a JSON string and the prompt says so; a positive whole number is read as its bucket (1, 2, 3, 4 and up as `">3"`) and then
+  `0.05..24`; a non-empty `reason` longer than 240 characters is truncated to 300 characters and accepted, as in AgentCompass). `task_count` is a JSON string and the prompt says so; a positive whole number is read as its bucket (1, 2, 3, 4 and up as `">3"`) and then
   checked like the string. Any other value, or one that contradicts `multi_task`, is invalid. The answer is cached in memory and in
   `~/.agent-compass/cindy-plugin/score-cache.json`, keyed by prompt/schema digest and full task input.
 - **the 32,768-character budget**: this channel takes a single `prompt` of at most 32,768 characters and has no separate context field, so the
@@ -110,7 +110,7 @@ keyword, regex or length heuristics on the task text:
   Cindy changes it, the cooldown just runs out. The plugin cannot see the auxiliary model in Cindy settings or a permission at all, so a fix there waits out
   the cooldown, up to 5 minutes, and the answer says so. No wait is longer than 5 minutes, even with the clock moved back. Cached tasks and explicit
   profiles are not held up.
-- **an explicit `profile`** must give every field in the tool schema's `required` list, otherwise `invalid_caller_profile` and nothing starts;
+- **an explicit `profile`** must give every field in the tool schema's `required` list (including `wants_fast` and `read_only_review`; only `self` and `reason` may be omitted), otherwise `invalid_caller_profile` and nothing starts;
   `profile: null` is the same as no profile.
   The external CLI classifies for itself and takes no profile: passing one answers `profile_not_supported_by_cli`.
 - **realtime_loop**: a live-loop task is scored on speed per turn as well, at the responsiveness floor of AgentCompass, using the speed data of the model

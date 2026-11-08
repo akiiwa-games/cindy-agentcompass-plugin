@@ -917,7 +917,7 @@ const TEXT_CALL_EXCEPTIONS = {
       "text.startsWith('{')", "text.endsWith('}')",
     ],
     'a profile field or its fallback reason, from the model or a caller: checkProfileFields, the gates': [
-      ['profile.reason.trim()', 4], 'missing.length', 'WORK_KINDS.includes(raw.work_kind)', 'raw.reason.trim()', 'raw.reason.length',
+      ['profile.reason.trim()', 4], 'missing.length', 'WORK_KINDS.includes(raw.work_kind)', 'raw.reason.trim()',
       'Object.keys(raw)', 'for(constkeyofObject.keys(raw))', "rawCount!=='1'", "raw.task_count!=='1'",
       "raw.task_count==='1'",
     ],
@@ -955,7 +955,7 @@ const TEXT_CALL_EXCEPTIONS = {
       'record.prompt.length', 'text(input.content).includes(record.prompt)',
     ],
     'a Cindy failure code, or an empty answer from the model': [
-      "String(code||'error').toLowerCase()", 'reply.text.trim()',
+      "String(code||'error').toLowerCase()", 'reply.text.trim()', "error.message==='Taskisempty'",
     ],
     "the worker's final message, shortened for the status reply": [
       'full.slice(0,4000)', 'full.length', 'output.length', 'output.slice(0,4000)',
@@ -1123,19 +1123,25 @@ test('a6: the acceptance document no longer says the built-in engine classifies 
   assert.match(doc, /the split and self gates, the classifier profile and the AgentCompass allocator/);
 });
 
-test('A1: the classifier must state self, wants_fast and read_only_review: an answer without them is invalid, never defaulted; a caller may still leave them out', () => {
+test('A1: the classifier must state self, wants_fast and read_only_review: an answer without them is invalid, never defaulted; a caller must also state wants_fast and read_only_review, and may only leave self (and reason) out', () => {
   for (const field of ['self', 'wants_fast', 'read_only_review']) {
     const {[field]: _, ...without} = makeProfile();
     assert.throws(() => validateClassifierProfile(without), new RegExp(`missing required field.*${field}`), field);
     const blocked = routeTask('What is a mutex?', REAL, {quota: OK, useCache: false, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(without)}});
     assert.deepEqual([blocked.status, blocked.decision.reason, blocked.profile_source], ['blocked', 'invalid_classifier_output', 'unavailable'], field);
     assert.equal(blocked.route, undefined);
-    assert.ok(!CALLER_REQUIRED_KEYS.includes(field));
   }
-  const {self, wants_fast, read_only_review, ...bare} = makeProfile();
+  for (const field of ['wants_fast', 'read_only_review']) {
+    assert.ok(CALLER_REQUIRED_KEYS.includes(field), field);
+    const {[field]: _, ...without} = makeProfile();
+    assert.throws(() => validateCallerProfile(without), new RegExp(`missing required field.*${field}`), field);
+    const blocked = routeTask('Fix util.py', REAL, {quota: OK, profile: without});
+    assert.deepEqual([blocked.status, blocked.decision.reason, blocked.profile_source], ['blocked', 'invalid_caller_profile', 'unavailable'], field);
+    assert.equal(blocked.route, undefined);
+  }
+  assert.ok(!CALLER_REQUIRED_KEYS.includes('self'));
+  const {self, ...bare} = makeProfile();
   assert.equal(validateCallerProfile(bare).self, false);
-  assert.equal(validateCallerProfile(bare).wants_fast, false);
-  assert.equal(validateCallerProfile(bare).read_only_review, false);
   assert.equal(validateCallerProfile({...bare, urgency: 'high'}).wants_fast, false, 'urgency is informational; wants_fast is not inferred from urgency');
 });
 
@@ -1510,6 +1516,9 @@ test('Review 9: a live loop reads the speed of the model Cindy lists, not of the
   const sonnet46 = routeRows([listedRow('cc', 'anthropic', 'claude-sonnet-4-6', ['high'])]);
   assert.deepEqual([sonnet46.status, sonnet46.decision.excluded],
     ['blocked', ['claude-sonnet-4-6@high: responsiveness 0.00 below the realtime_loop floor 0.5']]);
+  // A flat curve: medium is as fast as its own low, where claude-opus-5-5 slows down with effort.
+  const opus46 = routeRows([listedRow('cc', 'anthropic', 'claude-opus-4-6', FULL)]);
+  assert.deepEqual([opus46.status, opus46.route?.bundle.model, opus46.route?.bundle.effort, opus46.decision.components?.responsiveness], ['native', 'claude-opus-4-6', 'medium', 0.853]);
   // Its own curve has high at 0.663, where gpt-6.1-sol has it at 0.
   const sol56 = routeRows([listedRow('codex', 'openai', 'gpt-5.6-sol', ['high'])], {reasoning_depth: 2, code_complexity: 2, error_cost: 2});
   assert.deepEqual([sol56.status, sol56.route?.bundle.model, sol56.route?.bundle.effort, sol56.decision.components?.responsiveness], ['native', 'gpt-5.6-sol', 'high', 0.663]);
@@ -2108,7 +2117,45 @@ test('Step 3 regression: plan normalization matches full name before stripping t
     assert.deepEqual([m3FreshFree.status, m3FreshFree.decision.reason], ['blocked', 'account_unavailable']);
     assert.equal(m3FreshFree.decision.accounts[0].state, 'plan_inactive');
     assert.equal(m3FreshFree.decision.accounts[0].dispatchable, false);
+    assert.match(m3FreshFree.next_action, /Pi routes sharing the same provider account/);
   } finally {
     fs.rmSync(dir, {recursive: true, force: true});
   }
+});
+
+test('Review minors regression: classifier reason >240 chars is truncated to 300 chars and accepted, caller profile requires wants_fast and read_only_review, and route.mjs comment matches CRITICAL RULES 2-7', () => {
+  // 1. Classifier reason > 240 chars (e.g. 260 and 350 chars) is accepted and truncated to 300 chars, matching AgentCompass.
+  const reason260 = 'r'.repeat(260);
+  const clf260 = validateClassifierProfile(makeProfile({reason: reason260}));
+  assert.equal(clf260.reason.length, 260);
+  assert.equal(clf260.reason, reason260);
+  const routed260 = routeTask('Fix util.py', REAL, {
+    quota: OK,
+    useCache: false,
+    classification: {ok: true, model: 'm', rawOutput: JSON.stringify(makeProfile({reason: reason260}))},
+  });
+  assert.equal(routed260.status, 'native');
+  assert.equal(routed260.decision.profile.reason, reason260);
+
+  const reason350 = 'x'.repeat(300) + 'y'.repeat(50);
+  const clf350 = validateClassifierProfile(makeProfile({reason: reason350}));
+  assert.equal(clf350.reason.length, 300);
+  assert.equal(clf350.reason, 'x'.repeat(300));
+  const routed350 = routeTask('Fix util.py', REAL, {
+    quota: OK,
+    useCache: false,
+    classification: {ok: true, model: 'm', rawOutput: JSON.stringify(makeProfile({reason: reason350}))},
+  });
+  assert.equal(routed350.status, 'native');
+  assert.equal(routed350.decision.profile.reason, 'x'.repeat(300));
+
+  // Whitespace-only or empty reason is still rejected.
+  for (const emptyReason of ['', '   ']) {
+    assert.throws(() => validateClassifierProfile(makeProfile({reason: emptyReason})), /Invalid reason/);
+  }
+
+  // 2. route.mjs comment accurately states CRITICAL RULES 2-7 removed (matching README.md).
+  const routeSrc = ownSource('plugin/engine/route.mjs');
+  assert.match(routeSrc, /without its CRITICAL RULES 2-7:/);
+  assert.doesNotMatch(routeSrc, /without its CRITICAL RULES 2-5:/);
 });

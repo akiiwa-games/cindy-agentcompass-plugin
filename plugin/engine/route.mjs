@@ -187,7 +187,7 @@ export const TASK_PROFILE_SCHEMA = {
   },
 };
 
-// AgentCompass's SCORER_PROMPT (route_judge.py) without its CRITICAL RULES 2-5: each repeats, more briefly, an entry of `dimension_rubric`,
+// AgentCompass's SCORER_PROMPT (route_judge.py) without its CRITICAL RULES 2-7: each repeats, more briefly, an entry of `dimension_rubric`,
 // which this prompt carries whole and which is what must fit Cindy's 32,768 characters. Rule 1 stays: the rubric says "even if a local
 // output path is named" for only two of its five kinds. Then what its structured-output call carries elsewhere: this channel has no
 // response_format, so the JSON contract is in the prompt too.
@@ -294,6 +294,8 @@ const REQUIRED_CORE_KEYS = [
   'needs_gui',
   'local_only',
   'realtime_loop',
+  'wants_fast',
+  'read_only_review',
   'expected_hours',
   'hours_confidence',
   'urgency',
@@ -302,8 +304,8 @@ const REQUIRED_CORE_KEYS = [
   'task_count',
   'reason',
 ];
-// The model answers every field. A caller may leave `reason` and the two gates' answers out: it states what routing uses.
-const CLASSIFIER_REQUIRED_KEYS = [...REQUIRED_CORE_KEYS, 'self', 'wants_fast', 'read_only_review'];
+// The model answers every field. A caller may leave `reason` and `self` out: it states what routing uses.
+const CLASSIFIER_REQUIRED_KEYS = [...REQUIRED_CORE_KEYS, 'self'];
 const ALLOWED_PROFILE_KEYS = new Set(CLASSIFIER_REQUIRED_KEYS);
 export const CALLER_REQUIRED_KEYS = REQUIRED_CORE_KEYS.filter(key => key !== 'reason');
 const CALLER_ALLOWED_KEYS = new Set([...ALLOWED_PROFILE_KEYS, 'delegate']);
@@ -468,8 +470,8 @@ function checkProfileFields(raw, who, required, allowed) {
   if (raw.read_only_review === true && raw.code_complexity !== 0) {
     throw Error(`Invalid code_complexity ${raw.code_complexity} for read_only_review=true: must be 0 when read_only_review is true`);
   }
-  if ('reason' in raw && (typeof raw.reason !== 'string' || !raw.reason.trim() || raw.reason.length > 240)) {
-    throw Error(`Invalid reason in ${who} profile: must be 1..240 non-empty string`);
+  if ('reason' in raw && (typeof raw.reason !== 'string' || !raw.reason.trim())) {
+    throw Error(`Invalid reason in ${who} profile: must be a non-empty string`);
   }
 }
 
@@ -1139,7 +1141,7 @@ export function routeTask(task, catalog, {
         excluded: reasons,
       },
       error: `All candidate accounts are unavailable (${reasons.join('; ')}); refusing to dispatch to an inactive or failing account. Nothing was started.`,
-      next_action: 'Fix the account subscription, sign-in, or usage telemetry in Cindy (it recovers automatically after the next healthy Codex session log in Cindy, or by removing its entry in quota-state.json), then roll again. Nothing was started.',
+      next_action: 'Fix the account subscription, sign-in, or usage telemetry in Cindy (Pi routes sharing the same provider account are excluded too; it recovers automatically after the next healthy Codex session log in Cindy, or by removing its entry in quota-state.json), then roll again. Nothing was started.',
     };
   }
   const usage = row => matchesCodex(row.route.providerId) && codex.status !== 'unknown' ? codex : null;

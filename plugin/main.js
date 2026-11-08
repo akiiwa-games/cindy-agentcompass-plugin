@@ -388,7 +388,7 @@
         await discardDraft(record,canArchive);
         const saveError=await tryPersist(msg,operation,record);
         return {status:'blocked',operation,taskId:task.taskId,task_id:task.taskId,executed:false,error:record.error,
-          ...draftOutcome(record,operation),
+          ...draftOutcome(record,operation),...accountNotice(record),
           ...(saveError ? {receipt_saved:false,receipt_error:saveError} : {})};
       }
       record.sendRequest={taskId:task.taskId,expectedRevision:task.revision,requestKey:operation+':send',text:record.prompt};
@@ -400,7 +400,7 @@
         await discardDraft(record,canArchive);
         await tryPersist(msg,operation,record);
         return {status:'blocked',operation,taskId:task.taskId,task_id:task.taskId,runId:null,run_id:null,executed:false,
-          error:record.error,...draftOutcome(record,operation),
+          error:record.error,...draftOutcome(record,operation),...accountNotice(record),
           receipt_saved:false,receipt_error:preSendError};
       }
       let run, failure;
@@ -560,6 +560,6 @@
     handle(msg).then(
       result=>cindy.send({type:'tool-result',callId:msg.callId,ok:true,result}),
       error=>cindy.send({type:'tool-result',callId:msg.callId,ok:false,errorCode:'ROUTER_BLOCKED',
-        message:error.message+' Check plugin permissions, task directory and exact account mapping; no automatic retry.'}));
+        message:error.message==='Task is empty' ? error.message : error.message+' Check plugin permissions, task directory and exact account mapping; no automatic retry.'}));
   });
 })();
