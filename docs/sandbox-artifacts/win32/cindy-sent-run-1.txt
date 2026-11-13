@@ -1,4 +1,4 @@
-Rename the helper foo to bar in util.py and update its two callers. [e0c9faa5]
+Rename the helper foo to bar in util.py and update its two callers. [fcf81481]
 FIXTURE-SCENARIO: ok cli-fallback
 
 Cindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.

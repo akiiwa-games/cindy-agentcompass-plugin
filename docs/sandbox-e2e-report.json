@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-13T10:48:29.530Z",
+   "started_at": "2026-11-13T11:28:17.275Z",
    "operations": [
     {
      "name": "isolation",
@@ -33,7 +33,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 129 passed, 0 failed",
+       "name": "node --test: 125 passed, 0 failed",
        "ok": true
       },
       {
@@ -425,7 +425,7 @@
        "ok": true
       },
       {
-       "name": "the decision is explained: work kind, profile_source classifier, classifier_model, wants_fast, axis_demand, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel",
+       "name": "the decision is explained: work kind, profile_source classifier, classifier_model, wants_fast, axis_demand, score, alternatives, and no quota or account; the classification asked Cindy once, over the quick-text channel",
        "ok": true
       },
       {
@@ -485,8 +485,8 @@
      ]
     },
     {
-     "name": "built-in split, self, fast and quota",
-     "intent": "split and self come back from the built-in engine and start nothing; fast mode follows the classified profile and the Codex quota telemetry; an exhausted Codex window moves the route to Claude",
+     "name": "built-in split, self and fast",
+     "intent": "split and self come back from the built-in engine and start nothing; fast mode is never chosen and wants_fast stays in the decision; a Codex log, fresh or exhausted, changes no route and is not listed",
      "checks": [
       {
        "name": "split: task_count 2 and 3 from the built-in engine, with the next action for the parent",
@@ -501,19 +501,15 @@
        "ok": true
       },
       {
-       "name": "fast with fresh telemetry (12% used): Cindy creates codex fastMode true on a row that supports it",
+       "name": "fast asked with a fresh Codex log (12% used): Cindy creates a catalog row with fastMode false, wants_fast stays true, and no quota is listed",
        "ok": true
       },
       {
-       "name": "fast asked but the Codex window is 70% used: no fast mode",
+       "name": "fast asked with no Codex log at all: the same row, still not fast",
        "ok": true
       },
       {
-       "name": "fast asked with no telemetry at all: no fast mode",
-       "ok": true
-      },
-      {
-       "name": "quota: with the Codex window 97% used the edit goes to Claude on its own connection",
+       "name": "an exhausted Codex log (97% used) changes no route: the same row as with no log, and no quota or account is listed",
        "ok": true
       }
      ]
@@ -664,11 +660,11 @@
     "agentcompass_version": "0.6.0",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:38739/v1"
+    "scorer": "http://127.0.0.1:43815/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 129,
+     "pass": 125,
      "fail": 0
     },
     "python": {
@@ -690,11 +686,11 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-13T10:49:01.624Z",
+   "finished_at": "2026-11-13T11:28:48.763Z",
    "summary": {
     "operations": 28,
-    "checks": 120,
-    "passed": 120,
+    "checks": 119,
+    "passed": 119,
     "failed": 0,
     "artifacts": "<sandbox>/report/cindy"
    }
@@ -702,7 +698,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-13T10:47:00.232Z",
+   "started_at": "2026-11-13T11:26:47.020Z",
    "operations": [
     {
      "name": "isolation",
@@ -731,7 +727,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 129 passed, 0 failed",
+       "name": "node --test: 125 passed, 0 failed",
        "ok": true
       },
       {
@@ -1123,7 +1119,7 @@
        "ok": true
       },
       {
-       "name": "the decision is explained: work kind, profile_source classifier, classifier_model, wants_fast, axis_demand, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel",
+       "name": "the decision is explained: work kind, profile_source classifier, classifier_model, wants_fast, axis_demand, score, alternatives, and no quota or account; the classification asked Cindy once, over the quick-text channel",
        "ok": true
       },
       {
@@ -1183,8 +1179,8 @@
      ]
     },
     {
-     "name": "built-in split, self, fast and quota",
-     "intent": "split and self come back from the built-in engine and start nothing; fast mode follows the classified profile and the Codex quota telemetry; an exhausted Codex window moves the route to Claude",
+     "name": "built-in split, self and fast",
+     "intent": "split and self come back from the built-in engine and start nothing; fast mode is never chosen and wants_fast stays in the decision; a Codex log, fresh or exhausted, changes no route and is not listed",
      "checks": [
       {
        "name": "split: task_count 2 and 3 from the built-in engine, with the next action for the parent",
@@ -1199,19 +1195,15 @@
        "ok": true
       },
       {
-       "name": "fast with fresh telemetry (12% used): Cindy creates codex fastMode true on a row that supports it",
+       "name": "fast asked with a fresh Codex log (12% used): Cindy creates a catalog row with fastMode false, wants_fast stays true, and no quota is listed",
        "ok": true
       },
       {
-       "name": "fast asked but the Codex window is 70% used: no fast mode",
+       "name": "fast asked with no Codex log at all: the same row, still not fast",
        "ok": true
       },
       {
-       "name": "fast asked with no telemetry at all: no fast mode",
-       "ok": true
-      },
-      {
-       "name": "quota: with the Codex window 97% used the edit goes to Claude on its own connection",
+       "name": "an exhausted Codex log (97% used) changes no route: the same row as with no log, and no quota or account is listed",
        "ok": true
       }
      ]
@@ -1362,11 +1354,11 @@
     "agentcompass_version": "0.6.0",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:51452/v1"
+    "scorer": "http://127.0.0.1:58630/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 129,
+     "pass": 125,
      "fail": 0
     },
     "python": {
@@ -1388,11 +1380,11 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-13T10:48:15.986Z",
+   "finished_at": "2026-11-13T11:28:06.044Z",
    "summary": {
     "operations": 28,
-    "checks": 120,
-    "passed": 120,
+    "checks": 119,
+    "passed": 119,
     "failed": 0,
     "artifacts": "<sandbox>\\report\\cindy"
    }
@@ -1401,15 +1393,15 @@
  "summary": {
   "linux": {
    "operations": 28,
-   "checks": 120,
-   "passed": 120,
+   "checks": 119,
+   "passed": 119,
    "failed": 0,
    "artifacts": "<sandbox>/report/cindy"
   },
   "win32": {
    "operations": 28,
-   "checks": 120,
-   "passed": 120,
+   "checks": 119,
+   "passed": 119,
    "failed": 0,
    "artifacts": "<sandbox>\\report\\cindy"
   }

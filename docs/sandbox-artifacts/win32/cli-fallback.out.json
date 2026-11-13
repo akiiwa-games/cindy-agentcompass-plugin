@@ -15,7 +15,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "9204f939a42e3ee45d918662cf3d156e3c22a1ff",
+      "operation": "4a0a629c8bb83bd3ad5d9e3dd5a6d1851bdf9bc6",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -30,7 +30,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "9204f939a42e3ee45d918662cf3d156e3c22a1ff"
+        "operation": "4a0a629c8bb83bd3ad5d9e3dd5a6d1851bdf9bc6"
        }
       }
      }
@@ -50,7 +50,7 @@
   },
   {
    "name": "create",
-   "requestKey": "9204f939a42e3ee45d918662cf3d156e3c22a1ff:create",
+   "requestKey": "4a0a629c8bb83bd3ad5d9e3dd5a6d1851bdf9bc6:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6-astra",
@@ -64,7 +64,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "9204f939a42e3ee45d918662cf3d156e3c22a1ff:send",
+   "requestKey": "4a0a629c8bb83bd3ad5d9e3dd5a6d1851bdf9bc6:send",
    "chars": 433
   }
  ],
@@ -88,12 +88,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "9e7e48bc927879f47ceab92acfb1dd143fea44e1cf77e9a5fc4ccee0e62a1ed0",
+   "sha256": "19ef902b93e402961c243df430ccd519b563e4193058ed89662d420f74f83328",
    "chars": 433
   }
  ],
  "prepared": {
-  "operation": "9204f939a42e3ee45d918662cf3d156e3c22a1ff",
+  "operation": "4a0a629c8bb83bd3ad5d9e3dd5a6d1851bdf9bc6",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -153,11 +153,6 @@
      "included": 63,
      "total": 66
     },
-    "quota": {
-     "source": "codex-cli-sessions",
-     "status": "unknown",
-     "reason": "no Codex session log"
-    },
     "canonical_model": "gpt-6-astra",
     "score": 0.8220000000000001,
     "components": {
@@ -183,7 +178,6 @@
      "harness_place": 0,
      "decided_by": "tie"
     },
-    "selected_quota": null,
     "wants_fast": false,
     "warnings": [
      "candidate name chatgpt/gpt-5.3-codex-spark is not in the catalog: no scores: a demanded category is a data error, so it leaves automatic routing (name it to dispatch it)"
@@ -235,7 +229,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [e0c9faa5]\nFIXTURE-SCENARIO: ok cli-fallback\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [fcf81481]\nFIXTURE-SCENARIO: ok cli-fallback\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1
@@ -271,7 +265,7 @@
     "effort": "low",
     "fastMode": false
    },
-   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [e0c9faa5]\nFIXTURE-SCENARIO: ok cli-fallback\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
+   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [fcf81481]\nFIXTURE-SCENARIO: ok cli-fallback\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
   }
  ],
  "workerStderr": ""
