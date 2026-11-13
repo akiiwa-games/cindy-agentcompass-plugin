@@ -29,7 +29,7 @@ export async function targets(scratch) {
 export async function connect(scratch, { target } = {}) {
   const list = await targets(scratch);
   const t = target ? list.find((x) => x.url.includes(target))
-    : list.find((x) => !/[?&]\w+Window=1/.test(x.url)) ?? list[0];
+    : list.find((x) => /main_window\/index\.html(#|$)/.test(x.url)) ?? list[0];
   if (!t) throw new Error(`no page matches ${target ?? '(main window)'}: ${list.map((x) => x.url).join(', ')}`);
   const ws = new WebSocket(t.webSocketDebuggerUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('websocket error')); });

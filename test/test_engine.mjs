@@ -365,7 +365,7 @@ test('a Codex account is priced only with the plan it reports: with none its row
   const noPlan = {source: 'test', status: 'ok', used_percent: 17};
   const onlyCodex = routeWithProfile('Task text.', {}, REAL, noPlan);
   assert.equal(onlyCodex.status, 'blocked', 'nothing else to route to');
-  assert.ok(onlyCodex.decision.excluded.some(line => /capacity_unknown/.test(line)), JSON.stringify(onlyCodex.decision.excluded.slice(0, 3)));
+  assert.ok(onlyCodex.decision.excluded.some(line => /capacity[_ ]unknown/.test(line)), JSON.stringify(onlyCodex.decision.excluded.slice(0, 3)));
   const withClaude = routeWithProfile('Task text.', {}, WITH_CLAUDE, noPlan);
   assert.equal(withClaude.status, 'native');
   assert.equal(withClaude.route.bundle.harness, 'claude', 'the connection with no quota account runs unmetered');
@@ -377,7 +377,7 @@ test('a Codex account is priced only with the plan it reports: with none its row
   const named = routeWithProfile('Task text.', {}, WITH_CLAUDE, noPlan, {constraintModel: 'gpt-6-sol'});
   assert.equal(named.status, 'native');
   assert.equal(leaf(named.route.bundle.model), 'gpt-6-sol');
-  assert.ok(named.decision.warnings.some(line => /capacity_unknown/.test(line)));
+  assert.ok(named.decision.warnings.some(line => /capacity[_ ]unknown/.test(line)));
 });
 
 test('fast mode is driven by profile.wants_fast, a codex row of a model its data declares fast-capable and known quota under 60%; urgency alone never enables it', () => {
@@ -424,10 +424,17 @@ test('quota: a window the Codex CLI reports exhausted takes that account out of 
   // The engine prices what the window of the plan says: more of it used never makes a route cheaper.
   const cost = used => routeTask(task, REAL, {quota: {...exhausted, status: 'ok', used_percent: used, windows: [window(used, 10080)]}, profile: prof, now, constraintModel: 'gpt-6.1-sol:high'}).decision.selected_quota.cost;
   assert.ok(cost(10) <= cost(50) && cost(50) <= cost(80), `${cost(10)} ${cost(50)} ${cost(80)}`);
-  // A window the plan has no data for is named, not priced, and does not take the account out.
-  const proFiveHour = routeTask(task, REAL, {quota: {...exhausted, status: 'ok', used_percent: 30, windows: [window(30, 300), window(30, 10080)]}, profile: prof, now});
-  assert.equal(proFiveHour.status, 'native');
-  assert.ok(proFiveHour.decision.warnings.some(line => /five_hour.*not priced/.test(line)), JSON.stringify(proFiveHour.decision.warnings));
+  // AgentCompass v0.6.0 `applicable_windows`: a window the log reports binds the account whether or not its plan declares it. With no cited
+  // capacity it is never priced and never ignored, so the Codex rows leave automatic routing with the engine's own reason (and a window with
+  // nothing left says so as well); a connection that is not limited routes instead.
+  for (const left of [70, 0]) {
+    const undeclared = routeTask(task, REAL, {quota: {...exhausted, status: 'ok', used_percent: 30, windows: [window(100 - left, 300), window(30, 10080)]}, profile: prof, now});
+    assert.equal(undeclared.status, 'blocked', `an undeclared window with ${left}% left must not be dropped`);
+    assert.ok(undeclared.decision.excluded.some(line => /capacity[_ ]unknown/.test(line)), JSON.stringify(undeclared.decision.excluded?.slice(0, 3)));
+    if (left === 0) assert.ok(undeclared.decision.excluded.some(line => /exhausted|below launch floor/.test(line)), JSON.stringify(undeclared.decision.excluded?.slice(0, 4)));
+    const elsewhere = routeTask(task, WITH_CLAUDE, {quota: {...exhausted, status: 'ok', used_percent: 30, windows: [window(100 - left, 300), window(30, 10080)]}, profile: prof, now});
+    assert.equal(elsewhere.route.bundle.harness, 'claude', 'the other connection still routes');
+  }
   // Plus has both windows: a five-hour window that is nearly spent keeps the account's rows out of a task that needs more than is left.
   const plusSpent = routeTask(task, REAL, {quota: {source: 'test', status: 'ok', used_percent: 99, plan: 'plus', windows: [window(99, 300), window(20, 10080)]}, profile: prof, now});
   assert.ok(plusSpent.status === 'blocked' && plusSpent.decision.excluded.some(line => /five_hour/.test(line)), JSON.stringify(plusSpent.decision?.excluded?.slice(0, 2)));
@@ -1078,12 +1085,10 @@ const TEXT_CALL_EXCEPTIONS = {
       "windows.length",
       "DIRECT_SOURCES.includes(resolved.source)",
       "codex.windows.length",
-      "codexIgnored.length",
       "for(constyearofdesc(path.join(home,'sessions')))",
       "for(constmonthofdesc(year))",
       "for(constdayofdesc(month))",
       "for(constnameoffiles)",
-      "for(constwindowofwindows)",
       "codex.status!=='unknown'",
     ],
     "the engine's own output, read to word the answer: the lines it gives for rows it left out, its warnings and ranking": [

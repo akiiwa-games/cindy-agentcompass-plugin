@@ -1,8 +1,8 @@
 # Runs INSIDE the Windows Sandbox guest (Windows PowerShell 5.1). Every location is derived at run time.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File C:\stage\scripts\guest-setup.ps1 -Step probe|install|signin|launch|status
 # Evidence goes to C:\out (mapped read-write). Never writes or prints credential content.
-param([Parameter(Mandatory)][ValidateSet('probe','install','signin','launch','status','desktop','sendkeys')][string]$Step,
-      [string]$Keys = '', [int]$CdpPort = 9222, [int]$ExposedPort = 9223)
+param([Parameter(Mandatory)][ValidateSet('probe','install','signin','launch','status','desktop','sendkeys','state','workdir','pin','config')][string]$Step,
+      [string]$Keys = '', [string]$Label = 'state', [int]$CdpPort = 9222, [int]$ExposedPort = 9223)
 $ErrorActionPreference = 'Stop'
 $out = 'C:\out'
 $stage = 'C:\stage'
@@ -75,6 +75,39 @@ switch ($Step) {
     netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=$ExposedPort 2>$null | Out-Null
     netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=$ExposedPort connectaddress=127.0.0.1 connectport=$CdpPort | Out-Null
     Save 'launch.json' ([pscustomobject]@{ cindy_pid_hint = (Get-Process | Where-Object { $_.Name -like 'Cindy*' } | Select-Object -ExpandProperty Id); cdp = $CdpPort; exposed = $ExposedPort; at_utc = (Get-Date).ToUniversalTime().ToString('o') })
+  }
+  'state' {
+    # Copy the plugin's own state (receipts, router output, caches, cooldowns) so it can be read from the host.
+    $src = Join-Path $env:USERPROFILE '.agent-compass\cindy-plugin'
+    $dst = Join-Path $out ('state-' + $Label)
+    if (Test-Path -LiteralPath $dst) { Remove-Item -Recurse -Force -LiteralPath $dst }
+    if (Test-Path -LiteralPath $src) { Copy-Item -Recurse -LiteralPath $src -Destination $dst } else { New-Item -ItemType Directory -Path $dst | Out-Null }
+  }
+  'workdir' {
+    # Set the plugin's Working folder (-Keys <path>) in the signed-in account's errand prefs, without the native folder dialog.
+    $id = '_ns__local__agentcompass'
+    foreach ($f in Get-ChildItem (Join-Path $env:APPDATA 'CindyGlobal\owners') -Recurse -Filter ghost-errand-prefs.json -ErrorAction SilentlyContinue) {
+      $doc = [IO.File]::ReadAllText($f.FullName) | ConvertFrom-Json
+      if ($doc.errand.$id) { $doc.errand.$id | Add-Member -Force -NotePropertyName workingDir -NotePropertyValue $Keys; [IO.File]::WriteAllText($f.FullName, ($doc | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false))) }
+    }
+  }
+  'pin' {
+    # Pin the plugin card's model (-Keys <model id>, e.g. one Cindy cannot serve) or, with an empty -Keys, restore "follow the system".
+    $id = '_ns__local__agentcompass'
+    foreach ($f in Get-ChildItem (Join-Path $env:APPDATA 'CindyGlobal\owners') -Recurse -Filter ghost-errand-prefs.json -ErrorAction SilentlyContinue) {
+      $doc = [IO.File]::ReadAllText($f.FullName) | ConvertFrom-Json
+      $e = $doc.errand.$id
+      if (-not $e) { continue }
+      foreach ($k in 'agentKind','model','effort','fastMode','providerId') { $e.PSObject.Properties.Remove($k) }
+      if ($Keys) { foreach ($kv in @{agentKind='pi'; model=$Keys; effort='high'; fastMode=$false; providerId='xd'}.GetEnumerator()) { $e | Add-Member -Force -NotePropertyName $kv.Key -NotePropertyValue $kv.Value } }
+      [IO.File]::WriteAllText($f.FullName, ($doc | ConvertTo-Json -Depth 8), (New-Object Text.UTF8Encoding($false)))
+    }
+  }
+  'config' {
+    # Write ~/.agent-compass/cindy-plugin/config.json from -Keys (e.g. '{"engine":"cli"}'), or delete it when -Keys is empty.
+    $file = Join-Path $env:USERPROFILE '.agent-compass\cindy-plugin\config.json'
+    if ($Keys) { New-Item -ItemType Directory -Force -Path (Split-Path $file) | Out-Null; [IO.File]::WriteAllText($file, $Keys, (New-Object Text.UTF8Encoding($false))) }
+    elseif (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file }
   }
   'sendkeys' {
     # Keystrokes into the guest's foreground window (a native folder dialog), e.g. -Keys 'C:\work\proj{ENTER}'.

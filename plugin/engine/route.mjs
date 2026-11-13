@@ -732,17 +732,6 @@ function quotaWindowOf(window, now) {
   };
 }
 
-// The windows of a reading the account's plan has data for. A window its plan does not list (the plan data of a Codex Pro has the
-// weekly window only) cannot be priced, and the engine would take the whole account out of automatic routing for it: it is left
-// out of what is passed on and named, so the account's other windows still route. A plan nobody reported keeps every window.
-function pricedWindows(plan, windows) {
-  const template = (planDefaults('codex', configuredPlan('codex', plan)) || {}).windows;
-  if (!template) return {kept: windows, ignored: []};
-  const kept = [], ignored = [];
-  for (const window of windows) (canonicalWindowId(window.name, template) in template ? kept : ignored).push(window);
-  return {kept, ignored};
-}
-
 // The AgentCompass harness order of a route kind is data (`ROUTES[kind].harness_order`): the harness it names first goes first.
 function harnessRank(kind, harness) {
   const first = (ROUTES[kind]?.harness_order || [])[0];
@@ -947,7 +936,6 @@ export function routeTask(task, catalog, {
   const codexRead = Array.isArray(codex.windows) && codex.windows.length
     ? codex.windows.map(window => quotaWindowOf(window, now))
     : hasCodexUsage ? [{name: 'usage', used: codex.used_percent}] : [];
-  const {kept: codexWindows, ignored: codexIgnored} = pricedWindows(codex.plan ?? codex.plan_type, codexRead);
   const codexReading = boundCodex && hasCodexState ? {[`codex/${boundCodex}`]: {
     ...codex,
     provider: 'codex',
@@ -955,7 +943,9 @@ export function routeTask(task, catalog, {
     plan: codex.plan ?? codex.plan_type ?? null,
     status: codex.state || (hasCodexUsage && !codex.error && !codex.http_status && !codex.error_code && !codex.stale ? ACCOUNT_STATES.READY : codex.status),
     error: codex.error ?? (codex.state === ACCOUNT_STATES.USAGE_FAILING || codex.status === ACCOUNT_STATES.USAGE_FAILING ? (codex.reason || 'reading failing') : null),
-    windows: codexWindows,
+    // Every window the log reported goes to the engine, declared by the plan or not: it binds the account (an observed window
+    // with no cited capacity leaves automatic routing with the engine's own reason, as in AgentCompass v0.6.0 `applicable_windows`).
+    windows: codexRead,
     fetched_at: codex.fetched_at ?? null,
     last_success_at: codex.last_success_at ?? null,
   }} : null;
@@ -986,7 +976,6 @@ export function routeTask(task, catalog, {
   } : codex;
   const accountWarnings = [
     ...quotaAccounts.flatMap(a => a.warnings),
-    ...(!callerAccounts && codexIgnored.length ? [`codex/${boundCodex}: no plan data for the ${codexIgnored.map(w => `${w.name} (${w.used}% used)`).join(', ')} window of plan ${codex.plan ?? codex.plan_type}; not priced`] : []),
   ];
   const accountDecisionInfo = quotaAccounts.length ? {accounts: quotaAccounts} : {};
 
