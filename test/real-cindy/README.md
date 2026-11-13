@@ -9,7 +9,9 @@ Nothing here names a user, a host path or a machine id: every location is derive
 | `make-sandbox-config.mjs` | host | Writes `guest.wsb` (`stage` read-only as `C:\stage`, `out` read-write as `C:\out`, networking on, no GPU, clipboard off) |
 | `stage-credentials.mjs` | host | Copies the Codex and Claude sign-ins into `stage/signin` with every refresh token emptied; prints no value. `--remove` deletes them again (run it as soon as the guest has them) |
 | `guest.mjs` | host | `wsb` wrapper: `start` (refuses if a sandbox already runs; connects and minimises the window without activating it), `setup <step>`, `exec`, `ip`, `window [show]`, `stop` |
-| `guest-setup.ps1` | guest | Steps `probe` (zero-configuration), `install` (`/S /currentuser`), `signin` (moves the staged sign-ins into the guest profile), `launch` (Cindy with CDP, exposed on guest port 9223), `status`, `desktop` (screenshot of native dialogs), `sendkeys` |
+| `guest-setup.ps1` | guest | Steps `probe` (zero-configuration), `install` (`/S /currentuser`), `signin` (moves the staged sign-ins into the guest profile), `launch` (Cindy with CDP, exposed on guest port 9223), `status`, `desktop` (screenshot of native dialogs), `sendkeys`, `state -Label` (copies the plugin's state to `out/`), `workdir -Keys <path>` (plugin card Working folder), `pin -Keys <model>` (pin or, empty, restore the card model), `config -Keys <json>` (plugin `config.json`, or delete it) |
+| `ask.mjs` | host | Types a prompt into a Cindy dialogue over CDP (`--new` opens a Full-access dialogue), allows one-time approvals, waits until the turn is idle and prints the scrubbed text (`--redact <word>`) |
+| `build-record.mjs` | host | Turns `<scratch>/out/state-*`, `models.jsonl` and `tx/` plus a spec file into a redacted `acceptance.json`; fails if an e-mail address, a redacted word, an owner id or the host user name is still in it |
 | `cdp.mjs` | host | CDP driver for the guest's Cindy: `targets`, `eval`, `shot`, `text`, `click`, `type`, `mouse`; importable as a library |
 
 Order of a run:
@@ -32,3 +34,7 @@ Notes measured on Cindy 0.1.135:
   (CSS pixels; the screenshot is 1.5 times larger).
 - The plugin page's Working folder opens a native folder dialog in the guest: type the path with `guest-setup.ps1 -Step sendkeys -Keys 'C:\work\proj{ENTER}'`, then `{ENTER}` twice more.
 - Do not leave a copy of a sign-in anywhere: `<scratch>` is deleted at the end of a run, and nothing from `stage/signin` or the guest's profile belongs in a record.
+- The plugin's Working folder must be the calling dialogue's own folder (`...\dialogues\<date>\<session id>`), else `roll` answers `blocked` "Created draft has different route/permissions/workdir"; the receipt is replayed for the same task text.
+- The prefs file `owners/<id>/ghost-errand-prefs.json` must be written without a BOM, or Cindy ignores it (`guest-setup.ps1 -Step workdir|pin` does).
+- Agents refuse to emit a 15 KB tool argument made of one repeated line; pass varied prose for the long-task scenarios.
+- Run every `node` command with `C:/...` paths: a Git Bash `/c/...` path makes Node create a stray `C:\c\...` tree.
