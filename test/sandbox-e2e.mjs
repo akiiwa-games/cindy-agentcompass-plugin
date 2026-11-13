@@ -11,7 +11,7 @@
 // not AgentCompass, would run the worker). Real-host evidence is docs/CINDY_REAL_ACCEPTANCE_AND_CANCEL_FIX.md.
 //
 // Environment:
-//   AGENTCOMPASS_CHECKOUT   AgentCompass source checkout (default: ../route_manager next to this repository, or next to its main checkout from a git worktree)
+//   AGENTCOMPASS_CHECKOUT   AgentCompass source checkout (default: ../AgentCompass next to this repository, or next to its main checkout from a git worktree)
 //   AGENTCOMPASS_PYTHON     Python 3.11+ that runs it (default: python3, then python)
 //   CINDY_SANDBOX_ROOT      new directory for the isolated home (default: a fresh temporary directory)
 //   CINDY_SANDBOX_REPORT    report path (default: <sandbox>/report/sandbox-e2e-report.json)
@@ -65,6 +65,14 @@ assert.equal(fs.readdirSync(ROOT).length, 0, `CINDY_SANDBOX_ROOT must be a new e
 const D = name => {const p = path.join(ROOT, name); fs.mkdirSync(p, {recursive: true}); return p;};
 const home = D('home'), state = D('state'), bin = D('bin'), tmp = D('tmp'), art = D('report/cindy'), work = D('work dir');
 const python = findPython();
+// The fleet fixture of the checkout, completed with the `families` declaration of its catalog as AgentCompass's own tests do (v0.6.0 needs it).
+const referenceFleet = path.join(state, 'reference-accounts.json');
+{
+  const readDoc = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+  const fleet = readDoc(path.join(CHECKOUT, 'skills', 'agent-compass', 'scripts', 'fixtures', 'reference-accounts.json'));
+  fleet.families = readDoc(path.join(CHECKOUT, 'skills', 'agent-compass', 'references', 'accounts.json')).families;
+  fs.writeFileSync(referenceFleet, JSON.stringify(fleet));
+}
 const pathParts = [bin, path.dirname(process.execPath), path.dirname(python.exe)];
 if (WIN) pathParts.push(path.join(process.env.SYSTEMROOT || 'C:\\Windows', 'System32'));
 else pathParts.push('/usr/bin', '/bin');
@@ -77,7 +85,7 @@ const baseEnv = {
   XDG_STATE_HOME: path.join(home, '.local', 'state'),
   CODEX_HOME: path.join(home, '.codex'), CLAUDE_CONFIG_DIR: path.join(home, '.claude'), PASEO_HOME: path.join(home, '.paseo'),
   ROUTER_PROVIDER_HOME: home, ROUTER_STATE_DIR: state,
-  ROUTER_ACCOUNTS_FILE: path.join(CHECKOUT, 'skills', 'agent-compass', 'scripts', 'fixtures', 'reference-accounts.json'),
+  ROUTER_ACCOUNTS_FILE: referenceFleet,
   ROUTER_ACCOUNTS_OVERRIDE: path.join(state, 'override.json'), ROUTER_LEDGER: path.join(state, 'router-ledger.jsonl'),
   ROUTER_DISPATCH_DB: path.join(state, 'dispatch.sqlite3'), ROUTER_USAGE_CACHE: path.join(state, 'usage.json'), ROUTER_SCORE_CACHE: 'off',
   PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1', NO_COLOR: '1',
@@ -92,10 +100,22 @@ fs.mkdirSync(baseEnv.CODEX_HOME, {recursive: true});
 fs.mkdirSync(baseEnv.CLAUDE_CONFIG_DIR, {recursive: true});
 fs.writeFileSync(path.join(baseEnv.CLAUDE_CONFIG_DIR, '.credentials.json'), JSON.stringify({claudeAiOauth: {accessToken: 'fixture-only',
   subscriptionType: 'max', rateLimitTier: 'default_claude_max_20x'}}));
-// The Pi scenario routes with only the Codex sign-in: with Claude signed in, this fleet prefers Claude for exploration.
-const noClaude = D('claude-signed-out');
 const claims = Buffer.from(JSON.stringify({'https://api.openai.com/auth': {chatgpt_plan_type: 'plus', chatgpt_account_id: 'fixture'}})).toString('base64url');
 fs.writeFileSync(path.join(baseEnv.CODEX_HOME, 'auth.json'), JSON.stringify({tokens: {account_id: 'fixture', access_token: 'fixture-only', id_token: `e30.${claims}.fixture`}}));
+// The collector's usage cache for the two signed-in accounts: AgentCompass v0.6.0 prices a route from an observed quota window and routes
+// nothing automatically on an account it has never seen one of. A reading counts only for the credential it was taken with, so each row
+// carries the key AgentCompass derives from the credential file (sha256 over the resolved home and the token), and the plan it reported.
+{
+  const key = (...values) => crypto.createHash('sha256').update(values.map(v => String(v ?? '')).join('\0')).digest('hex');
+  const window = (id, used, hours) => ({id, used_pct: used, resets_at: new Date(Date.now() + hours * 3600 * 1000).toISOString()});
+  const row = (credential_key, plan_label, windows, extra = {}) => ({fetched_at: new Date().toISOString(), stale: false, available: true,
+    credential_key, plan_label, windows, ...extra});
+  fs.writeFileSync(path.join(state, 'usage.json'), JSON.stringify({providers: {
+    codex: row(key(fs.realpathSync.native(baseEnv.CODEX_HOME), 'fixture-only:fixture'), 'plus', [window('usage', 20, 100), window('five_hour', 10, 3)]),
+    claude: row(key(fs.realpathSync.native(baseEnv.CLAUDE_CONFIG_DIR), 'fixture-only'), 'max20',
+      [window('five_hour', 10, 3), window('seven_day', 20, 100), window('weekly_fable', 10, 100)], {plan_source: 'profile_api'}),
+  }}));
+}
 const piAgentDir = path.join(home, '.pi', 'agent');
 fs.mkdirSync(piAgentDir, {recursive: true});
 fs.writeFileSync(path.join(piAgentDir, 'auth.json'), JSON.stringify({'openai-codex': {type: 'oauth', access: `e30.${claims}.fixture`, accountId: 'fixture'}}));
@@ -103,10 +123,11 @@ fs.writeFileSync(path.join(piAgentDir, 'auth.json'), JSON.stringify({'openai-cod
 // ---- the model behind the classifier: a fixed small-edit profile, changed by a `FIXTURE-PROFILE: <name>` line in the task
 // so each harness is reached through the real allocator (profiles found by probing this fleet; the router decides).
 const PROFILES = {
-  deep: {work_kind: 'direction_reasoning', reasoning_depth: 4, hallucination_risk: 3, error_cost: 3, divergence: 3, context_scale: 3,
+  deep: {work_kind: 'direction_reasoning', reasoning_depth: 4, axis_demand: {divergence: 3, coding: 3, aesthetics: 0, tool_operation: 1},
     code_complexity: 3, expected_hours: 3, reason: 'fixture: deep open-ended design'},
   review: {work_kind: 'debug_review', reasoning_depth: 3, reason: 'fixture: a focused review'},
-  explore: {work_kind: 'exploration_analysis', interaction_style: 'exploration', reason: 'fixture: read-only exploration'},
+  explore: {work_kind: 'exploration_analysis', interaction_style: 'exploration', code_complexity: 0, access: 'read-only',
+    axis_demand: {divergence: 2, coding: 0, aesthetics: 0, tool_operation: 1}, reason: 'fixture: read-only exploration'},
   split: {multi_task: true, task_count: '2', reason: 'fixture: two independent deliverables'},
 };
 const scorerRequests = [];
@@ -116,8 +137,8 @@ const scorer = http.createServer((req, res) => {
     const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
     const user = (body.messages || []).find(m => m.role === 'user')?.content || '';
     scorerRequests.push({path: req.url, model: body.model, chars: user.length});
-    const profile = {work_kind: 'general_implementation', reasoning_depth: 2, code_complexity: 1, context_scale: 2, divergence: 1,
-      hallucination_risk: 2, error_cost: 2, needs_visual: false, needs_gui: false, local_only: false, realtime_loop: false,
+    const profile = {work_kind: 'general_implementation', reasoning_depth: 2, code_complexity: 1, access: 'write',
+      axis_demand: {divergence: 1, coding: 1, aesthetics: 0, tool_operation: 1}, needs_visual: false, needs_gui: false, local_only: false,
       wants_fast: false, read_only_review: false, expected_hours: 0.5,
       hours_confidence: 'medium', urgency: 'normal', interaction_style: 'engineering', multi_task: false, task_count: '1',
       reason: 'fixture classification of a small bounded edit'};
@@ -236,7 +257,7 @@ try {
 
   // -------------------------------------------------------------------------------------------------------------
   operation('AgentCompass core: stock Cindy shell', 'raw shell roll in Cindy has no addressable parent: the core refuses instead of routing a provider thread to Paseo');
-  const stock = await ac(['roll', '--task', task('stock-cindy'), '--wait', '0'], {env: {CINDY_INPUT_HANDOFF_ROUTE: 'fixture-route-value', CLAUDE_SESSION_ID: 'provider-thread-from-cindy-shell'}});
+  const stock = await ac(['roll', '--task', task('stock-cindy')], {env: {CINDY_INPUT_HANDOFF_ROUTE: 'fixture-route-value', CLAUDE_SESSION_ID: 'provider-thread-from-cindy-shell'}});
   const stockDoc = parse(stock.stdout) || {};
   check('roll is refused (not launched) and names Cindy', stock.code !== 0 && stockDoc.status !== 'launched' && (stock.stdout + stock.stderr).toLowerCase().includes('cindy'),
     (stock.stdout + stock.stderr).slice(0, 400));
@@ -274,8 +295,8 @@ try {
   const bundle = stored.bundle || {};
   check('the plugin made the launcher permission explicit for the routed harness',
     ({claude: 'bypassPermissions', codex: 'full-access', pi: 'full-access'})[bundle.harness] === bundle.modeId, bundle);
-  check('codex: the router chose codex/gpt-6.1-sol, full-access, without fast mode',
-    bundle.provider === 'codex' && bundle.harness === 'codex' && bundle.model === 'gpt-6.1-sol' && bundle.modeId === 'full-access' && !bundle.fast, bundle);
+  check('the router chose a bundle of a Cindy harness (provider = harness, a model and an effort), not fast mode: nothing here asks for it',
+    ['claude', 'codex', 'pi'].includes(bundle.harness) && bundle.provider === bundle.harness && Boolean(bundle.model) && Boolean(bundle.effort) && !bundle.fast, bundle);
   const created = (record.calls || []).find(c => c.name === 'create') || {};
   check("the create request carries the router's exact model/effort and the bypass permission",
     created.route?.model === (bundle.launch_model || bundle.model) && created.route?.effort === bundle.effort && created.permissionMode === 'bypassPermissions', {created, bundle});
@@ -490,7 +511,8 @@ try {
     const dir = D(`codex home ${name}`), day = path.join(dir, 'sessions', '2026', '11', '03');
     fs.mkdirSync(day, {recursive: true});
     fs.writeFileSync(path.join(day, 'rollout-sandbox.jsonl'), JSON.stringify({type: 'event_msg', payload: {type: 'token_count', rate_limits: {limit_id: 'codex',
-      primary: {used_percent: used, window_minutes: 300, resets_at: Math.floor(Date.now() / 1000) + 7200}, secondary: null, plan_type: 'pro'}}}) + '\n');
+      primary: {used_percent: used, window_minutes: 300, resets_at: Math.floor(Date.now() / 1000) + 7200},
+      secondary: {used_percent: used, window_minutes: 10080, resets_at: Math.floor(Date.now() / 1000) + 86400}, plan_type: 'pro'}}}) + '\n');
     return {CODEX_HOME: dir};
   };
   const cliName = WIN ? 'agentcompass.exe' : 'agentcompass';
@@ -525,9 +547,9 @@ try {
     JSON.stringify(first(zc.r, 'roll')).slice(0, 500) + zc.result.stderr.slice(-300) + (zc.record.workerStderr || ''));
   check('Cindy creates a row of its own catalog (codex on the openai connection) with bypassPermissions', isRow(zc.create.route, REAL) &&
     zc.create.route.agentKind === 'codex' && zc.create.route.providerId === 'openai' && zc.create.permissionMode === 'bypassPermissions', zc.create);
-  check('the decision is explained: work kind, profile_source classifier, classifier_model, realtime_loop, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel',
+  check('the decision is explained: work kind, profile_source classifier, classifier_model, wants_fast, axis_demand, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel',
     Boolean(zc.receipt.router?.decision?.work_kind && zc.receipt.router?.decision?.profile_source === 'classifier' &&
-    zc.receipt.router?.decision?.classifier_model === 'fixture-quick-text' && typeof zc.receipt.router?.decision?.realtime_loop === 'boolean' &&
+    zc.receipt.router?.decision?.classifier_model === 'fixture-quick-text' && typeof zc.receipt.router?.decision?.wants_fast === 'boolean' && Boolean(zc.receipt.router?.decision?.axis_demand) &&
     zc.receipt.router.decision.alternatives?.length && zc.receipt.router.decision.quota?.source === 'codex-cli-sessions' &&
     zc.record.oneshotCalls?.length === 1 && zc.record.oneshotCalls[0].expectJson === true && count(zc.record, 'create') === 1), zc.receipt.router?.decision);
   check('the text sent to Cindy is the whole task byte for byte plus the return channel', zc.sentText.startsWith(zcTask) && zc.sentText.includes('Cindy plugin task return channel') &&
@@ -535,20 +557,29 @@ try {
   check('status reports running, then collects the exact final message; cleanup archives', first(zc.r, 'status while running').result?.status === 'running' && lifecycle(zc) &&
     (first(zc.r, 'status').result?.final_result_summary || '').includes('zero-config'), JSON.stringify(zc.r).slice(0, 700));
 
-  operation('built-in engine: every Cindy harness', 'codex for an edit, Pi for read-and-report exploration, Claude (cc) for a review; each an exact catalog row with bypassPermissions, through to cleanup');
+  operation('built-in engine: every Cindy harness', 'an edit, an exploration and a review on the full catalog, then a catalog of one harness only (Pi, Claude): the route is always an exact catalog row of a Cindy harness with its launcher mode, through to cleanup');
   const WITH_CLAUDE = {models: [...REAL.models, {route: {agentKind: 'cc', providerId: 'anthropic', model: 'claude-opus-5-5'}, efforts: ['low', 'medium', 'high', 'max']},
     {route: {agentKind: 'cc', providerId: 'anthropic', model: 'claude-sonnet-5-5'}, efforts: ['low', 'medium', 'high', 'max']}]};
-  // Pi on the Codex-only catalog Cindy reported: with Claude signed in too, this engine prefers Claude for exploration.
-  for (const [name, text, kind, mode, catalog, classifierProfile] of [
-    ['codex', 'Rename the helper foo to bar in util.py and update its two callers.', 'codex', 'full-access', 'real+claude',
+  // Which harness wins on a catalog with several is the engine's net-score decision and is not asserted; a catalog with one harness leaves only that one.
+  const LAUNCHER_MODE = {cc: 'bypassPermissions', codex: 'full-access', pi: 'full-access'};
+  for (const [name, text, only, catalog, classifierProfile] of [
+    ['edit', 'Rename the helper foo to bar in util.py and update its two callers.', null, 'real+claude',
       {work_kind: 'general_implementation', reasoning_depth: 1, code_complexity: 1}],
-    ['pi', 'Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only.', 'pi', 'full-access', 'real',
-      {work_kind: 'exploration_analysis', interaction_style: 'exploration', code_complexity: 0}],
-    ['claude', 'Review the diff in src/auth for security regressions and subtle bugs (read-only review).', 'cc', 'bypassPermissions', 'real+claude',
-      {work_kind: 'debug_review', reasoning_depth: 3, code_complexity: 0, context_scale: 2, hallucination_risk: 3}]]) {
-    const h = await builtinLife(`harness-${name}`, `${text} [${name}-${Date.now()}]`, {catalog, classifierProfile});
+    ['exploration', 'Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only.', null, 'real+claude',
+      {work_kind: 'exploration_analysis', interaction_style: 'exploration', code_complexity: 0, access: 'read-only',
+        axis_demand: {divergence: 2, coding: 0, aesthetics: 0, tool_operation: 1}}],
+    ['review', 'Review the diff in src/auth for security regressions and subtle bugs (read-only review).', null, 'real+claude',
+      {work_kind: 'debug_review', reasoning_depth: 3, code_complexity: 0, access: 'read-only', read_only_review: true, axis_demand: {divergence: 1, coding: 2, aesthetics: 0, tool_operation: 1}}],
+    ['pi only', 'Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only.', 'pi', 'pi-only',
+      {work_kind: 'exploration_analysis', interaction_style: 'exploration', code_complexity: 0, access: 'read-only',
+        axis_demand: {divergence: 2, coding: 0, aesthetics: 0, tool_operation: 1}}],
+    ['claude only', 'Review the diff in src/auth for security regressions and subtle bugs (read-only review).', 'cc', 'claude-only',
+      {work_kind: 'debug_review', reasoning_depth: 3, code_complexity: 0, access: 'read-only', read_only_review: true, axis_demand: {divergence: 1, coding: 2, aesthetics: 0, tool_operation: 1}}]]) {
+    const h = await builtinLife(`harness-${name.replace(' ', '-')}`, `${text} [${name}-${Date.now()}]`, {catalog, classifierProfile});
     const b = h.receipt.bundle || {};
-    check(`${name}: the built-in engine chose ${kind} (${b.model}/${b.effort}) with launcher mode ${mode}`, h.create.route?.agentKind === kind && b.modeId === mode && b.providerId === h.create.route?.providerId,
+    const kind = h.create.route?.agentKind;
+    check(`${name}: the built-in engine chose ${kind} (${b.model}/${b.effort})${only ? `, the only harness the catalog has` : ''}, with the launcher mode of that harness`,
+      (only ? kind === only : kind in LAUNCHER_MODE) && b.modeId === LAUNCHER_MODE[kind] && b.providerId === h.create.route?.providerId,
       {bundle: b, kind: h.receipt.router?.decision?.work_kind, stderr: h.result.stderr.slice(-300)});
     check(`${name}: Cindy creates that exact catalog row with bypassPermissions and the run completes`, isRow(h.create.route, WITH_CLAUDE) &&
       h.create.permissionMode === 'bypassPermissions' && lifecycle(h), {create: h.create, replies: JSON.stringify(h.r).slice(0, 600)});
@@ -588,7 +619,7 @@ try {
   const drained = await builtinLife('quota-exhausted', `Rename the helper foo to bar in util.py and update its two callers. [drained-${Date.now()}]`,
     {catalog: 'real+claude', env: telemetry('drained', 97)});
   check('quota: with the Codex window 97% used the edit goes to Claude on its own connection', drained.create.route?.agentKind === 'cc' &&
-    drained.receipt.router?.decision?.quota?.status === 'exhausted' && drained.receipt.router.decision.quota_penalized_routes >= 10 && lifecycle(drained),
+    drained.receipt.router?.decision?.quota?.status === 'exhausted' && lifecycle(drained),
     {create: drained.create, quota: drained.receipt.router?.decision?.quota});
 
   // -------------------------------------------------------------------------------------------------------------
@@ -688,7 +719,10 @@ try {
     check(`an installed-style \`agentcompass\` launcher is on PATH (${path.basename(launcherFile)})`, made.code === 0 && fs.existsSync(launcherFile) &&
       path.basename(launcherFile) === cliName, made.stdout + made.stderr);
     const accountMap = [{routerProvider: 'codex', routerAccount: 'codex', providerId: 'codex-connection', agentKind: 'codex'},
-                        {routerProvider: 'pi', routerAccount: 'codex', providerId: 'pi-openai-connection', agentKind: 'pi'}];
+                        {routerProvider: 'pi', routerAccount: 'codex', providerId: 'pi-openai-connection', agentKind: 'pi'},
+                        {routerProvider: 'claude', routerAccount: 'claude', providerId: 'claude-connection', agentKind: 'cc'}];
+    // The connection Cindy must be asked for is the one the map names for the routed account; the router, not this test, decides the account.
+    const mappedConnection = bundle => accountMap.find(m => m.routerProvider === bundle?.provider && m.routerAccount === bundle?.account)?.providerId;
     fs.writeFileSync(path.join(stateHome, 'account-map.json'), JSON.stringify(accountMap));
     ({record, result} = await drive(market, 'cli-opt-in', [
       {label: 'roll', call: 'roll', args: {task: task('cli-opt-in')}},
@@ -702,14 +736,15 @@ try {
     check('roll starts a run through the discovered command; the real router answered natively for the Cindy session',
       zr.ok && zr.result?.status === 'running' && zReceipt.engine === 'cli' && zReceipt.router?.status === 'native' && zReceipt.router?.parent_id === SESSION,
       JSON.stringify(zr).slice(0, 500) + result.stderr.slice(-300) + (record.workerStderr || ''));
-    check('the account map from the home directory was applied to the exact catalog route',
-      JSON.stringify(zReceipt.mappings) === JSON.stringify(accountMap) && (record.calls || []).find(c => c.name === 'create')?.route?.providerId === 'codex-connection',
-      {mappings: zReceipt.mappings, create: (record.calls || []).find(c => c.name === 'create')});
+    check('the account map from the home directory was applied to the exact catalog route of the routed account',
+      JSON.stringify(zReceipt.mappings) === JSON.stringify(accountMap) && Boolean(mappedConnection(zReceipt.bundle)) &&
+      (record.calls || []).find(c => c.name === 'create')?.route?.providerId === mappedConnection(zReceipt.bundle),
+      {mappings: zReceipt.mappings, bundle: zReceipt.bundle, create: (record.calls || []).find(c => c.name === 'create')});
     const zDone = first(r, 'status after completion').result || {};
     check('status collects the exact final message and cleanup archives', zDone.status === 'completed' && zDone.output_available &&
       (zDone.final_result_summary || '').includes('cli opt-in result') && first(r, 'cleanup').result?.status === 'cleaned', zDone);
 
-    operation('every Cindy harness through the real router', 'Claude max and high (router.json build), and Pi (CLI opt-in), reach exact catalog routes with Cindy bypassPermissions; codex is the first operation');
+    operation('every Cindy harness through the real router', 'Claude (router.json build, deep and review profiles) and Pi (CLI opt-in) reach exact catalog routes with Cindy bypassPermissions; the other harnesses are signed out so the router has only that one to choose; codex is the first operation');
     const harness = async (name, profile, plug, env = {}) => {
       const out = await drive(plug, `harness-${name}`, [
         {label: 'roll', call: 'roll', args: {task: task(name) + `FIXTURE-PROFILE: ${profile}\n`}},
@@ -721,40 +756,50 @@ try {
       const op = first(rr, 'roll').result?.operation || 'none';
       return {...out, r: rr, receipt: readJson(path.join(stateHome, op, 'receipt.json')), create: (out.record.calls || []).find(c => c.name === 'create') || {}};
     };
-    for (const [name, profile, effort] of [['claude-max', 'deep', 'xhigh'], ['claude-high', 'review', 'high']]) {
-      const h = await harness(name, profile, plugin);
+    // Sign accounts out by moving their credential files away for the duration of one scenario; the file comes back afterwards.
+    const parked = D('parked-credentials');
+    const signedOut = async (files, fn) => {
+      const moved = files.map((file, i) => [file, path.join(parked, String(i))]);
+      for (const [from, to] of moved) fs.renameSync(from, to);
+      try {return await fn();} finally {for (const [from, to] of moved) fs.renameSync(to, from);}
+    };
+    const codexAuth = path.join(baseEnv.CODEX_HOME, 'auth.json');
+    const piAuth = path.join(piAgentDir, 'auth.json');
+    const CREATE_KIND = {claude: 'cc', codex: 'codex', pi: 'pi'};
+    // A routed bundle reaches Cindy as exactly its own catalog row: its harness's kind, its launch model and effort, no fast mode, bypassPermissions.
+    const mirrorsBundle = h => {
       const b = h.receipt.bundle || {};
-      check(`${name}: the router chose claude/claude-opus-5-5 at ${effort} and the plugin made bypassPermissions explicit`,
-        b.provider === 'claude' && b.harness === 'claude' && b.model === 'claude-opus-5-5' && b.effort === effort && b.modeId === 'bypassPermissions',
+      return h.create.route?.agentKind === CREATE_KIND[b.harness] && h.create.route?.model === (b.launch_model || b.model) && h.create.route?.effort === b.effort &&
+        h.create.route?.fastMode === false && h.create.permissionMode === 'bypassPermissions' && lifecycle(h);
+    };
+    // Claude is the only account left: both profiles must land on the claude harness, whatever model and effort the net score picks.
+    for (const [name, profile] of [['claude-deep', 'deep'], ['claude-review', 'review']]) {
+      const h = await signedOut([codexAuth, piAuth], () => harness(name, profile, plugin));
+      const b = h.receipt.bundle || {};
+      check(`${name}: with only Claude signed in the router chose the claude harness (${b.model}/${b.effort}) and the plugin made bypassPermissions explicit`,
+        b.provider === 'claude' && b.harness === 'claude' && Boolean(b.model) && Boolean(b.effort) && !b.fast && b.modeId === 'bypassPermissions',
         {bundle: b, router: h.receipt.router?.status, stderr: h.result.stderr.slice(-300)});
-      check(`${name}: Cindy creates cc/claude/claude-opus-5-5/${effort} with bypassPermissions and the run completes`,
-        JSON.stringify(h.create.route) === JSON.stringify({agentKind: 'cc', providerId: 'claude', model: 'claude-opus-5-5', effort, fastMode: false}) &&
-        h.create.permissionMode === 'bypassPermissions' && lifecycle(h), {create: h.create, replies: JSON.stringify(h.r).slice(0, 600)});
+      check(`${name}: Cindy creates the cc row of that bundle with bypassPermissions and the run completes`, mirrorsBundle(h),
+        {create: h.create, bundle: b, replies: JSON.stringify(h.r).slice(0, 600)});
     }
-    const claudeCreds = path.join(baseEnv.CLAUDE_CONFIG_DIR, '.credentials.json');
-    const savedClaudeCreds = path.join(noClaude, '.credentials.json');
-    fs.renameSync(claudeCreds, savedClaudeCreds);
-    let pi;
-    try {
-      pi = await harness('pi', 'explore', market, {...zcEnv, CLAUDE_CONFIG_DIR: noClaude});
-    } finally {
-      fs.renameSync(savedClaudeCreds, claudeCreds);
-    }
+    // A read-only exploration with everything signed in: which harness and model the net score prefers is the router's decision. Whatever it picks
+    // must reach Cindy as its own catalog row on the connection the map names for that account.
+    const pi = await harness('explore', 'explore', market, zcEnv);
     const pb = pi.receipt.bundle || {};
-    check('pi: the router chose the Pi harness on the codex account with its launch model; the fixed full-tool worker is full-access',
-      pb.provider === 'pi' && pb.harness === 'pi' && pb.account === 'codex' && pb.launch_model === 'openai-codex/gpt-6.1-sol' && pb.modeId === 'full-access',
-      {bundle: pb, router: pi.receipt.router?.status, stderr: pi.result.stderr.slice(-300)});
-    check('pi: Cindy creates the exact pi route on the mapped connection with bypassPermissions and the run completes',
-      JSON.stringify(pi.create.route) === JSON.stringify({agentKind: 'pi', providerId: 'pi-openai-connection', model: 'openai-codex/gpt-6.1-sol', effort: pb.effort, fastMode: false}) &&
-      pi.create.permissionMode === 'bypassPermissions' && lifecycle(pi), {create: pi.create, replies: JSON.stringify(pi.r).slice(0, 600)});
+    check(`explore: the router chose the ${pb.harness} harness (${pb.model}/${pb.effort}) with that harness's launcher mode`,
+      pb.harness in CREATE_KIND && pb.provider === pb.harness && pb.modeId === (pb.harness === 'claude' ? 'bypassPermissions' : 'full-access') && !pb.fast,
+      {bundle: pb, router: pi.receipt.router?.status, stderr: pi.result.stderr.slice(-300), reply: JSON.stringify(pi.r).slice(0, 500)});
+    check('explore: Cindy creates the exact row of that bundle on its mapped connection with bypassPermissions and the run completes',
+      mirrorsBundle(pi) && pi.create.route?.providerId === (mappedConnection(pb) ?? pb.account),
+      {create: pi.create, bundle: pb, replies: JSON.stringify(pi.r).slice(0, 600)});
 
     operation('review 7: a fixed account map unblocks the retry', 'the routed account has no Cindy connection of its name: the roll fails before create; after account-map.json is written the same assignment is routed again and runs');
     fs.rmSync(path.join(stateHome, 'account-map.json'));
     const r7 = task('review7');
     ({record, result} = await drive(market, 'review7-retry', [
-      {label: 'the Cindy connection has its own name', fixture: {connection: 'codex-connection'}},
+      {label: 'the Cindy connection has its own name', fixture: {connection: 'cindy-own-connection'}},
       {label: 'roll', call: 'roll', args: {task: r7}},
-      {label: 'write the account map', fixture: {accountMap: [{routerProvider: 'codex', routerAccount: 'codex', providerId: 'codex-connection', agentKind: 'codex'}]}},
+      {label: 'write the account map', fixture: {accountMap: accountMap.map(m => ({...m, providerId: `${m.routerProvider}-mapped`}))}},
       {label: 'roll again', call: 'roll', args: {task: r7}},
     ], {env: zcEnv}));
     r = replies(record);
@@ -763,8 +808,8 @@ try {
     check('the first roll is refused before any create', first(r, 'roll').ok === false && /unavailable or ambiguous|No explicit/.test(first(r, 'roll').message || ''),
       JSON.stringify(first(r, 'roll')).slice(0, 400) + result.stderr.slice(-300));
     check('the retry re-reads the map, routes again and runs on the mapped connection', first(r, 'roll again').result?.status === 'running' && r7receipt.attempts === 2 &&
-      r7receipt.mappings?.[0]?.providerId === 'codex-connection' && (record.calls || []).find(c => c.name === 'create')?.route?.providerId === 'codex-connection' &&
-      count(record, 'create') === 1, {reply: first(r, 'roll again'), attempts: r7receipt.attempts});
+      r7receipt.mappings?.length === accountMap.length && (record.calls || []).find(c => c.name === 'create')?.route?.providerId === `${r7receipt.bundle?.provider}-mapped` &&
+      count(record, 'create') === 1, {reply: first(r, 'roll again'), attempts: r7receipt.attempts, bundle: r7receipt.bundle});
 
     operation('CLI opt-in without the CLI installed', 'config.json asks for the CLI but none is installed: the built-in engine routes and says so; no error');
     fs.rmSync(path.join(stateHome, 'account-map.json'), {force: true});

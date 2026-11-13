@@ -11,8 +11,8 @@ Conclusion on 2026-11-07:
 Not covered on real Cindy, in any sign-in configuration:
 
 - the default route returning valid JSON with `profile_source: "classifier"`, and which model Cindy actually used;
-- the realtime-loop task and the "write a ticket-grabbing script" counterexample;
-- a task over 15,000 characters being classified, and one over about 20,100 being refused;
+- a task whose profile demands a GUI (`needs_gui`, `axis_demand.tool_operation` 3) and one that only reads (`read_only_review`), each routed by the profile alone;
+- a task over 15,000 characters being classified, and one over about 19,800 being refused;
 - `blocked` when the classifier is unavailable, including `NO_CANDIDATE`, and the cooldown record and hint after a failure;
 - no leftovers in the task list;
 - the `split` and `self` gates deciding from the profile, and a caller `profile` running through;
@@ -20,9 +20,9 @@ Not covered on real Cindy, in any sign-in configuration:
 
 What covers these instead, with a fake host and not real Cindy:
 
-- `npm run test:sandbox` on Windows, 116/116, rerun on 2026-11-07 on the engine vendored from Magpie 34448f9;
-- `npm run test:sandbox:linux`, 116/116, rerun on 2026-11-07 on the same engine;
-- `npm test`: 126/126 Node tests and 8 Python tests, none skipped; it compares the case file with `test/fixtures/agentcompass/` by itself, and with an AgentCompass
+- `npm run test:sandbox` on Windows, 120/120, rerun on 2026-11-13 on the engine vendored from Magpie ac494f3 (AgentCompass v0.6.0) against an AgentCompass checkout;
+- `npm run test:sandbox:linux`, 120/120, rerun on 2026-11-13 on the same engine;
+- `npm test`: 128/128 Node tests and 8 Python tests, none skipped; it compares the case file with `test/fixtures/agentcompass/` by itself, and with an AgentCompass
   checkout named or found; one without the file, or with another file, fails.
 
 They show the plugin's logic against the host contract as read from Cindy's source. They do not show that real Cindy behaves that way.

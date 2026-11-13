@@ -280,7 +280,7 @@ async function builtin(input, catalog, dir, root, conf = {}, extra = {}) {
   writeDiag(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
   if (result.status === 'blocked') {
     if (result.decision?.reason === 'no_runnable_model') throw Error(result.error);
-    if (result.decision?.reason === 'no_model_meets_floor' || result.decision?.reason === 'accounts_unavailable' || result.profile_source === 'unavailable') return result;
+    if (result.decision?.reason === 'no_route' || result.decision?.reason === 'accounts_unavailable' || result.profile_source === 'unavailable') return result;
     throw Error(result.error);
   }
   return result;
@@ -313,19 +313,18 @@ async function external(command, task, ctx, dir, timeoutMs=110000) {
       try {
         if (timedOut || signal || code===null) throw Error(timedOut ? 'Router timed out' : 'Router terminated by '+(signal || 'signal'));
         const result=JSON.parse(text);
-        const reason=result.reason || result.error_code || result.decision?.reason || result.error || null;
-        if (reason==='accounts_unavailable') {
+        // v0.6.0: every System-One classifier failed. The router starts no worker on a guess, and neither does this plugin.
+        if (result.status==='scorer_unavailable' || result.error==='scorer_unavailable') {
           resolve({
             ...result,
             status:'blocked',
-            reason:'accounts_unavailable',
             engine:'cli',
-            decision:{...(result.decision || {}), reason:'accounts_unavailable'},
-            error:result.error && result.error!=='accounts_unavailable'
-              ? result.error
-              : 'All candidate accounts are unavailable; refusing to dispatch to an inactive or failing account. Nothing was started.',
+            profile:null,
+            profile_source:'unavailable',
+            decision:{...(result.decision || {}), reason:'scorer_unavailable', profile_source:'unavailable'},
+            error:'The AgentCompass classifiers are all unavailable; nothing was started.',
             next_action:result.next_action || result.next ||
-              'Fix the account subscription, sign-in, or usage telemetry in Cindy (Pi routes sharing the same provider account are excluded too; it recovers automatically after the next healthy Codex session log in Cindy, or by removing its entry in quota-state.json), then roll again. Nothing was started.',
+              'Fix a classifier of the AgentCompass install (agentcompass doctor), or remove the CLI configuration (router.json, or {"engine":"cli"} in config.json) to use the built-in engine, then roll again. Nothing was started.',
           });
           return;
         }

@@ -1,0 +1,426 @@
+{
+ "results": [
+  {
+   "label": "catalog",
+   "fixture": {
+    "catalog": "claude-only",
+    "classifierProfile": {
+     "work_kind": "debug_review",
+     "reasoning_depth": 3,
+     "code_complexity": 0,
+     "access": "read-only",
+     "read_only_review": true,
+     "axis_demand": {
+      "divergence": 1,
+      "coding": 2,
+      "aesthetics": 0,
+      "tool_operation": 1
+     }
+    }
+   }
+  },
+  {
+   "label": "roll",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": true,
+     "result": {
+      "status": "running",
+      "operation": "20628712d1e821303a0b43c58e807a35907bb406",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "task_id": "task-1",
+      "run_id": "run-1",
+      "error": null,
+      "error_code": null,
+      "automatic_callback": false,
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "20628712d1e821303a0b43c58e807a35907bb406"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "label": "status while running",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": true,
+     "result": {
+      "status": "running",
+      "operation": "20628712d1e821303a0b43c58e807a35907bb406",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "outputMessageId": null,
+      "output_available": false,
+      "messages_complete": false,
+      "message_pages_read": 0,
+      "final_result_summary": "",
+      "summary_shortened": false,
+      "full_result_artifacts": [],
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "20628712d1e821303a0b43c58e807a35907bb406"
+       }
+      },
+      "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
+     }
+    }
+   ]
+  },
+  {
+   "label": "finished",
+   "fixture": {
+    "runStatus": "completed",
+    "outputMessageId": "out-final",
+    "pages": 2,
+    "finalText": "[Worker final report] harness-claude-only"
+   }
+  },
+  {
+   "label": "status",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": true,
+     "result": {
+      "status": "completed",
+      "operation": "20628712d1e821303a0b43c58e807a35907bb406",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "outputMessageId": "out-final",
+      "output_available": true,
+      "messages_complete": true,
+      "message_pages_read": 2,
+      "final_result_summary": "[Worker final report] harness-claude-only",
+      "summary_shortened": false,
+      "full_result_artifacts": [
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\20628712d1e821303a0b43c58e807a35907bb406\\messages-1346932e110e592b.json",
+       "<sandbox>\\home\\.agent-compass\\cindy-plugin\\20628712d1e821303a0b43c58e807a35907bb406\\messages-8a750281cb1b5d24.json"
+      ],
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "cleanup",
+       "args": {
+        "operation": "20628712d1e821303a0b43c58e807a35907bb406"
+       }
+      },
+      "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
+     }
+    }
+   ]
+  },
+  {
+   "label": "cleanup",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-4",
+     "ok": true,
+     "result": {
+      "status": "cleaned",
+      "operation": "20628712d1e821303a0b43c58e807a35907bb406",
+      "taskId": "task-1",
+      "task_id": "task-1"
+     }
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "create",
+   "requestKey": "20628712d1e821303a0b43c58e807a35907bb406:create",
+   "route": {
+    "agentKind": "cc",
+    "providerId": "anthropic",
+    "model": "claude-opus-5-5",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  {
+   "name": "send",
+   "taskId": "task-1",
+   "expectedRevision": 1,
+   "requestKey": "20628712d1e821303a0b43c58e807a35907bb406:send",
+   "chars": 436
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "readMessages",
+   "after": null
+  },
+  {
+   "name": "readMessages",
+   "after": "1"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "listRuns",
+   "taskId": "task-1"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "archive",
+   "taskId": "task-1"
+  }
+ ],
+ "oneshotCalls": [
+  {
+   "kind": "oneshot_text",
+   "chars": 32413,
+   "expectJson": true,
+   "callId": "call-1"
+  }
+ ],
+ "nodeCalls": [
+  "prepare",
+  "prepare",
+  "load",
+  "save",
+  "save",
+  "save",
+  "load",
+  "save",
+  "load",
+  "output",
+  "save",
+  "output",
+  "save",
+  "save",
+  "load",
+  "save"
+ ],
+ "sent": [
+  {
+   "runId": "run-1",
+   "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
+   "sha256": "7c88f35a2a8fbae05ba85f93d7ccf868ec60ca7b3d152dc5aa1b0dfdf853da4e",
+   "chars": 436
+  }
+ ],
+ "prepared": {
+  "operation": "20628712d1e821303a0b43c58e807a35907bb406",
+  "parent": "cindy-session-1",
+  "state": "prepared",
+  "engine": "builtin",
+  "router": {
+   "status": "native",
+   "engine": "builtin",
+   "route": {
+    "bundle": {
+     "provider": "claude",
+     "harness": "claude",
+     "account": "anthropic",
+     "providerId": "anthropic",
+     "model": "claude-opus-5-5",
+     "effort": "medium",
+     "fast": false,
+     "modeId": "bypassPermissions"
+    }
+   },
+   "decision": {
+    "work_kind": "debug_review",
+    "difficulty": "coupled",
+    "axis_demand": {
+     "divergence": 1,
+     "coding": 2,
+     "aesthetics": 0,
+     "tool_operation": 1
+    },
+    "profile": {
+     "work_kind": "debug_review",
+     "reasoning_depth": 3,
+     "code_complexity": 0,
+     "needs_visual": false,
+     "needs_gui": false,
+     "local_only": true,
+     "wants_fast": false,
+     "read_only_review": true,
+     "access": "read-only",
+     "expected_hours": 0.5,
+     "hours_confidence": "medium",
+     "urgency": "normal",
+     "interaction_style": "engineering",
+     "reason": "fixture classification from fake Cindy host model",
+     "multi_task": false,
+     "task_count": "1",
+     "axis_demand": {
+      "divergence": 1,
+      "coding": 2,
+      "aesthetics": 0,
+      "tool_operation": 1
+     },
+     "self": false
+    },
+    "profile_source": "classifier",
+    "classifier_model": "fixture-quick-text",
+    "read_only_review": true,
+    "classifier_calibration_cases": {
+     "included": 63,
+     "total": 66
+    },
+    "quota": {
+     "source": "codex-cli-sessions",
+     "status": "unknown",
+     "reason": "no Codex connection in catalog"
+    },
+    "canonical_model": "claude-opus-5-5",
+    "score": 0.8220000000000001,
+    "components": {
+     "duration_source": "aa",
+     "duration_multiplier": 0.7422,
+     "divergence": -0.2153,
+     "coding": -0.3709,
+     "aesthetics": -0.237,
+     "tool_operation": -0.125,
+     "share_divergence": 0.9351,
+     "share_coding": 0.8672,
+     "share_aesthetics": 0.9181,
+     "share_tool_operation": 0.9562,
+     "five_axis_level": -0.319,
+     "five_axis_shortfall": 0,
+     "fit": 0.822,
+     "continuity": 0,
+     "opportunity_cost": 0,
+     "quota_price": 0,
+     "need_probability": 0,
+     "need_probability_end": 0,
+     "earliest_reset_hours": null,
+     "harness_place": 0,
+     "decided_by": "completion_hours"
+    },
+    "selected_quota": null,
+    "wants_fast": false,
+    "warnings": [],
+    "alternatives": [
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "effort": "high",
+      "fast": false,
+      "score": 0.8220000000000001
+     },
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "fast": false,
+      "score": 0.8220000000000001
+     },
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "fast": false,
+      "score": 0.8220000000000001
+     },
+     {
+      "agentKind": "cc",
+      "providerId": "anthropic",
+      "model": "claude-sonnet-5-5",
+      "effort": "max",
+      "fast": false,
+      "score": 0.8220000000000001
+     }
+    ]
+   }
+  },
+  "bundle": {
+   "provider": "claude",
+   "harness": "claude",
+   "account": "anthropic",
+   "providerId": "anthropic",
+   "model": "claude-opus-5-5",
+   "effort": "medium",
+   "fast": false,
+   "modeId": "bypassPermissions"
+  },
+  "prompt": "Review the diff in src/auth for security regressions and subtle bugs (read-only review). [claude only-1794557862289]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "directory": "<sandbox>\\work dir",
+  "mappings": [],
+  "attempts": 1
+ },
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [
+  {
+   "taskId": "task-1",
+   "revision": 2,
+   "resolvedConfig": {
+    "agentKind": "cc",
+    "providerId": "anthropic",
+    "model": "claude-opus-5-5",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions",
+   "planModeEnabled": false,
+   "workingDir": "<sandbox>\\work dir",
+   "archived": true
+  }
+ ],
+ "runs": [
+  {
+   "runId": "run-1",
+   "taskId": "task-1",
+   "inputMessageId": "plugin-task:run-1",
+   "status": "completed",
+   "acceptedConfig": {
+    "agentKind": "cc",
+    "providerId": "anthropic",
+    "model": "claude-opus-5-5",
+    "effort": "medium",
+    "fastMode": false
+   },
+   "inputText": "Review the diff in src/auth for security regressions and subtle bugs (read-only review). [claude only-1794557862289]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "outputMessageId": "out-final"
+  }
+ ],
+ "workerStderr": ""
+}

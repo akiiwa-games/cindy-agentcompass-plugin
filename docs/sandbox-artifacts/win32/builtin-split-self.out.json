@@ -42,60 +42,62 @@
        "work_kind": "general_implementation",
        "reasoning_depth": 2,
        "code_complexity": 2,
-       "context_scale": 1,
-       "divergence": 1,
-       "hallucination_risk": 1,
-       "error_cost": 2,
        "needs_visual": false,
        "needs_gui": false,
        "local_only": true,
-       "realtime_loop": false,
-       "interaction_style": "engineering",
+       "wants_fast": false,
+       "read_only_review": false,
+       "access": "write",
        "expected_hours": 0.5,
        "hours_confidence": "medium",
        "urgency": "normal",
+       "interaction_style": "engineering",
        "reason": "two independent tasks",
        "multi_task": true,
        "task_count": "2",
-       "self": false,
-       "wants_fast": false,
-       "read_only_review": false
+       "axis_demand": {
+        "divergence": 1,
+        "coding": 2,
+        "aesthetics": 0,
+        "tool_operation": 1
+       },
+       "self": false
       },
       "profile_source": "classifier",
       "classifier_model": "fixture-quick-text",
-      "realtime_loop": false,
       "read_only_review": false,
       "decision": {
        "profile": {
         "work_kind": "general_implementation",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "interaction_style": "engineering",
+        "wants_fast": false,
+        "read_only_review": false,
+        "access": "write",
         "expected_hours": 0.5,
         "hours_confidence": "medium",
         "urgency": "normal",
+        "interaction_style": "engineering",
         "reason": "two independent tasks",
         "multi_task": true,
         "task_count": "2",
-        "self": false,
-        "wants_fast": false,
-        "read_only_review": false
+        "axis_demand": {
+         "divergence": 1,
+         "coding": 2,
+         "aesthetics": 0,
+         "tool_operation": 1
+        },
+        "self": false
        },
        "profile_source": "classifier",
        "classifier_model": "fixture-quick-text",
-       "realtime_loop": false,
        "read_only_review": false,
        "classifier_calibration_cases": {
-        "included": 53,
-        "total": 53
+        "included": 63,
+        "total": 66
        }
       },
       "next_action": "This assignment holds several independent deliverables. Split it and roll each task separately; nothing was started."
@@ -119,60 +121,62 @@
        "work_kind": "general_implementation",
        "reasoning_depth": 2,
        "code_complexity": 2,
-       "context_scale": 1,
-       "divergence": 1,
-       "hallucination_risk": 1,
-       "error_cost": 2,
        "needs_visual": false,
        "needs_gui": false,
        "local_only": true,
-       "realtime_loop": false,
-       "interaction_style": "engineering",
+       "wants_fast": false,
+       "read_only_review": false,
+       "access": "write",
        "expected_hours": 0.5,
        "hours_confidence": "medium",
        "urgency": "normal",
+       "interaction_style": "engineering",
        "reason": "three independent tasks",
        "multi_task": true,
        "task_count": "3",
-       "self": false,
-       "wants_fast": false,
-       "read_only_review": false
+       "axis_demand": {
+        "divergence": 1,
+        "coding": 2,
+        "aesthetics": 0,
+        "tool_operation": 1
+       },
+       "self": false
       },
       "profile_source": "classifier",
       "classifier_model": "fixture-quick-text",
-      "realtime_loop": false,
       "read_only_review": false,
       "decision": {
        "profile": {
         "work_kind": "general_implementation",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "interaction_style": "engineering",
+        "wants_fast": false,
+        "read_only_review": false,
+        "access": "write",
         "expected_hours": 0.5,
         "hours_confidence": "medium",
         "urgency": "normal",
+        "interaction_style": "engineering",
         "reason": "three independent tasks",
         "multi_task": true,
         "task_count": "3",
-        "self": false,
-        "wants_fast": false,
-        "read_only_review": false
+        "axis_demand": {
+         "divergence": 1,
+         "coding": 2,
+         "aesthetics": 0,
+         "tool_operation": 1
+        },
+        "self": false
        },
        "profile_source": "classifier",
        "classifier_model": "fixture-quick-text",
-       "realtime_loop": false,
        "read_only_review": false,
        "classifier_calibration_cases": {
-        "included": 53,
-        "total": 53
+        "included": 63,
+        "total": 66
        }
       },
       "next_action": "This assignment holds several independent deliverables. Split it and roll each task separately; nothing was started."
@@ -195,60 +199,62 @@
        "work_kind": "general_implementation",
        "reasoning_depth": 2,
        "code_complexity": 2,
-       "context_scale": 1,
-       "divergence": 1,
-       "hallucination_risk": 1,
-       "error_cost": 2,
        "needs_visual": false,
        "needs_gui": false,
        "local_only": true,
-       "realtime_loop": false,
-       "interaction_style": "engineering",
+       "wants_fast": false,
+       "read_only_review": false,
+       "access": "write",
        "expected_hours": 0.5,
        "hours_confidence": "medium",
        "urgency": "normal",
+       "interaction_style": "engineering",
        "reason": "conceptual question for current session",
        "multi_task": false,
        "task_count": "1",
-       "self": true,
-       "wants_fast": false,
-       "read_only_review": false
+       "axis_demand": {
+        "divergence": 1,
+        "coding": 2,
+        "aesthetics": 0,
+        "tool_operation": 1
+       },
+       "self": true
       },
       "profile_source": "classifier",
       "classifier_model": "fixture-quick-text",
-      "realtime_loop": false,
       "read_only_review": false,
       "decision": {
        "profile": {
         "work_kind": "general_implementation",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "interaction_style": "engineering",
+        "wants_fast": false,
+        "read_only_review": false,
+        "access": "write",
         "expected_hours": 0.5,
         "hours_confidence": "medium",
         "urgency": "normal",
+        "interaction_style": "engineering",
         "reason": "conceptual question for current session",
         "multi_task": false,
         "task_count": "1",
-        "self": true,
-        "wants_fast": false,
-        "read_only_review": false
+        "axis_demand": {
+         "divergence": 1,
+         "coding": 2,
+         "aesthetics": 0,
+         "tool_operation": 1
+        },
+        "self": true
        },
        "profile_source": "classifier",
        "classifier_model": "fixture-quick-text",
-       "realtime_loop": false,
        "read_only_review": false,
        "classifier_calibration_cases": {
-        "included": 53,
-        "total": 53
+        "included": 63,
+        "total": 66
        }
       },
       "next_action": "Do this in the current session; no Cindy task was started."
@@ -271,60 +277,62 @@
        "work_kind": "general_implementation",
        "reasoning_depth": 2,
        "code_complexity": 2,
-       "context_scale": 1,
-       "divergence": 1,
-       "hallucination_risk": 1,
-       "error_cost": 2,
        "needs_visual": false,
        "needs_gui": false,
        "local_only": true,
-       "realtime_loop": false,
-       "interaction_style": "engineering",
+       "wants_fast": false,
+       "read_only_review": false,
+       "access": "write",
        "expected_hours": 0.5,
        "hours_confidence": "medium",
        "urgency": "normal",
+       "interaction_style": "engineering",
        "reason": "explicitly requested direct answer in current session",
        "multi_task": false,
        "task_count": "1",
-       "self": true,
-       "wants_fast": false,
-       "read_only_review": false
+       "axis_demand": {
+        "divergence": 1,
+        "coding": 2,
+        "aesthetics": 0,
+        "tool_operation": 1
+       },
+       "self": true
       },
       "profile_source": "classifier",
       "classifier_model": "fixture-quick-text",
-      "realtime_loop": false,
       "read_only_review": false,
       "decision": {
        "profile": {
         "work_kind": "general_implementation",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "interaction_style": "engineering",
+        "wants_fast": false,
+        "read_only_review": false,
+        "access": "write",
         "expected_hours": 0.5,
         "hours_confidence": "medium",
         "urgency": "normal",
+        "interaction_style": "engineering",
         "reason": "explicitly requested direct answer in current session",
         "multi_task": false,
         "task_count": "1",
-        "self": true,
-        "wants_fast": false,
-        "read_only_review": false
+        "axis_demand": {
+         "divergence": 1,
+         "coding": 2,
+         "aesthetics": 0,
+         "tool_operation": 1
+        },
+        "self": true
        },
        "profile_source": "classifier",
        "classifier_model": "fixture-quick-text",
-       "realtime_loop": false,
        "read_only_review": false,
        "classifier_calibration_cases": {
-        "included": 53,
-        "total": 53
+        "included": 63,
+        "total": 66
        }
       },
       "next_action": "Do this in the current session; no Cindy task was started."
@@ -362,25 +370,25 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 28422,
+   "chars": 32412,
    "expectJson": true,
    "callId": "call-1"
   },
   {
    "kind": "oneshot_text",
-   "chars": 28372,
+   "chars": 32362,
    "expectJson": true,
    "callId": "call-2"
   },
   {
    "kind": "oneshot_text",
-   "chars": 28362,
+   "chars": 32352,
    "expectJson": true,
    "callId": "call-3"
   },
   {
    "kind": "oneshot_text",
-   "chars": 28329,
+   "chars": 32319,
    "expectJson": true,
    "callId": "call-4"
   }

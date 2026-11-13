@@ -5,13 +5,13 @@
 #   wsl -d docker-desktop -- sh /mnt/host/<drive>/<path>/cindy-agentcompass-plugin/test/run-linux-sandbox.sh
 #
 #   CINDY_SANDBOX_CACHE       directory holding the two runtime archives below (downloaded with wget when missing)
-#   AGENTCOMPASS_CHECKOUT_SRC AgentCompass source checkout (default: ../route_manager next to this repository; scripts/run-linux-sandbox.mjs also finds it from a git worktree)
+#   AGENTCOMPASS_CHECKOUT_SRC AgentCompass source checkout (default: ../AgentCompass next to this repository; scripts/run-linux-sandbox.mjs also finds it from a git worktree)
 #   CINDY_SANDBOX             tmpfs work directory, removed on exit (default: /run/cindy-sandbox)
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 CACHE=${CINDY_SANDBOX_CACHE:-$REPO/../.cindy-sandbox-cache}
-CHECKOUT_SRC=${AGENTCOMPASS_CHECKOUT_SRC:-$REPO/../route_manager}
+CHECKOUT_SRC=${AGENTCOMPASS_CHECKOUT_SRC:-$REPO/../AgentCompass}
 SANDBOX=${CINDY_SANDBOX:-/run/cindy-sandbox}
 NODE_TGZ=node-v24.22.2-linux-x64-musl.tar.gz
 NODE_SHA=867e322d67294e9c405f10cae5d70ed2e4940bb367fa47dbcb5151c9899d7c04

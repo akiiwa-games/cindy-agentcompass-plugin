@@ -168,6 +168,8 @@ test('the built-in engine is complete in the package and depends on nothing outs
     }
     assert.doesNotMatch(source, /\brequire\(|\bimport\(|\bfetch\(|node:(?:http|https|net|child_process)/, rel);
   }
-  assert.deepEqual([...seen].sort(), ['engine/allocator.mjs', 'engine/catalog.mjs', 'engine/continuity.mjs', 'engine/profiler.mjs', 'engine/quota-loader.mjs', 'engine/quota.mjs', 'engine/route.mjs']);
+  assert.deepEqual([...seen].sort(), ['engine/allocator.mjs', 'engine/axis-scores.mjs', 'engine/candidate-eval.mjs', 'engine/candidate-ranking.mjs', 'engine/catalog.mjs',
+    'engine/continuity.mjs', 'engine/fleet.mjs', 'engine/plans.mjs', 'engine/profiler.mjs', 'engine/quota-economy.mjs', 'engine/quota-loader.mjs',
+    'engine/quota-pools.mjs', 'engine/quota.mjs', 'engine/reference-data.mjs', 'engine/route.mjs', 'engine/task-intake.mjs', 'engine/user-scores.mjs']);
   assert.ok(files.some(f => f.rel === 'engine/classifier-cases.json'), 'the calibration data route.mjs reads ships in the package');
 });

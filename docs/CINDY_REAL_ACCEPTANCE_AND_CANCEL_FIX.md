@@ -15,8 +15,8 @@ real-acceptance report and the cancel-fix notes). The plugin now lives only in t
   account (`xd`), OpenAI, xAI and Anthropic API-key connections; when none can serve it, `roll` is blocked until a model is available or the
   caller passes a complete `profile`. Declaring `cindy.text` also means that Cindy stops every tool of the plugin at a Setup card until it is signed
   in to a Cindy account ([evidence](sandbox-real-e2e/README.md)). The channel takes one prompt of at most 32,768 characters with no context field, so a long task costs
-  calibration cases (53 up to about 4,450 characters, 12 at 15,000, rare decisions kept longest; recorded in `decision.classifier_calibration_cases`) and one
-  that cannot fit (about 20,100 characters once JSON-escaped) is refused, never cut. The README has the details.
+  calibration cases (63 of 66 for a short task, 16 at 15,000, rare decisions kept longest; recorded in `decision.classifier_calibration_cases`) and one
+  that cannot fit (about 19,800 characters once JSON-escaped) is refused, never cut. The README has the details.
 - **Two engines.** The external `agentcompass roll` is used only when the user asks for it: a `router.json` (written by
   `scripts/build_plugin.py`, or placed in `~/.agent-compass/cindy-plugin/`) binds one install, and `config.json` with
   `{"engine":"cli"}` uses the CLI found on `PATH` or in `~/.local/bin`. When that CLI is not installed the built-in engine routes and the

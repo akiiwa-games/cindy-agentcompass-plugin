@@ -12,17 +12,17 @@ function nextToMainCheckout(repo) {
     const dotGit = path.join(repo, '.git');
     if (!fs.existsSync(dotGit) || !fs.statSync(dotGit).isFile()) return null;
     const m = /^gitdir:\s*(.+?)[\\/]\.git[\\/]worktrees[\\/]/i.exec(fs.readFileSync(dotGit, 'utf8').trim());
-    return m ? path.resolve(m[1], '..', 'route_manager') : null;
+    return m ? path.resolve(m[1], '..', 'AgentCompass') : null;
   } catch {
     return null;
   }
 }
 
 export function findCheckout(repo) {
-  return [path.join(repo, '..', 'route_manager'), nextToMainCheckout(repo)].filter(Boolean).find(isCheckout) ?? null;
+  return [path.join(repo, '..', 'AgentCompass'), nextToMainCheckout(repo)].filter(Boolean).find(isCheckout) ?? null;
 }
 
 // For a caller that goes on to use it: with none to find, the path that names what is missing.
 export function defaultCheckout(repo) {
-  return findCheckout(repo) ?? path.join(repo, '..', 'route_manager');
+  return findCheckout(repo) ?? path.join(repo, '..', 'AgentCompass');
 }

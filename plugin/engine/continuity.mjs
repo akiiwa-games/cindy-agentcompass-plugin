@@ -1,4 +1,4 @@
-// Vendored from akiiwa-games/magpie-agentcompass-router src/continuity.js at 539a0110fc5d30e7036aab1612fa02ff7201ebfd (MIT), itself ported from AgentCompass.
+// Vendored from akiiwa-games/magpie-agentcompass-router src/continuity.js at ac494f31dda6dc516e985594208e28fca85aa5fb (MIT), itself ported from AgentCompass.
 // Only the import paths differ from the source; regenerate with scripts/vendor_engine.mjs rather than edit.
 /**
  * Session Affinity, Turn-Loop Lock, Cache-Temperature Hold & Monotonic Effort Ratchet.
@@ -13,15 +13,28 @@
  */
 
 import {
-  DEFAULT_MODELS,
-  DEFAULT_SCORING_POLICY,
+  DISPATCH_EFFORTS,
+  FAMILIES,
   MODEL_ALIASES,
+  SCORING_POLICY as DEFAULT_SCORING_POLICY,
   canonicalModel,
   healthKey,
+  modelSpec,
   resolveModel,
-  resolveModelSpec,
 } from "./catalog.mjs";
+import { defaultScoredModels } from "./axis-scores.mjs";
+import { dispatchAllowedEfforts } from "./candidate-eval.mjs";
 import { isModelQuotaExhausted } from "./quota.mjs";
+
+/** The scored models a call reads (the host's own `options.models` when it gives some). */
+const modelsOf = (options) => (options && options.models) || defaultScoredModels();
+const aliasesOf = (options) => (options && options.aliases) || MODEL_ALIASES;
+
+/** The row of a model a session runs on: its context window and whether the public data says it takes images. */
+const specOf = (model, options) => modelSpec(model, modelsOf(options), aliasesOf(options), FAMILIES);
+
+/** Whether the public data cites image input for this model (unknown is not yes: a turn that needs images routes again). */
+const takesImages = (spec) => (((spec || {}).five_axis || {}).image_input || {}).status === "yes";
 
 export const CACHE_WORTH_TOKENS = 1024;
 export const CACHE_COLD_MS = 5 * 60 * 1000;
@@ -826,10 +839,6 @@ export function keepsEffort(
   if (!sessionState || !sessionState.effort || !sessionState.model) {
     return wantedEffort || "medium";
   }
-  const explicitRealtime = [options?.realtimeLoop, options?.realtime_loop].find((v) => typeof v === "boolean");
-  if (explicitRealtime === true || (sessionState.realtimeLoop === true && explicitRealtime !== false)) {
-    return wantedEffort || sessionState.effort || "medium";
-  }
   const ttlMs = coldAfterMs(sessionState.provider || sessionState.model, {
     ...sessionState,
     ...options,
@@ -857,18 +866,9 @@ export function keepsEffort(
     return wantedEffort || "medium";
   }
 
-  const { spec } = resolveModelSpec(sessionState.model, options.models, options.aliases);
-  return ratchetEffort(sessionState.effort, wantedEffort, spec?.efforts);
-}
-
-/**
- * `realtime_loop` as a turn should route it: the caller's explicit answer, else what the session was first routed with.
- * `undefined` leaves the decision to the task profile, so a non-realtime session routes as it always has.
- */
-export function effectiveRealtimeLoop(facts = {}, sessionState = null, options = {}) {
-  if (typeof facts?.realtime_loop === "boolean") return facts.realtime_loop;
-  if (typeof options?.realtime_loop === "boolean") return options.realtime_loop;
-  return sessionState?.realtimeLoop === true ? true : undefined;
+  const fleet = { models: modelsOf(options), aliases: aliasesOf(options), families: FAMILIES, dispatch_efforts: DISPATCH_EFFORTS };
+  const allowed = dispatchAllowedEfforts({ provider: sessionState.provider || "", model: sessionState.model }, fleet, sessionState.model);
+  return ratchetEffort(sessionState.effort, wantedEffort, allowed || undefined);
 }
 
 /**
@@ -879,7 +879,6 @@ export function effectiveRealtimeLoop(facts = {}, sessionState = null, options =
  *   - `"turn"`: mid-turn tool call / tool result loop (`within === true`)
  *   - `"cache"`: KV cache is worth holding (`>= 1024` tokens or `cached: true`) and still warm
  *   - `"session"`: `affinityMode === "session"` and model is healthy & within limits
- *   - `"realtime_loop"`: the session was routed as `realtime_loop` and is still within its cache TTL
  *   - `"strict"`: `affinityMode === "strict"` and model is healthy
  *
  * Switch / Re-route reasons (`shouldHold: false`):
@@ -888,7 +887,7 @@ export function effectiveRealtimeLoop(facts = {}, sessionState = null, options =
  *   - `"gone"`: current model is no longer in the candidate pool
  *   - `"worn"`: cumulative session tokens (`compactedTokens + tokens`) >= 2,000,000
  *   - `"outgrown"`: current token count exceeds 95% of the model's `context_window`
- *   - `"capability_outgrown"`: new turn requires visual/GUI/frontier capability the current model lacks
+ *   - `"capability_outgrown"`: new turn needs image input (a screenshot, or computer use) the current model is not cited for
  *   - `"compacted"`: conversation was `/compact`-ed (token count dropped > 50%)
  *   - `"cold"`: KV cache TTL expired (`now - updatedAt > coldAfterMs`) or cache < 1024 tokens, or the state has no
  *     age (`ageKnown: false`, decided again from the history), so no TTL-gated hold applies
@@ -903,8 +902,8 @@ function pinOverridesSession(sessionState, pins, options) {
   if (pins.pinnedBundle && pins.pinnedBundle !== sessionState.pinnedBundle) return true;
   let effort = pins.constraintEffort ? String(pins.constraintEffort).trim().toLowerCase() : null;
   if (pins.constraintModel) {
-    const models = options.models || DEFAULT_MODELS;
-    const aliases = options.aliases || MODEL_ALIASES;
+    const models = modelsOf(options);
+    const aliases = aliasesOf(options);
     // Each row is its own model (contract R1): a session on a family row is not on the flagship it folds to, nor the other way round.
     const running = healthKey(sessionState.target || sessionState.model, models, aliases);
     if (healthKey(String(pins.constraintModel), models, aliases) !== running) return true;
@@ -935,16 +934,8 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
     };
   }
 
-  const currentModel = canonicalModel(
-    sessionState.model,
-    options.aliases || MODEL_ALIASES,
-    options.models || DEFAULT_MODELS
-  );
-  const { spec } = resolveModelSpec(
-    currentModel,
-    options.models || DEFAULT_MODELS,
-    options.aliases || MODEL_ALIASES
-  );
+  const currentModel = canonicalModel(sessionState.model, aliasesOf(options), modelsOf(options));
+  const spec = specOf(currentModel, options);
 
   // 1. Check 24h session retention expiry
   const ageMs = Math.max(0, now - (sessionState.updatedAt || 0));
@@ -1082,8 +1073,7 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
 
   // 6. Check visual modality outgrowth (even mid-turn if a tool returned a screenshot to a blind model)
   const needsVisual = Boolean(facts.hasCurrentTurnVisual || facts.hasVisual);
-  const modelHasVisual =
-    spec?.visual !== false && Number(spec?.capabilities?.visual ?? spec?.visual ?? 0) > 0;
+  const modelHasVisual = takesImages(spec);
   if (affinityMode !== "strict" && needsVisual && !modelHasVisual) {
     return {
       shouldHold: false,
@@ -1123,61 +1113,12 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
     };
   }
 
-  // Realtime loop capability outgrowth on a new user turn when the session was not already routed for realtime_loop
-  const reqRealtimeLoopFact =
-    typeof facts.realtime_loop === "boolean"
-      ? facts.realtime_loop
-      : typeof options.realtime_loop === "boolean"
-        ? options.realtime_loop
-        : undefined;
-  if (
-    affinityMode !== "strict" &&
-    reqRealtimeLoopFact === true &&
-    !sessionState.realtimeLoop
-  ) {
-    return {
-      shouldHold: false,
-      why: "capability_outgrown",
-      reasonDetail: "realtime_loop_required",
-      previousModel: currentModel,
-      previousEffort: sessionState.effort,
-      within: false,
-      turn: facts.turn || 1,
-    };
-  }
-
   // GUI / computer-use capability outgrowth on a new user turn
-  if (
-    affinityMode !== "strict" &&
-    facts.hasComputerUse &&
-    Number(spec?.capabilities?.gui ?? 0) < 0.5
-  ) {
+  if (affinityMode !== "strict" && facts.hasComputerUse && !modelHasVisual) {
     return {
       shouldHold: false,
       why: "capability_outgrown",
       reasonDetail: "gui_capability_required",
-      previousModel: currentModel,
-      previousEffort: sessionState.effort,
-      within: false,
-      turn: facts.turn || 1,
-    };
-  }
-
-  const realtimeSession = sessionState.realtimeLoop === true && reqRealtimeLoopFact !== false;
-
-  // Tier escalation outgrowth: lightweight model (`tier < 3.5`) hit with a frontier/coupled task, as the caller's
-  // profile says. A realtime session stays on its fast model.
-  if (
-    affinityMode !== "strict" &&
-    affinityMode !== "session" &&
-    facts.demandsFrontierEscalation &&
-    !realtimeSession &&
-    (spec?.tier ?? 3.5) < 3.5
-  ) {
-    return {
-      shouldHold: false,
-      why: "capability_outgrown",
-      reasonDetail: "tier_escalation_required",
       previousModel: currentModel,
       previousEffort: sessionState.effort,
       within: false,
@@ -1242,21 +1183,6 @@ export function evaluateProviderContinuation(facts = {}, sessionState = null, op
     return {
       shouldHold: true,
       why: "cache",
-      model: currentModel,
-      effort: sessionState.effort || "high",
-      provider: sessionState.provider || "",
-      previousModel: currentModel,
-      previousEffort: sessionState.effort || "high",
-      within: false,
-      turn: facts.turn || sessionState.turn || 1,
-    };
-  }
-
-  // A realtime session keeps its model and stepped-down effort across turns, however short they are
-  if (realtimeSession && withinCacheTtl) {
-    return {
-      shouldHold: true,
-      why: "realtime_loop",
       model: currentModel,
       effort: sessionState.effort || "high",
       provider: sessionState.provider || "",
@@ -1412,7 +1338,6 @@ export class SessionContinuityStore {
         anchor: decision.anchor ?? existing?.anchor ?? "",
         lastWhy: decision.why || "first",
         lastHeld: Boolean(decision.held),
-        realtimeLoop: decision.realtimeLoop ?? existing?.realtimeLoop ?? false,
         // What a later provider route of a held turn profiles with, and which pin the session is on.
         profile: decision.profile ?? existing?.profile ?? null,
         pinnedBundle: decision.pinnedBundle ?? existing?.pinnedBundle ?? null,

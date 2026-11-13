@@ -3,19 +3,19 @@
 export const BASE_TASK = 'Rename foo to bar in util.py.';
 
 const WORDS = [
-  // realtime_loop
+  // wants_fast and axis_demand.tool_operation
   '抢票', '秒杀', '挂机', '盯盘', '直播间', 'flash sale', 'order book', 'polling', 'game', 'real-time',
   // wants_fast and urgency
   'urgent', 'URGENT', 'Urgent!', 'asap', 'ASAP', '紧急', '尽快', 'fast mode', 'do not use fast mode', 'not urgent',
   // multi_task
   '同时', '并且', '另外', 'and also', 'both', 'as well as',
-  // reading only: code_complexity, hallucination_risk
+  // reading only: code_complexity, access, read_only_review
   'review', 'Review', 'REVIEW', '审查', 'audit', 'read-only', 'diagnose', '诊断', 'do not change any code',
   // self
   '?', '？', 'answer directly', '直接回答', 'do not delegate',
   // needs_gui, needs_visual, local_only
-  'screenshot', 'click', '点击', 'browser', 'E:/PROJECTS/x', 'public web',
-  // reasoning_depth, divergence, context_scale
+  'screenshot', 'click', '点击', 'browser', '/work/project/x', 'public web',
+  // reasoning_depth, axis_demand
   'prove', 'architecture', 'brainstorm', 'whole repository', 'system-wide',
 ];
 

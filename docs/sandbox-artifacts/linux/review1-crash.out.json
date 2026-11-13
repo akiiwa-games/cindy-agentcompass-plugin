@@ -15,7 +15,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "2cabc06dc6ffe8a075ec45475a8fe025f4c0c465",
+      "operation": "31d13871aaaed6886f02678b17d7754a45dea148",
       "taskId": "task-1",
       "runId": "run-1",
       "task_id": "task-1",
@@ -23,11 +23,14 @@
       "error": null,
       "error_code": null,
       "automatic_callback": false,
+      "warnings": [
+       "candidate name chatgpt/gpt-5.3-codex-spark is not in the catalog: no scores: a demanded category is a data error, so it leaves automatic routing (name it to dispatch it)"
+      ],
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "2cabc06dc6ffe8a075ec45475a8fe025f4c0c465"
+        "operation": "31d13871aaaed6886f02678b17d7754a45dea148"
        }
       }
      }
@@ -58,7 +61,7 @@
      "ok": true,
      "result": {
       "status": "cleanup_refused",
-      "operation": "2cabc06dc6ffe8a075ec45475a8fe025f4c0c465",
+      "operation": "31d13871aaaed6886f02678b17d7754a45dea148",
       "taskId": "task-1",
       "state": "running",
       "archived": false,
@@ -67,7 +70,7 @@
        "ghost_id": "agentcompass",
        "tool": "stop",
        "args": {
-        "operation": "2cabc06dc6ffe8a075ec45475a8fe025f4c0c465"
+        "operation": "31d13871aaaed6886f02678b17d7754a45dea148"
        }
       }
      }
@@ -83,7 +86,7 @@
      "ok": true,
      "result": {
       "status": "running",
-      "operation": "2cabc06dc6ffe8a075ec45475a8fe025f4c0c465",
+      "operation": "31d13871aaaed6886f02678b17d7754a45dea148",
       "taskId": "task-1",
       "runId": "run-1",
       "error": null,
@@ -94,11 +97,14 @@
       "final_result_summary": "",
       "summary_shortened": false,
       "full_result_artifacts": [],
+      "warnings": [
+       "candidate name chatgpt/gpt-5.3-codex-spark is not in the catalog: no scores: a demanded category is a data error, so it leaves automatic routing (name it to dispatch it)"
+      ],
       "next_tool": {
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "2cabc06dc6ffe8a075ec45475a8fe025f4c0c465"
+        "operation": "31d13871aaaed6886f02678b17d7754a45dea148"
        }
       },
       "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
@@ -119,12 +125,12 @@
   },
   {
    "name": "create",
-   "requestKey": "2cabc06dc6ffe8a075ec45475a8fe025f4c0c465:create",
+   "requestKey": "31d13871aaaed6886f02678b17d7754a45dea148:create",
    "route": {
     "agentKind": "codex",
-    "model": "gpt-6.1-sol",
+    "model": "gpt-6-astra",
     "providerId": "openai",
-    "effort": "high",
+    "effort": "low",
     "fastMode": false
    },
    "permissionMode": "bypassPermissions"
@@ -133,7 +139,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "2cabc06dc6ffe8a075ec45475a8fe025f4c0c465:send",
+   "requestKey": "31d13871aaaed6886f02678b17d7754a45dea148:send",
    "chars": 434
   },
   {
@@ -166,7 +172,7 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 28423,
+   "chars": 32413,
    "expectJson": true,
    "callId": "call-1"
   }
@@ -187,12 +193,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>/report/cindy/cindy-sent-run-1.txt",
-   "sha256": "d7ef5b9f2ff40cca093ab7a0bd26efd701a8a9add0cac246798057234aeefb8e",
+   "sha256": "fabdb7d8cb50387afa8fd435cd47b6c3c0af81ba2fdb9d29b8261c43eebc1f21",
    "chars": 434
   }
  ],
  "prepared": {
-  "operation": "2cabc06dc6ffe8a075ec45475a8fe025f4c0c465",
+  "operation": "31d13871aaaed6886f02678b17d7754a45dea148",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -205,8 +211,8 @@
      "harness": "codex",
      "account": "openai",
      "providerId": "openai",
-     "model": "gpt-6.1-sol",
-     "effort": "high",
+     "model": "gpt-6-astra",
+     "effort": "low",
      "fast": false,
      "modeId": "full-access"
     }
@@ -214,97 +220,87 @@
    "decision": {
     "work_kind": "general_implementation",
     "difficulty": "hard",
-    "required_ability": 3.1711,
+    "axis_demand": {
+     "divergence": 1,
+     "coding": 2,
+     "aesthetics": 0,
+     "tool_operation": 1
+    },
     "profile": {
      "work_kind": "general_implementation",
      "reasoning_depth": 2,
      "code_complexity": 2,
-     "context_scale": 1,
-     "divergence": 1,
-     "hallucination_risk": 1,
-     "error_cost": 2,
      "needs_visual": false,
      "needs_gui": false,
      "local_only": true,
-     "realtime_loop": false,
-     "interaction_style": "engineering",
+     "wants_fast": false,
+     "read_only_review": false,
+     "access": "write",
      "expected_hours": 0.5,
      "hours_confidence": "medium",
      "urgency": "normal",
+     "interaction_style": "engineering",
      "reason": "fixture classification from fake Cindy host model",
      "multi_task": false,
      "task_count": "1",
-     "self": false,
-     "wants_fast": false,
-     "read_only_review": false
+     "axis_demand": {
+      "divergence": 1,
+      "coding": 2,
+      "aesthetics": 0,
+      "tool_operation": 1
+     },
+     "self": false
     },
     "profile_source": "classifier",
     "classifier_model": "fixture-quick-text",
-    "realtime_loop": false,
     "read_only_review": false,
     "classifier_calibration_cases": {
-     "included": 53,
-     "total": 53
+     "included": 63,
+     "total": 66
     },
-    "canonical_model": "gpt-6.1-sol",
-    "score": 0.3646,
-    "components": {
-     "fit": 0.897,
-     "route_fit": 0.54,
-     "vector_fit": 1,
-     "subjective_fit": 0.95,
-     "ability": 1,
-     "ability_value": 3.6,
-     "required_ability": 3.171,
-     "continuity": 0,
-     "quality_bonus": 0,
-     "free_usage": 0,
-     "reset_bonus": 0,
-     "sprint_quality": 0,
-     "fast_bonus": 0,
-     "opportunity_cost": 0,
-     "effort_penalty": 0,
-     "overqualification": 0.0045,
-     "shortfall": 0,
-     "harness_factor": 1
-    },
-    "wants_fast": false,
-    "not_routed": [
-     "chatgpt/gpt-5.3-codex-spark"
-    ],
     "quota": {
      "source": "codex-cli-sessions",
      "status": "unknown",
      "reason": "no Codex session log"
     },
-    "quota_penalized_routes": 0,
+    "canonical_model": "gpt-6-astra",
+    "score": 0.8220000000000001,
+    "components": {
+     "duration_source": "aa",
+     "duration_multiplier": 0.3886,
+     "divergence": -2.6755,
+     "coding": -1.194,
+     "aesthetics": -0.609,
+     "tool_operation": -1.2043,
+     "share_divergence": 0.193,
+     "share_coding": 0.5725,
+     "share_aesthetics": 0.7895,
+     "share_tool_operation": 0.5776,
+     "five_axis_level": -1.6878,
+     "five_axis_shortfall": 0,
+     "fit": 0.822,
+     "continuity": 0,
+     "opportunity_cost": 0,
+     "quota_price": 0,
+     "need_probability": 0,
+     "need_probability_end": 0,
+     "earliest_reset_hours": null,
+     "harness_place": 0,
+     "decided_by": "tie"
+    },
+    "selected_quota": null,
+    "wants_fast": false,
+    "warnings": [
+     "candidate name chatgpt/gpt-5.3-codex-spark is not in the catalog: no scores: a demanded category is a data error, so it leaves automatic routing (name it to dispatch it)"
+    ],
     "alternatives": [
      {
       "agentKind": "pi",
       "providerId": "openai",
-      "model": "chatgpt/gpt-6.1-sol",
-      "effort": "high",
+      "model": "chatgpt/gpt-6-astra",
+      "effort": "low",
       "fast": false,
-      "score": 0.3646,
-      "notes": []
-     },
-     {
-      "agentKind": "codex",
-      "providerId": "openai",
-      "model": "gpt-6-sol",
-      "effort": "high",
-      "fast": false,
-      "score": 0.3574,
-      "notes": []
-     },
-     {
-      "agentKind": "pi",
-      "providerId": "openai",
-      "model": "chatgpt/gpt-6-sol",
-      "effort": "high",
-      "fast": false,
-      "score": 0.3574,
-      "notes": []
+      "score": 0.8220000000000001
      },
      {
       "agentKind": "codex",
@@ -312,8 +308,7 @@
       "model": "gpt-6.1-sol",
       "effort": "medium",
       "fast": false,
-      "score": 0.3546,
-      "notes": []
+      "score": 0.8220000000000001
      },
      {
       "agentKind": "pi",
@@ -321,8 +316,15 @@
       "model": "chatgpt/gpt-6.1-sol",
       "effort": "medium",
       "fast": false,
-      "score": 0.3546,
-      "notes": []
+      "score": 0.8220000000000001
+     },
+     {
+      "agentKind": "codex",
+      "providerId": "openai",
+      "model": "gpt-6.1-terra",
+      "effort": "high",
+      "fast": false,
+      "score": 0.8220000000000001
      }
     ]
    }
@@ -332,12 +334,12 @@
    "harness": "codex",
    "account": "openai",
    "providerId": "openai",
-   "model": "gpt-6.1-sol",
-   "effort": "high",
+   "model": "gpt-6-astra",
+   "effort": "low",
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [07858c2c]\nFIXTURE-SCENARIO: ok review1-crash\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [bfc5e8d7]\nFIXTURE-SCENARIO: ok review1-crash\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>/work dir",
   "mappings": [],
   "attempts": 1
@@ -350,9 +352,9 @@
    "revision": 2,
    "resolvedConfig": {
     "agentKind": "codex",
-    "model": "gpt-6.1-sol",
+    "model": "gpt-6-astra",
     "providerId": "openai",
-    "effort": "high",
+    "effort": "low",
     "fastMode": false
    },
    "permissionMode": "bypassPermissions",
@@ -368,12 +370,12 @@
    "status": "running",
    "acceptedConfig": {
     "agentKind": "codex",
-    "model": "gpt-6.1-sol",
+    "model": "gpt-6-astra",
     "providerId": "openai",
-    "effort": "high",
+    "effort": "low",
     "fastMode": false
    },
-   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [07858c2c]\nFIXTURE-SCENARIO: ok review1-crash\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
+   "inputText": "Rename the helper foo to bar in util.py and update its two callers. [bfc5e8d7]\nFIXTURE-SCENARIO: ok review1-crash\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n"
   }
  ],
  "workerStderr": ""

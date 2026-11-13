@@ -47,12 +47,13 @@ Cindy session ──ghost_call {tool:"roll", args:{task}}──▶ plugin/main.j
   `plugin/assets/icon.png` (from `scripts/make_icon.mjs`) and `en`, `zh-CN`, `ja`, `ko` resources in `plugin/locales/`, as the official
   plugin repository requires.
 - `plugin/engine/`: the built-in router. `route.mjs` holds the live model classifier prompt/schema/validator/cache, the profile-driven
-  split and self gates, the catalog scoring, the quota reading and fast mode; `catalog.mjs`, `profiler.mjs`, `allocator.mjs`, `quota.mjs` and
-  `continuity.mjs` are the AgentCompass model catalog, profile schema validator and allocator as ported to
+  split and self gates, the catalog scoring, the quota reading and fast mode; the sixteen other modules (`axis-scores`, `allocator`,
+  `candidate-eval`, `candidate-ranking`, `catalog`, `continuity`, `fleet`, `plans`, `profiler`, `quota-economy`, `quota-loader`, `quota-pools`,
+  `quota`, `reference-data`, `task-intake`, `user-scores`) are the AgentCompass v0.6.0 scoring engine as ported to
   [`magpie-agentcompass-router`](https://github.com/akiiwa-games/magpie-agentcompass-router) (MIT): each is its source at the commit in its header,
   with only the header and import paths added by `node scripts/vendor_engine.mjs <magpie checkout> [commit]`, which reads that commit and never the working
-  tree or HEAD (the commit defaults to the pinned one), and a test pins the digests. The router only calls the allocator with a
-  checked profile, never its keyword profiling. `classifier-cases.json` is the AgentCompass rubric and calibration set, unchanged.
+  tree or HEAD (the commit defaults to the pinned one), and a test pins the digests. They read no file and no environment variable; the router hands
+  the engine only a profile it has checked. `classifier-cases.json` is the AgentCompass rubric and calibration set, unchanged.
 - `plugin/main.js`: the logic page. Requires the experimental tasks API, puts the classification to Cindy's quick-text channel when the
   built-in engine needs a live task profile, picks the one catalog route that exactly matches the routed
   harness/connection/model/effort/fast setting, creates and checks the draft, sends the full prompt once, and collects results.
@@ -66,8 +67,9 @@ Cindy session ──ghost_call {tool:"roll", args:{task}}──▶ plugin/main.j
 ## The built-in engine and live classifier
 
 `roll` routes the complete task, unchanged, against the catalog Cindy reports for this machine (`tasks.models()`). All task profile fields
-(`work_kind`, difficulty integers, `multi_task`/`task_count`, `needs_visual`, `needs_gui`, `local_only`, `realtime_loop`, `self`,
-`wants_fast`, `read_only_review`) come strictly from the live classifier model's semantic judgment or an explicit caller-supplied `profile`—never from
+(`work_kind`, `interaction_style`, `reasoning_depth`, `code_complexity`, `axis_demand` with `divergence`, `coding`, `aesthetics` and
+`tool_operation` each 0..3, `access`, `multi_task`/`task_count`, `needs_visual`, `needs_gui`, `local_only`, `expected_hours`, `hours_confidence`, `urgency`,
+`self`, `wants_fast`, `read_only_review`) come strictly from the live classifier model's semantic judgment or an explicit caller-supplied `profile`—never from
 keyword, regex or length heuristics on the task text:
 
 - **live model classification**: when no caller `profile` is supplied and the task input is not already cached, the logic page makes one
@@ -77,24 +79,23 @@ keyword, regex or length heuristics on the task text:
   card, else the manifest's `oneshotModel` (this plugin sets none), else the auxiliary chain in Cindy settings. The plugin cannot name it and
   learns it from the answer (`classifier_model`). Cindy runs this channel on its Cindy account (`xd`), OpenAI, xAI and Anthropic API-key
   connections; a Claude subscription adds no quick-text model.
-- **the prompt**: the AgentCompass `SCORER_PROMPT` without its CRITICAL RULES 2-7 (each one repeats, more briefly, an entry of the rubric that follows),
+- **the prompt**: the AgentCompass `SCORER_PROMPT` without its CRITICAL RULES 2-5 (each one repeats, more briefly, an entry of the rubric that follows),
   then `plugin/engine/classifier-cases.json` (the AgentCompass file `skills/agent-compass/references/classifier-cases.json`, unchanged: route
-  definitions, rubric, 53 calibration cases; `test/fixtures/agentcompass/` holds the copy `npm test` compares it with), the schema as one entry per field
-  with every constraint and every description but the six the rubric covers (`context_scale`, `divergence`, `local_only`, `realtime_loop`, `wants_fast`, `read_only_review`), and last the
+  definitions, rubric, 66 calibration cases; `test/fixtures/agentcompass/` holds the copy `npm test` compares it with), the schema as one entry per field
+  with every constraint and every description but the four the rubric covers (`local_only`, `wants_fast`, `read_only_review`, `axis_demand`), and last the
   whole task inside an `untrusted_task_evidence` JSON envelope with prompt-injection rules. The answer is validated against `TASK_PROFILE_SCHEMA` with every
-  field required, so one without `self`, `wants_fast` or `read_only_review` is `invalid_classifier_output` and starts nothing (including `realtime_loop` and `expected_hours` in
+  field required, so one without `self`, `wants_fast` or `read_only_review` is `invalid_classifier_output` and starts nothing (including `axis_demand`, exactly the four keys with an integer 0..3 each, and `expected_hours` in
   `0.05..24`; a non-empty `reason` longer than 240 characters is truncated to 300 characters and accepted, as in AgentCompass). `task_count` is a JSON string and the prompt says so; a positive whole number is read as its bucket (1, 2, 3, 4 and up as `">3"`) and then
   checked like the string. Any other value, or one that contradicts `multi_task`, is invalid. The answer is cached in memory and in
   `~/.agent-compass/cindy-plugin/score-cache.json`, keyed by prompt/schema digest and full task input.
 - **the 32,768-character budget**: this channel takes a single `prompt` of at most 32,768 characters and has no separate context field, so the
   task and the instructions share it. The rubric and route definitions always go whole; calibration cases take what is left, whole ones only, in
-  an order computed from the fields of the case file alone (`calibrationCaseOrder`), never from what the task says: the `multi_task` case, a live case
-  paired with a counterexample that writes or fixes code, one case of each `reasoning_depth` rarest first, then the other pairs (a live case never goes in
-  without its counterexample), the rest of the rarest depths, and one of each `work_kind` in turn. All 53 fit a task of up to about 4,450 characters;
-  30 at 10,000, 12 at 15,000, 7 at 16,000, 3 at 17,000. Every one of those signals is there up to about 16,500 characters; above that, whatever still fits goes
-  in, in that order, so depth 4 goes first at about 16,500 and depths 3 and 4 then alternate, both are gone at about 16,950, a live pair at about 17,100,
-  `multi_task` at about 17,600, and depth 4 goes for good at about 17,800. `decision.classifier_calibration_cases` records `{included, total}`. A task that does
-  not fit with no cases left (about 20,100 characters once JSON-escaped) is refused with `task_too_long_for_classifier`, never cut; give it an explicit
+  an order computed from the fields of the case file alone (`calibrationCaseOrder`), never from what the task says: the `multi_task` case, one case of
+  each `reasoning_depth` rarest first, one case of each demand level of each `axis_demand` category rarest first, then one of each `work_kind` in turn,
+  shortest first. 63 of the 66 fit a short task; 57 fit at 3,000 characters, 48 at 6,000, 37 at 9,000, 27 at 12,000 and 16 at 15,000. Every one of those
+  signals (the `multi_task` case, every depth and every demand level) is there up to about 17,550 characters; above that, whatever still fits goes in,
+  in that order, so tool_operation 1 goes first at about 17,560. `decision.classifier_calibration_cases` records `{included, total}`. A task that does
+  not fit with no cases left (about 19,800 characters once JSON-escaped) is refused with `task_too_long_for_classifier`, never cut; give it an explicit
   `profile`.
 - **when the classifier is unavailable**: on any failure the built-in engine **never** falls back to keyword profiling. It returns
   `status: "blocked"` with `profile_source: "unavailable"`, a `decision.reason` of `classifier_<Cindy's code>` (`classifier_no_candidate`,
@@ -113,46 +114,56 @@ keyword, regex or length heuristics on the task text:
 - **an explicit `profile`** must give every field in the tool schema's `required` list (including `wants_fast` and `read_only_review`; only `self` and `reason` may be omitted), otherwise `invalid_caller_profile` and nothing starts;
   `profile: null` is the same as no profile.
   The external CLI classifies for itself and takes no profile: passing one answers `profile_not_supported_by_cli`.
-- **realtime_loop**: a live-loop task is scored on speed per turn as well, at the responsiveness floor of AgentCompass, using the speed data of the model
-  name Cindy lists (`claude-opus-4-8` is not as fast as the `claude-opus-5-5` routing scores it as; a name with no data of its own gets the default). A
-  too-slow effort steps down only to an effort that row offers; when none is fast enough and capable enough, `roll` is `blocked` with reason
-  `no_model_meets_floor`, `decision.excluded` gives each model and effort with its reason, and nothing starts.
 - **a named model or effort**: `routeTask` takes `constraintModel` or `pinnedModel` (`gpt-6-astra`, or `gpt-6-astra:high`) and `constraintEffort`, and holds
-  every task to them, as AgentCompass does with a constraint; only the caller can give them, never the task text, and `decision.pinned` records them. On a live
-  loop a named model stays even when too slow, without stepping down and with `components.realtime_slow_pin_warning`; an effort alone names no model to keep.
-  When nothing on offer matches, `roll` is `blocked` with `no_model_meets_floor`; nothing else stands in. The `roll` tool takes only `task` and `profile`, so
-  today a user in Cindy cannot name one.
-- **Spark**: `gpt-5.3-codex-spark` is not routed to, even when Cindy lists it, because AgentCompass has no such route; `decision.not_routed` names it. As in
-  AgentCompass, where a constraint keeps any bundle it names, naming it is the one way to run it: then it needs Cindy to list it, and has no speed data of its
-  own on a live loop. Other models the catalog leaves off by default stay routable when Cindy lists them.
+  every task to them, as AgentCompass does with a pin; only the caller can give them, never the task text, and `decision.pinned` records them. When nothing
+  on offer matches, `roll` is `blocked` (`decision.refusal` says `pin_not_in_pool` or `pin_unavailable`); nothing else stands in. The `roll` tool takes only
+  `task` and `profile`, so today a user in Cindy cannot name one.
+- **a row with a gap in its data leaves automatic routing**: AgentCompass v0.6.0 has no default for a missing number. A model with no scores for a category the
+  task demands (`gpt-5.3-codex-spark` has none), a billed account with no price, or an account whose capacity is unknown is a data error: that row is out of
+  automatic routing and `decision.excluded` says why, one line per reason with the rows it takes out. Naming the model dispatches it anyway, with the
+  data error in `decision.warnings`. A catalog in which nothing can be routed is `blocked` with `decision.reason: "no_route"`.
 - **split**: when the profile has `multi_task: true`, `roll` returns `status: "split"` with `task_count`; nothing starts. Roll each task
   separately.
 - **self**: when the profile has `self: true` (or `delegate: false`), `roll` returns `status: "self"`; nothing starts.
-- **native**: otherwise the allocator (`rankCandidates`) scores every Claude, Codex and Pi row with each effort the row offers against the
-  profile. The best one is started. Where one model at one effort is offered by both Pi and its native CLI at the same score, Pi wins for
-  read-and-report work and the native CLI otherwise, as in AgentCompass; this order is no part of a score and moves no other model. `realtime_loop` is preserved on both `profile` and `decision`.
+- **native**: otherwise the engine (`selectBestRoute`) scores every Claude, Codex and Pi row with each effort the row offers against the profile: how well
+  the model fits each demanded category (`axis_demand`, `code_complexity`, `reasoning_depth` and the work kind), plus continuity, minus what the route spends
+  of the quota window of the account it draws on, and the best net score is started. A row the profile leaves out (`read_only_review`, `access`, `needs_visual`,
+  `needs_gui`) is excluded with its reason. Where one model at one effort is offered by both Pi and its native CLI at the same score, the harness order of the
+  work kind decides (Pi first for read-and-report work, the native CLI otherwise), as in AgentCompass; this order is no part of a score and moves no other model.
+  `decision.axis_demand`, `decision.components`, `decision.score` and `decision.alternatives` say what was demanded and why this row won.
 - **quota and account state**: the newest rate-limit snapshot the Codex CLI wrote to its session logs (`$CODEX_HOME`, else `~/.codex` and
-  Cindy's own `<app data>/CindyGlobal/codex-home`) lowers the score of routes on that connection when it is high or exhausted. The decision
-  lists `quota_penalized_routes` and warns when the chosen route itself is short of quota. Accounts are tracked as `ready`, `plan_inactive`,
-  `usage_failing` or `auth_failed`, and `roll` / `status` surface `warnings` and compact `accounts`. Because Codex writes session logs only
-  while running, session log `mtime` is never treated as a reading failure: snapshots whose windows have reset are treated as unknown quota
-  (dispatchable, no penalty, no fast mode, no warning). True read failures (unreadable file or corrupt `rate_limits` JSON with no valid
-  earlier snapshot in the file) persist their first-seen time in `quota-state.json` in the state directory, warn immediately while still
-  dispatching, exclude the account after 6 h of continuous failure, and clear when a healthy log is read. A `plan_inactive` reading (such
-  as `free`) within 6 h excludes the account; one older than 6 h warns and dispatches so the run refreshes telemetry.
-- **fast mode**: a task whose profile sets `wants_fast: true` gets Codex fast mode when the row supports it and the quota snapshot shows
-  less than 60% used (`urgency: "high"` is informational and never turns fast mode on by itself). Unknown quota never turns fast mode on.
+  Cindy's own `<app data>/CindyGlobal/codex-home`) is the one account the engine prices: the plan it reports (`plus`, `pro`) and the usage of its
+  `usage` (weekly) and `five_hour` windows. **The plan is read, never assumed**: a reading with no plan, or with no window the plan can price, takes
+  that account's Codex and Pi rows out of automatic routing (`capacity_unknown`, `no weekly quota window`), while rows that draw on no quota account (Claude
+  rows, or Codex rows when no Codex log exists yet) are an unmetered account and route. A window the plan has no data for (a `five_hour` window on `pro`) is
+  named in `decision.warnings` and not priced. More of a window used never makes a route cheaper, and a window that is spent takes the account out. Accounts
+  are tracked as `ready`, `plan_inactive`, `usage_failing` or `auth_failed`, and `roll` / `status` surface `warnings` and compact `accounts`. Because Codex writes
+  session logs only while running, session log `mtime` is never treated as a reading failure: snapshots whose windows have reset are treated as unknown quota.
+  True read failures (unreadable file or corrupt `rate_limits` JSON with no valid earlier snapshot in the file) persist their first-seen time in
+  `quota-state.json` in the state directory, warn immediately, exclude the account after 6 h of continuous failure, and clear when a healthy log is read. A
+  `plan_inactive` reading (such as `free`) within 6 h excludes the account; one older than 6 h warns and dispatches so the run refreshes telemetry. With several
+  Codex connections the snapshot is applied only to one a caller bound to it (`providerId`), never to all.
+- **fast mode**: a task whose profile sets `wants_fast: true` gets Codex fast mode when the row is a Codex row Cindy offers fast mode for, the model's own
+  AgentCompass data says it has a fast mode, and the quota snapshot shows less than 60% used (`urgency: "high"` is informational and never turns fast mode on by itself). Unknown quota never turns fast mode on.
 - **refused routes cool down**: when Cindy refuses `tasks.create` because of the route itself (`ROUTE_UNAVAILABLE`,
   `UNSUPPORTED_CAPABILITY`, `PERMISSION_DENIED`), that route is skipped for 15 min, doubling with each consecutive refusal up to 2 h,
   so the retry goes elsewhere (`route-cooldowns.json` in the state directory; the decision lists `cooling_down`). A task created on
   the route clears it. When every runnable route is cooling down, the roll still routes and warns (`cooldown_warning`).
 - **blocked**: a catalog with no Claude, Codex or Pi model (`no_runnable_model`), an unavailable/failed classifier without a caller profile,
-  every capable candidate account excluded (`accounts_unavailable`), or no route that meets the task's floor (`no_model_meets_floor`), is
-  refused (`status: "blocked"`); nothing is guessed. On `accounts_unavailable`, `roll` returns `reason: "accounts_unavailable"`,
-  `decision.reason: "accounts_unavailable"`, the failing/excluded `accounts` and `warnings`, a clear `error`, and an actionable `next_action`.
+  every candidate account excluded (`accounts_unavailable`), or no row that can run the task (`no_route`) is refused (`status: "blocked"`); nothing is
+  guessed. On `accounts_unavailable`, `roll` returns `reason: "accounts_unavailable"`, `decision.reason: "accounts_unavailable"`, the failing/excluded
+  `accounts` and `warnings`, a clear `error`, and an actionable `next_action`.
 
 Every decision is saved with the receipt (`router.stdout.json`): `profile_source` (`"classifier"`, `"caller"` or `"unavailable"`),
-`classifier_model`, `realtime_loop`, `profile`, chosen route, score components, alternatives and quota.
+`classifier_model`, `profile`, `axis_demand`, chosen route, score components, alternatives and quota.
+
+### What the plugin does not carry from AgentCompass v0.6.0
+
+- No user scores (`agentcompass score set`, the tray's Manual Scores panel) and no pricing or subscription configuration: the engine's scores are its public
+  data, and the one account the plugin prices is the Codex plan its own session logs report. Metered (billed) accounts are not read.
+- No `--constraint` or `--effort` option on the `roll` tool and no session continuity between rolls: each roll routes alone.
+- No fleet of accounts from AgentCompass's own configuration: the accounts are the Cindy connections in the catalog.
+- No Python and no network, as before: the engine modules above are pure JavaScript and read no file.
 
 ### Classifier configuration (`~/.agent-compass/cindy-plugin/config.json`)
 
@@ -240,7 +251,7 @@ else runs for real: the market install with nothing else on the machine; the bui
 `split`, `self`, fast mode and quota moves from real Codex telemetry files; the external `agentcompass roll` when opted in, and the
 built-in fallback when the CLI is missing; concurrent rolls across sessions, a forged `session_context`, 12 message pages, a 2.6 MB reply,
 stop to a confirmed `cancelled` state, archive and `manual_cleanup_required` cleanup, drafts that fail verification, and PR #274
-review cases 1, 2, 5, 6 and 7 end to end (all seven are unit-tested). Set `AGENTCOMPASS_CHECKOUT` to an AgentCompass checkout for the CLI scenarios (default `../route_manager`, next to the repository or, from a git worktree, next to its main checkout). The latest
+review cases 1, 2, 5, 6 and 7 end to end (all seven are unit-tested). Set `AGENTCOMPASS_CHECKOUT` to an AgentCompass checkout for the CLI scenarios (default `../AgentCompass`, next to the repository or, from a git worktree, next to its main checkout). The latest
 Windows and Linux runs are in [docs/sandbox-e2e-report.json](docs/sandbox-e2e-report.json), with every scenario's input and host record
 under `docs/sandbox-artifacts/`; machine paths are replaced by `<sandbox>`, `<repo>`, `<home>` and similar names. `npm run test:sandbox:linux` updates its
 part itself; `npm run test:sandbox` writes only to its sandbox unless `CINDY_REPORT_MERGE_INTO` names that file, and its artifacts are then copied by hand.

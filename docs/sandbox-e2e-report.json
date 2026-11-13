@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-07T20:53:27.224Z",
+   "started_at": "2026-11-13T08:19:17.292Z",
    "operations": [
     {
      "name": "isolation",
@@ -33,7 +33,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 130 passed, 0 failed",
+       "name": "node --test: 128 passed, 0 failed",
        "ok": true
       },
       {
@@ -151,7 +151,7 @@
        "ok": true
       },
       {
-       "name": "codex: the router chose codex/gpt-6.1-sol, full-access, without fast mode",
+       "name": "the router chose a bundle of a Cindy harness (provider = harness, a model and an effort), not fast mode: nothing here asks for it",
        "ok": true
       },
       {
@@ -425,7 +425,7 @@
        "ok": true
       },
       {
-       "name": "the decision is explained: work kind, profile_source classifier, classifier_model, realtime_loop, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel",
+       "name": "the decision is explained: work kind, profile_source classifier, classifier_model, wants_fast, axis_demand, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel",
        "ok": true
       },
       {
@@ -440,30 +440,46 @@
     },
     {
      "name": "built-in engine: every Cindy harness",
-     "intent": "codex for an edit, Pi for read-and-report exploration, Claude (cc) for a review; each an exact catalog row with bypassPermissions, through to cleanup",
+     "intent": "an edit, an exploration and a review on the full catalog, then a catalog of one harness only (Pi, Claude): the route is always an exact catalog row of a Cindy harness with its launcher mode, through to cleanup",
      "checks": [
       {
-       "name": "codex: the built-in engine chose codex (gpt-6-luna/high) with launcher mode full-access",
+       "name": "edit: the built-in engine chose codex (gpt-6-astra/low), with the launcher mode of that harness",
        "ok": true
       },
       {
-       "name": "codex: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "name": "edit: Cindy creates that exact catalog row with bypassPermissions and the run completes",
        "ok": true
       },
       {
-       "name": "pi: the built-in engine chose pi (chatgpt/gpt-6.1-terra/high) with launcher mode full-access",
+       "name": "exploration: the built-in engine chose cc (claude-opus-5-5/low), with the launcher mode of that harness",
        "ok": true
       },
       {
-       "name": "pi: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "name": "exploration: Cindy creates that exact catalog row with bypassPermissions and the run completes",
        "ok": true
       },
       {
-       "name": "claude: the built-in engine chose cc (claude-opus-5-5/high) with launcher mode bypassPermissions",
+       "name": "review: the built-in engine chose codex (gpt-6-astra/low), with the launcher mode of that harness",
        "ok": true
       },
       {
-       "name": "claude: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "name": "review: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "pi only: the built-in engine chose pi (chatgpt/gpt-6.1-sol/high), the only harness the catalog has, with the launcher mode of that harness",
+       "ok": true
+      },
+      {
+       "name": "pi only: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "claude only: the built-in engine chose cc (claude-opus-5-5/medium), the only harness the catalog has, with the launcher mode of that harness",
+       "ok": true
+      },
+      {
+       "name": "claude only: Cindy creates that exact catalog row with bypassPermissions and the run completes",
        "ok": true
       }
      ]
@@ -575,7 +591,7 @@
        "ok": true
       },
       {
-       "name": "the account map from the home directory was applied to the exact catalog route",
+       "name": "the account map from the home directory was applied to the exact catalog route of the routed account",
        "ok": true
       },
       {
@@ -586,30 +602,30 @@
     },
     {
      "name": "every Cindy harness through the real router",
-     "intent": "Claude max and high (router.json build), and Pi (CLI opt-in), reach exact catalog routes with Cindy bypassPermissions; codex is the first operation",
+     "intent": "Claude (router.json build, deep and review profiles) and Pi (CLI opt-in) reach exact catalog routes with Cindy bypassPermissions; the other harnesses are signed out so the router has only that one to choose; codex is the first operation",
      "checks": [
       {
-       "name": "claude-max: the router chose claude/claude-opus-5-5 at xhigh and the plugin made bypassPermissions explicit",
+       "name": "claude-deep: with only Claude signed in the router chose the claude harness (claude-opus-5-5/xhigh) and the plugin made bypassPermissions explicit",
        "ok": true
       },
       {
-       "name": "claude-max: Cindy creates cc/claude/claude-opus-5-5/xhigh with bypassPermissions and the run completes",
+       "name": "claude-deep: Cindy creates the cc row of that bundle with bypassPermissions and the run completes",
        "ok": true
       },
       {
-       "name": "claude-high: the router chose claude/claude-opus-5-5 at high and the plugin made bypassPermissions explicit",
+       "name": "claude-review: with only Claude signed in the router chose the claude harness (claude-sonnet-5-5/medium) and the plugin made bypassPermissions explicit",
        "ok": true
       },
       {
-       "name": "claude-high: Cindy creates cc/claude/claude-opus-5-5/high with bypassPermissions and the run completes",
+       "name": "claude-review: Cindy creates the cc row of that bundle with bypassPermissions and the run completes",
        "ok": true
       },
       {
-       "name": "pi: the router chose the Pi harness on the codex account with its launch model; the fixed full-tool worker is full-access",
+       "name": "explore: the router chose the claude harness (claude-opus-5-5/medium) with that harness's launcher mode",
        "ok": true
       },
       {
-       "name": "pi: Cindy creates the exact pi route on the mapped connection with bypassPermissions and the run completes",
+       "name": "explore: Cindy creates the exact row of that bundle on its mapped connection with bypassPermissions and the run completes",
        "ok": true
       }
      ]
@@ -645,14 +661,14 @@
     "os_release": "6.18.40.1-microsoft-standard-WSL2",
     "node": "v24.22.2",
     "python": "3.12.16",
-    "agentcompass_version": "0.4.1",
+    "agentcompass_version": "0.6.0",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:40865/v1"
+    "scorer": "http://127.0.0.1:46749/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 130,
+     "pass": 128,
      "fail": 0
     },
     "python": {
@@ -662,7 +678,7 @@
    },
    "market": {
     "id": "agentcompass",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "icon": {
      "bytes": 5217,
      "px": 256
@@ -674,11 +690,11 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-07T20:53:57.547Z",
+   "finished_at": "2026-11-13T08:19:49.217Z",
    "summary": {
     "operations": 28,
-    "checks": 116,
-    "passed": 116,
+    "checks": 120,
+    "passed": 120,
     "failed": 0,
     "artifacts": "<sandbox>/report/cindy"
    }
@@ -686,7 +702,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-07T20:55:57.371Z",
+   "started_at": "2026-11-13T08:16:41.187Z",
    "operations": [
     {
      "name": "isolation",
@@ -715,7 +731,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 130 passed, 0 failed",
+       "name": "node --test: 128 passed, 0 failed",
        "ok": true
       },
       {
@@ -833,7 +849,7 @@
        "ok": true
       },
       {
-       "name": "codex: the router chose codex/gpt-6.1-sol, full-access, without fast mode",
+       "name": "the router chose a bundle of a Cindy harness (provider = harness, a model and an effort), not fast mode: nothing here asks for it",
        "ok": true
       },
       {
@@ -1107,7 +1123,7 @@
        "ok": true
       },
       {
-       "name": "the decision is explained: work kind, profile_source classifier, classifier_model, realtime_loop, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel",
+       "name": "the decision is explained: work kind, profile_source classifier, classifier_model, wants_fast, axis_demand, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel",
        "ok": true
       },
       {
@@ -1122,30 +1138,46 @@
     },
     {
      "name": "built-in engine: every Cindy harness",
-     "intent": "codex for an edit, Pi for read-and-report exploration, Claude (cc) for a review; each an exact catalog row with bypassPermissions, through to cleanup",
+     "intent": "an edit, an exploration and a review on the full catalog, then a catalog of one harness only (Pi, Claude): the route is always an exact catalog row of a Cindy harness with its launcher mode, through to cleanup",
      "checks": [
       {
-       "name": "codex: the built-in engine chose codex (gpt-6-luna/high) with launcher mode full-access",
+       "name": "edit: the built-in engine chose codex (gpt-6-astra/low), with the launcher mode of that harness",
        "ok": true
       },
       {
-       "name": "codex: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "name": "edit: Cindy creates that exact catalog row with bypassPermissions and the run completes",
        "ok": true
       },
       {
-       "name": "pi: the built-in engine chose pi (chatgpt/gpt-6.1-terra/high) with launcher mode full-access",
+       "name": "exploration: the built-in engine chose cc (claude-opus-5-5/low), with the launcher mode of that harness",
        "ok": true
       },
       {
-       "name": "pi: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "name": "exploration: Cindy creates that exact catalog row with bypassPermissions and the run completes",
        "ok": true
       },
       {
-       "name": "claude: the built-in engine chose cc (claude-opus-5-5/high) with launcher mode bypassPermissions",
+       "name": "review: the built-in engine chose codex (gpt-6-astra/low), with the launcher mode of that harness",
        "ok": true
       },
       {
-       "name": "claude: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "name": "review: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "pi only: the built-in engine chose pi (chatgpt/gpt-6.1-sol/high), the only harness the catalog has, with the launcher mode of that harness",
+       "ok": true
+      },
+      {
+       "name": "pi only: Cindy creates that exact catalog row with bypassPermissions and the run completes",
+       "ok": true
+      },
+      {
+       "name": "claude only: the built-in engine chose cc (claude-opus-5-5/medium), the only harness the catalog has, with the launcher mode of that harness",
+       "ok": true
+      },
+      {
+       "name": "claude only: Cindy creates that exact catalog row with bypassPermissions and the run completes",
        "ok": true
       }
      ]
@@ -1257,7 +1289,7 @@
        "ok": true
       },
       {
-       "name": "the account map from the home directory was applied to the exact catalog route",
+       "name": "the account map from the home directory was applied to the exact catalog route of the routed account",
        "ok": true
       },
       {
@@ -1268,30 +1300,30 @@
     },
     {
      "name": "every Cindy harness through the real router",
-     "intent": "Claude max and high (router.json build), and Pi (CLI opt-in), reach exact catalog routes with Cindy bypassPermissions; codex is the first operation",
+     "intent": "Claude (router.json build, deep and review profiles) and Pi (CLI opt-in) reach exact catalog routes with Cindy bypassPermissions; the other harnesses are signed out so the router has only that one to choose; codex is the first operation",
      "checks": [
       {
-       "name": "claude-max: the router chose claude/claude-opus-5-5 at xhigh and the plugin made bypassPermissions explicit",
+       "name": "claude-deep: with only Claude signed in the router chose the claude harness (claude-opus-5-5/xhigh) and the plugin made bypassPermissions explicit",
        "ok": true
       },
       {
-       "name": "claude-max: Cindy creates cc/claude/claude-opus-5-5/xhigh with bypassPermissions and the run completes",
+       "name": "claude-deep: Cindy creates the cc row of that bundle with bypassPermissions and the run completes",
        "ok": true
       },
       {
-       "name": "claude-high: the router chose claude/claude-opus-5-5 at high and the plugin made bypassPermissions explicit",
+       "name": "claude-review: with only Claude signed in the router chose the claude harness (claude-sonnet-5-5/medium) and the plugin made bypassPermissions explicit",
        "ok": true
       },
       {
-       "name": "claude-high: Cindy creates cc/claude/claude-opus-5-5/high with bypassPermissions and the run completes",
+       "name": "claude-review: Cindy creates the cc row of that bundle with bypassPermissions and the run completes",
        "ok": true
       },
       {
-       "name": "pi: the router chose the Pi harness on the codex account with its launch model; the fixed full-tool worker is full-access",
+       "name": "explore: the router chose the claude harness (claude-opus-5-5/medium) with that harness's launcher mode",
        "ok": true
       },
       {
-       "name": "pi: Cindy creates the exact pi route on the mapped connection with bypassPermissions and the run completes",
+       "name": "explore: Cindy creates the exact row of that bundle on its mapped connection with bypassPermissions and the run completes",
        "ok": true
       }
      ]
@@ -1327,14 +1359,14 @@
     "os_release": "10.0.26100",
     "node": "v24.12.0",
     "python": "3.13.7",
-    "agentcompass_version": "0.4.1",
+    "agentcompass_version": "0.6.0",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:12358/v1"
+    "scorer": "http://127.0.0.1:65341/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 130,
+     "pass": 128,
      "fail": 0
     },
     "python": {
@@ -1344,7 +1376,7 @@
    },
    "market": {
     "id": "agentcompass",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "icon": {
      "bytes": 5217,
      "px": 256
@@ -1356,11 +1388,11 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-07T20:57:10.439Z",
+   "finished_at": "2026-11-13T08:18:04.111Z",
    "summary": {
     "operations": 28,
-    "checks": 116,
-    "passed": 116,
+    "checks": 120,
+    "passed": 120,
     "failed": 0,
     "artifacts": "<sandbox>\\report\\cindy"
    }
@@ -1369,15 +1401,15 @@
  "summary": {
   "linux": {
    "operations": 28,
-   "checks": 116,
-   "passed": 116,
+   "checks": 120,
+   "passed": 120,
    "failed": 0,
    "artifacts": "<sandbox>/report/cindy"
   },
   "win32": {
    "operations": 28,
-   "checks": 116,
-   "passed": 116,
+   "checks": 120,
+   "passed": 120,
    "failed": 0,
    "artifacts": "<sandbox>\\report\\cindy"
   }

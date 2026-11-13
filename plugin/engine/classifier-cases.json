@@ -1,5 +1,5 @@
 {
-  "version": "2026-11-07",
+  "version": "2026-11-11",
   "route_definitions": {
     "computer_use": "Operate a live desktop, browser, or application GUI via screenshots, mouse clicks, keyboard input, or window automation.",
     "visual_analysis": "Read-only inspection or comparison of images, screenshots, UI mockups, or design frames without writing UI code or clicking a live GUI.",
@@ -17,15 +17,14 @@
     "direction_reasoning": "High-depth mathematical proof/derivation, formal critique, or first-principles strategic/architectural paradigm design."
   },
   "dimension_rubric": {
-    "anti_inflation_rule": "Score ONLY functional work the worker performs, never brief length or Markdown structure. Coordinator headers (`Parent session agent ID`, `工作目录`), role/AGENTS/SKILL docs, communication rules, and output/receipt paths are boilerplate—ignore them for `context_scale`, `reasoning_depth`, and `code_complexity`.",
+    "anti_inflation_rule": "Score ONLY functional work the worker performs, never brief length or Markdown structure. Coordinator headers (`Parent session agent ID`, `工作目录`), role/AGENTS/SKILL docs, communication rules, and output/receipt paths are boilerplate—ignore them for `reasoning_depth`, `code_complexity` and `axis_demand`.",
     "local_only_positive_vs_negative": "CONTRAST RULE for `local_only`: `true` when depending on un-inlined files/dirs/repos on THIS machine (reading, copying, searching, editing, building, or testing local files) or local processes/daemons/GUI/env. `false` when all required inputs are inlined or from the public web (`web_research`, `self_contained_code`, `text_in_text_out`, `direction_reasoning`, `complex_build_plan`), even if a local output path is named.",
-    "read_only_review": "CONTRAST RULE for `read_only_review`: `true` ONLY for read-only code/PR/diff/branch/security/release reviews or independent audits that write NO repo production/test code (`code_complexity: 0`, `work_kind: debug_review`, `hallucination_risk: 3`, even when saving a review report file to a specified path). `false` when fixing issues from a prior review (`Fix the review findings`), implementing/modifying code, diagnosing live runtime/log symptoms without a diff/code audit, or running ops commands.",
+    "read_only_review": "CONTRAST RULE for `read_only_review`: `true` ONLY for read-only code/PR/diff/branch/security/release reviews or independent audits that write NO repo production/test code (`code_complexity: 0`, `work_kind: debug_review`, even when saving a review report file to a specified path). `false` when fixing issues from a prior review (`Fix the review findings`), implementing/modifying code, diagnosing live runtime/log symptoms without a diff/code audit, or running ops commands.",
     "wants_fast": "CONTRAST RULE for `wants_fast`: `true` ONLY when affirmatively requesting fast mode, priority tier, urgent/ASAP turnaround, or a pre-reset quota sprint (`pre-reset sprint`, `before quota resets`, `重置前冲刺`) without negation. `false` when negated (`Do NOT use fast mode`, `no rush`, `不用开启fast`), when fast/immediate only describes an in-task runtime step (`click Save immediately`), when merely mentioning quota/reset without requesting fast execution, or when unmentioned.",
-    "context_scale": "Count coupled functional modules reasoned across, NOT paths mentioned: `1` = one module/script (+ paired test & boilerplate) or self-contained task; `2` = 2..5 coupled modules/datasets; `3` = repo/system-wide (>5 modules) or multi-stage orchestrator.",
-    "divergence": "`1` (Convergent): known target/spec/runbook/diff review/isolated bug fix; `2` (Multi-hypothesis): unknown root cause with 2+ competing hypotheses or comparing technical options; `3` (Divergent/Creative): open-ended creative ideation, motif/gameplay/narrative proposals, or first-principles architecture redesign.",
     "reasoning_depth": "`1` (Routine): explicit command/checklist/runbook, trivial config tweak, or mechanical bulk edit; `2` (Standard/Hard): single/multi-module feature, bug diagnosis/fix, read-only PR review, or structured research; `3` (Coupled): cross-module refactor with strict invariants, deep concurrency forensics, or migration plan in an existing system; `4` (Frontier): whole-product/system architecture or detailed game-system/economy/combat math from scratch, ultra-low-latency network design, or formal mathematical proof/critique.",
     "multi_task_vs_single_task": "`multi_task: true` ONLY when bundling 2+ independent deliverables assignable to separate workers in parallel. Sequential steps (`diagnose -> fix -> test -> report`) or one report covering sub-questions is ONE task (`multi_task: false, task_count: 1`).",
-    "realtime_loop": "`realtime_loop: true` ONLY when the worker agent itself stays inside a live external system continuous observe-act loop across turns where turn latency degrades live results (personally playing/farming a live game, live ticket/course/appointment/flash-sale sniping, live order-book/API watching & trading, polling a live page/App/API to act immediately, live-stream chat). Set `needs_gui` by whether the loop uses a GUI (`computer_use`) vs pure CLI/API (`tool_execution`). `realtime_loop: false` for ALL coding, frontend/backend work, bug fixes, UI design, optimization, diagnosis, log analysis, or one-shot GUI clicks—even on real-time/polling/game/dashboard/flash-sale features."
+    "axis_demand": "Level 0..3 per category: how much THIS task needs it. divergence: 0 a known spec or checklist, 1 small judgment calls, 2 several options to compare or a research/data-analysis question to investigate and synthesize, 3 open-ended creative writing, open research synthesis, or a first-principles redesign. coding: 0 no code read or written, 1 a small script or config change or a test-verified result, 2 a production module with its tests or a review/audit of one, 3 coupled modules, concurrency, protocol or core-library work, a whole-system review, or a costly irreversible defect. aesthetics: 0 no visual output, 1 tidy formatting only, 2 a user-facing screen/page/chart/document whose look matters, 3 design-led work (a new interface or interaction, a visual identity, a 3D scene). tool_operation: 0 reads files and runs a few shell commands, 1 routine tool or API calls, 2 heavy tool/API orchestration or the worker itself stays inside a live external system (game, ticket queue, order book, live page or chat) where slow turns hurt, 3 reads images or screenshots inside the loop or operates a GUI. Writing or fixing software about real-time systems is coding, not a live loop.",
+    "expected_hours": "Measured on this host: agents finish a review, investigation, multi-file fix or runbook brief in about 0.3h (middle half 0.2-0.6) and a feature across 8+ files in 1-3h. This overrides the schema's generic hour examples: a multi-file feature or investigation is 0.3-0.6h, not 1-3. Brief length, headings and boilerplate add nothing."
   },
   "calibration_cases": [
     {
@@ -36,10 +35,6 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
@@ -48,9 +43,14 @@
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -61,10 +61,6 @@
         "interaction_style": "exploration",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 3,
-        "error_cost": 1,
         "needs_visual": true,
         "needs_gui": false,
         "local_only": true,
@@ -73,9 +69,14 @@
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 0,
+          "aesthetics": 2,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -86,10 +87,6 @@
         "interaction_style": "exploration",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 3,
-        "hallucination_risk": 3,
-        "error_cost": 1,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": false,
@@ -98,9 +95,14 @@
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 3,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 1
+        }
       }
     },
     {
@@ -111,10 +113,6 @@
         "interaction_style": "text_only",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 3,
-        "error_cost": 1,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": false,
@@ -123,9 +121,14 @@
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 2,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 1
+        }
       }
     },
     {
@@ -136,10 +139,6 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 1,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": false,
@@ -148,9 +147,14 @@
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -161,21 +165,22 @@
         "interaction_style": "text_only",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 3,
-        "hallucination_risk": 2,
-        "error_cost": 1,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": false,
-        "expected_hours": 0.6,
+        "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 3,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -186,21 +191,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "expected_hours": 0.5,
+        "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -211,21 +217,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 1,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "expected_hours": 0.5,
+        "expected_hours": 0.2,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 1
+        }
       }
     },
     {
@@ -236,21 +243,22 @@
         "interaction_style": "exploration",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 2,
-        "divergence": 1,
-        "hallucination_risk": 3,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "expected_hours": 0.6,
+        "expected_hours": 0.2,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": true
+        "read_only_review": true,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -261,21 +269,22 @@
         "interaction_style": "exploration",
         "reasoning_depth": 3,
         "code_complexity": 0,
-        "context_scale": 2,
-        "divergence": 2,
-        "hallucination_risk": 3,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "expected_hours": 1.5,
+        "expected_hours": 0.4,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 2,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -286,21 +295,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 3,
         "code_complexity": 3,
-        "context_scale": 3,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 3,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "expected_hours": 2.5,
+        "expected_hours": 0.85,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 3,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -311,10 +321,6 @@
         "interaction_style": "advisory",
         "reasoning_depth": 4,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 3,
-        "hallucination_risk": 3,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": false,
@@ -323,9 +329,14 @@
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 3,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -336,10 +347,6 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 1,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
@@ -348,9 +355,14 @@
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 1
+        }
       }
     },
     {
@@ -361,21 +373,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "expected_hours": 1.0,
+        "expected_hours": 0.4,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": true,
         "task_count": "2",
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -384,8 +397,6 @@
       "expected_profile": {
         "interaction_style": "exploration",
         "code_complexity": 0,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": false,
@@ -395,12 +406,15 @@
         "task_count": "1",
         "work_kind": "complex_build_plan",
         "reasoning_depth": 4,
-        "context_scale": 3,
-        "divergence": 3,
         "expected_hours": 2.5,
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 3,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -409,8 +423,6 @@
       "expected_profile": {
         "interaction_style": "exploration",
         "code_complexity": 0,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": false,
@@ -420,12 +432,15 @@
         "task_count": "1",
         "work_kind": "direction_reasoning",
         "reasoning_depth": 4,
-        "context_scale": 2,
-        "divergence": 3,
         "expected_hours": 2.0,
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 3,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -434,8 +449,6 @@
       "expected_profile": {
         "interaction_style": "exploration",
         "code_complexity": 0,
-        "hallucination_risk": 3,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": false,
@@ -445,12 +458,15 @@
         "task_count": "1",
         "work_kind": "complex_build_plan",
         "reasoning_depth": 4,
-        "context_scale": 3,
-        "divergence": 2,
         "expected_hours": 2.0,
-        "realtime_loop": false,
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 2,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -461,21 +477,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": true,
-        "expected_hours": 1.5,
+        "expected_hours": 2.5,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -486,21 +503,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": true,
-        "expected_hours": 1.0,
+        "expected_hours": 2.0,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -511,21 +529,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": true,
         "expected_hours": 0.5,
         "hours_confidence": "high",
         "urgency": "high",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -536,21 +555,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": true,
         "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "high",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -561,21 +581,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 3,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": true,
         "expected_hours": 1.0,
         "hours_confidence": "medium",
         "urgency": "high",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -586,21 +607,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": true,
         "expected_hours": 0.5,
         "hours_confidence": "medium",
         "urgency": "high",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -611,21 +633,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": true,
         "expected_hours": 1.0,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -636,21 +659,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": true,
         "expected_hours": 0.5,
         "hours_confidence": "high",
         "urgency": "high",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -661,21 +685,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.8,
+        "expected_hours": 0.2,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -686,21 +711,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.5,
+        "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -711,21 +737,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 1.0,
+        "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -736,21 +763,22 @@
         "interaction_style": "exploration",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 3,
-        "error_cost": 1,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.4,
+        "expected_hours": 0.2,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 2,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -761,21 +789,22 @@
         "interaction_style": "exploration",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 2,
-        "hallucination_risk": 3,
-        "error_cost": 1,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.5,
+        "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 2,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -786,21 +815,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.5,
+        "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -811,21 +841,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 1,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": false,
         "expected_hours": 0.15,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -836,21 +867,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.8,
+        "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -861,21 +893,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 3,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": true,
-        "expected_hours": 1.0,
+        "expected_hours": 0.7,
         "hours_confidence": "medium",
         "urgency": "high",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 2
+        }
       }
     },
     {
@@ -886,21 +919,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": true,
-        "expected_hours": 0.5,
+        "expected_hours": 0.35,
         "hours_confidence": "high",
         "urgency": "high",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 2
+        }
       }
     },
     {
@@ -911,21 +945,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.5,
+        "expected_hours": 0.3,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -936,21 +971,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.8,
+        "expected_hours": 0.3,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -961,21 +997,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 2,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 1.0,
+        "expected_hours": 0.4,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 2,
+          "coding": 2,
+          "aesthetics": 3,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -986,21 +1023,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.5,
+        "expected_hours": 0.3,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 2,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1011,21 +1049,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 2,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.8,
+        "expected_hours": 0.35,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 2,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1036,21 +1075,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 1,
-        "context_scale": 1,
-        "divergence": 2,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.6,
+        "expected_hours": 0.3,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 2,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1061,21 +1101,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 1,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": false,
         "expected_hours": 0.1,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -1086,21 +1127,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 0,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 2,
-        "error_cost": 1,
         "needs_visual": true,
         "needs_gui": true,
         "local_only": true,
-        "realtime_loop": false,
         "expected_hours": 0.1,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 3
+        }
       }
     },
     {
@@ -1111,21 +1153,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 1,
-        "context_scale": 1,
-        "divergence": 2,
-        "hallucination_risk": 2,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.5,
+        "expected_hours": 0.3,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 2,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1136,21 +1179,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.6,
+        "expected_hours": 0.3,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 2,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1161,21 +1205,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 0.4,
+        "expected_hours": 0.3,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 2,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1186,21 +1231,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
-        "expected_hours": 1.0,
+        "expected_hours": 0.35,
         "hours_confidence": "medium",
         "urgency": "unknown",
         "multi_task": false,
         "task_count": "1",
         "wants_fast": false,
-        "read_only_review": false
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 2,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1211,21 +1257,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
         "wants_fast": true,
         "read_only_review": false,
-        "expected_hours": 0.4,
+        "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "high",
         "multi_task": false,
-        "task_count": "1"
+        "task_count": "1",
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1236,21 +1283,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
         "wants_fast": false,
         "read_only_review": false,
-        "expected_hours": 0.4,
+        "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "low",
         "multi_task": false,
-        "task_count": "1"
+        "task_count": "1",
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1261,21 +1309,22 @@
         "interaction_style": "exploration",
         "reasoning_depth": 2,
         "code_complexity": 0,
-        "context_scale": 2,
-        "divergence": 1,
-        "hallucination_risk": 3,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
         "wants_fast": false,
         "read_only_review": true,
-        "expected_hours": 0.6,
+        "expected_hours": 0.2,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
-        "task_count": "1"
+        "task_count": "1",
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1286,21 +1335,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
         "wants_fast": false,
         "read_only_review": false,
-        "expected_hours": 0.5,
+        "expected_hours": 0.3,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
-        "task_count": "1"
+        "task_count": "1",
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1311,21 +1361,22 @@
         "interaction_style": "engineering",
         "reasoning_depth": 2,
         "code_complexity": 2,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 2,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
         "wants_fast": true,
         "read_only_review": false,
-        "expected_hours": 0.5,
+        "expected_hours": 0.2,
         "hours_confidence": "high",
         "urgency": "high",
         "multi_task": false,
-        "task_count": "1"
+        "task_count": "1",
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
       }
     },
     {
@@ -1336,21 +1387,360 @@
         "interaction_style": "engineering",
         "reasoning_depth": 1,
         "code_complexity": 1,
-        "context_scale": 1,
-        "divergence": 1,
-        "hallucination_risk": 1,
-        "error_cost": 1,
         "needs_visual": false,
         "needs_gui": false,
         "local_only": true,
-        "realtime_loop": false,
         "wants_fast": false,
         "read_only_review": false,
-        "expected_hours": 0.2,
+        "expected_hours": 0.15,
         "hours_confidence": "high",
         "urgency": "unknown",
         "multi_task": false,
-        "task_count": "1"
+        "task_count": "1",
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
+      }
+    },
+    {
+      "id": "long_review_brief_with_boilerplate",
+      "task": "Parent session agent ID: 7c1e. Role: independent reviewer; read AGENTS.md and the review skill first. Communicate only through the parent channel. Review the diff of branch feature/retry-backoff against main in the local repository (about 12 files, 600 changed lines): check the retry and backoff logic for races and unbounded growth, the new config parsing for bad input, and whether the tests cover each change. Do not modify code. Write the findings to reports/retry-review.md, each with severity, file:line, evidence and a suggested fix, then send the parent a short summary. Constraints: no network, no new dependencies, keep the report under two pages.",
+      "expected_profile": {
+        "work_kind": "debug_review",
+        "interaction_style": "exploration",
+        "reasoning_depth": 2,
+        "code_complexity": 0,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.2,
+        "hours_confidence": "medium",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": true,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
+      }
+    },
+    {
+      "id": "long_feature_brief_with_tests",
+      "task": "Context: the local scheduler service retries failed jobs immediately. Requirements: (1) add exponential backoff with jitter in a new module backoff.py; (2) wire it into worker.py, queue.py and config.py; (3) make the base delay and cap configurable with validation; (4) log each retry once; (5) add unit tests for the delay curve and the config validation; (6) run the existing test suite and fix any regressions you cause. Follow the repository style, keep the change small, and describe it in the final report.",
+      "expected_profile": {
+        "work_kind": "general_implementation",
+        "interaction_style": "engineering",
+        "reasoning_depth": 2,
+        "code_complexity": 2,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.35,
+        "hours_confidence": "medium",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
+      }
+    },
+    {
+      "id": "long_runbook_brief_with_checks",
+      "task": "Run this release checklist on this machine in order and stop at the first failure: 1. git status must be clean; 2. run the unit tests; 3. build the package; 4. verify the built version string matches the tag; 5. install it into a fresh virtual environment; 6. run the CLI help and a dry run; 7. record the output of each step in a table with pass/fail; 8. report the table and the artifact path. Do not change any source file.",
+      "expected_profile": {
+        "work_kind": "tool_execution",
+        "interaction_style": "engineering",
+        "reasoning_depth": 1,
+        "code_complexity": 0,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.25,
+        "hours_confidence": "high",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 1
+        }
+      }
+    },
+    {
+      "id": "wide_rename_refactor_many_files",
+      "task": "Rename the concept `lane` to `channel` across the two local packages (about 15 files: modules, tests, docs and config keys). Keep behaviour identical, keep old config keys working with a deprecation warning, update every test and doc reference, run the full test suites of both packages and fix whatever breaks.",
+      "expected_profile": {
+        "work_kind": "general_implementation",
+        "interaction_style": "engineering",
+        "reasoning_depth": 3,
+        "code_complexity": 3,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.85,
+        "hours_confidence": "medium",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 3,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
+      }
+    },
+    {
+      "id": "long_log_investigation_read_only",
+      "task": "Read-only investigation on this machine: the nightly sync job slowed from 5 to 40 minutes after last Tuesday. Use the job logs in logs/sync/ and the deploy history in the repository to find when it started and what changed, rank the three most likely causes with evidence, and write the result to notes/sync-slowdown.md. Do not change code or configuration.",
+      "expected_profile": {
+        "work_kind": "exploration_analysis",
+        "interaction_style": "exploration",
+        "reasoning_depth": 2,
+        "code_complexity": 0,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.3,
+        "hours_confidence": "medium",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 2,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
+      }
+    },
+    {
+      "id": "handoff_finish_remaining_review_findings",
+      "task": "Continue from the handoff in notes/handoff.md: the previous worker finished three of five review findings on branch fix/launch-race in the local repository. Fix the remaining two (a race in the launcher start path and a missing timeout on the status poll) in the existing files, update the tests, run the suite, and report what changed.",
+      "expected_profile": {
+        "work_kind": "general_implementation",
+        "interaction_style": "engineering",
+        "reasoning_depth": 2,
+        "code_complexity": 2,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.2,
+        "hours_confidence": "medium",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
+      }
+    },
+    {
+      "id": "git_land_pull_request_ops",
+      "task": "Land the open pull request #1 on main in the local repository: rebase the branch on main, fast-forward main, close the PR with a comment, and resync the other local worktrees to the new main. Report the resulting commit hashes.",
+      "expected_profile": {
+        "work_kind": "tool_execution",
+        "interaction_style": "engineering",
+        "reasoning_depth": 1,
+        "code_complexity": 0,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.15,
+        "hours_confidence": "high",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 0,
+          "aesthetics": 0,
+          "tool_operation": 1
+        }
+      }
+    },
+    {
+      "id": "read_only_multi_round_scoring_review",
+      "task": "Review rounds 12 to 13 of the quota-economy scoring change, read-only: read the diff, the design notes and the tests, check that the economic invariants still hold, and list findings with file:line and severity. Do not modify any code; save the review to reports/round-13.md.",
+      "expected_profile": {
+        "work_kind": "debug_review",
+        "interaction_style": "exploration",
+        "reasoning_depth": 2,
+        "code_complexity": 0,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.25,
+        "hours_confidence": "medium",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": true,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 2,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
+      }
+    },
+    {
+      "id": "pre_release_verification_read_mostly",
+      "task": "Pre-release verification of v1.2 on this machine, read-mostly: run the full test suites, build the wheel, install it into a clean environment, exercise the CLI help and one dry run, and report anything that fails. Do not change any source file.",
+      "expected_profile": {
+        "work_kind": "tool_execution",
+        "interaction_style": "engineering",
+        "reasoning_depth": 1,
+        "code_complexity": 0,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.25,
+        "hours_confidence": "medium",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 1
+        }
+      }
+    },
+    {
+      "id": "single_stale_fixture_test_fix",
+      "task": "The unit test test_provider_fetch in tests/test_usage.py fails because its fixture is stale after a field rename. Fix the one fixture file and confirm the test passes.",
+      "expected_profile": {
+        "work_kind": "debug_review",
+        "interaction_style": "engineering",
+        "reasoning_depth": 2,
+        "code_complexity": 2,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.1,
+        "hours_confidence": "high",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 0
+        }
+      }
+    },
+    {
+      "id": "research_packet_backtest_replay",
+      "task": "Run the prepared research packet docs/packets/replay.md: replay the strategy over the last ten days of stored data, compare fills and PnL with the production log, and write the table and findings to reports/replay.md.",
+      "expected_profile": {
+        "work_kind": "research_packet",
+        "interaction_style": "exploration",
+        "reasoning_depth": 2,
+        "code_complexity": 1,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.6,
+        "hours_confidence": "medium",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 1
+        }
+      }
+    },
+    {
+      "id": "research_packet_data_pull_and_stats",
+      "task": "Execute the research packet: pull the three monthly datasets it lists, run the provided statistics script, check the results against the thresholds in the packet and report pass or fail per threshold.",
+      "expected_profile": {
+        "work_kind": "research_packet",
+        "interaction_style": "exploration",
+        "reasoning_depth": 2,
+        "code_complexity": 1,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.5,
+        "hours_confidence": "medium",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 0,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 1
+        }
+      }
+    },
+    {
+      "id": "research_packet_read_only_log_collection",
+      "task": "Follow the packet: read-only collection of the shadow runtime logs from the remote host over ssh, compute the listed metrics, and write the comparison to notes/shadow-vs-expected.md. Change nothing on the host.",
+      "expected_profile": {
+        "work_kind": "research_packet",
+        "interaction_style": "exploration",
+        "reasoning_depth": 2,
+        "code_complexity": 0,
+        "needs_visual": false,
+        "needs_gui": false,
+        "local_only": true,
+        "expected_hours": 0.4,
+        "hours_confidence": "medium",
+        "urgency": "unknown",
+        "multi_task": false,
+        "task_count": "1",
+        "wants_fast": false,
+        "read_only_review": false,
+        "axis_demand": {
+          "divergence": 1,
+          "coding": 1,
+          "aesthetics": 0,
+          "tool_operation": 1
+        }
       }
     }
   ]

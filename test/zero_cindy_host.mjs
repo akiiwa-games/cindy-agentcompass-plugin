@@ -13,7 +13,8 @@
 //   or {label, fixture: {...changes to the fake Cindy...}}   e.g. {capabilities, catalog, workingDir, staleRevision, runStatus, outputMessageId, pages, archiveFails}
 //   capabilities: 'full' | 'missing' | 'denied' | 'no-cancel' | 'no-archive' | 'no-exact'
 //   catalog: 'matching' (the routed row, on the connection the account map or `connection` names) | 'real' (the catalog
-//            Cindy 0.1.121 reported, test/fixtures) | 'real+claude' (that plus a Claude connection) | 'other-model' | 'empty'
+//            Cindy 0.1.121 reported, test/fixtures) | 'real+claude' (that plus a Claude connection) | 'claude-only' | 'pi-only'
+//            (the rows of one harness, so the router has only that harness to choose) | 'other-model' | 'empty'
 //   sendFault: 'lost-answer' (the run is stored, its answer never arrives)   inputOverride: text the run's input message shows
 //   saveFault: 'after-send' (the receipt save after an accepted send fails once)
 //   classifierProfile / classifierProfiles: what Cindy's quick-text channel answers (over the fixture profile), the plural one per request
@@ -62,14 +63,11 @@ const DEFAULT_CLASSIFIER_PROFILE = {
   interaction_style: 'engineering',
   reasoning_depth: 2,
   code_complexity: 2,
-  context_scale: 1,
-  divergence: 1,
-  hallucination_risk: 1,
-  error_cost: 2,
+  access: 'write',
+  axis_demand: {divergence: 1, coding: 2, aesthetics: 0, tool_operation: 1},
   needs_visual: false,
   needs_gui: false,
   local_only: true,
-  realtime_loop: false,
   expected_hours: 0.5,
   hours_confidence: 'medium',
   urgency: 'normal',
@@ -119,6 +117,8 @@ const cindy = {
       log('models', {});
       if (host.catalog === 'real') return structuredClone({ models: REAL.models });
       if (host.catalog === 'real+claude') return structuredClone({ models: [...REAL.models, ...CLAUDE_ROWS] });
+      if (host.catalog === 'claude-only') return structuredClone({ models: CLAUDE_ROWS });
+      if (host.catalog === 'pi-only') return structuredClone({ models: REAL.models.filter(m => m.route?.agentKind === 'pi') });
       const route = host.prepared ? routeOf(host.prepared.bundle, host.prepared.mappings) : null;
       if (!route || host.catalog === 'empty') return { models: [] };
       const shown = host.catalog === 'other-model' ? { ...route, model: route.model + '-other' } : route;

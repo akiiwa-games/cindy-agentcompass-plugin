@@ -88,14 +88,11 @@ const makeProfile = (overrides = {}) => ({
   interaction_style: 'engineering',
   reasoning_depth: 2,
   code_complexity: 1,
-  context_scale: 1,
-  divergence: 1,
-  hallucination_risk: 1,
-  error_cost: 2,
+  access: 'write',
+  axis_demand: {divergence: 1, coding: 1, aesthetics: 0, tool_operation: 1},
   needs_visual: false,
   needs_gui: false,
   local_only: true,
-  realtime_loop: false,
   expected_hours: 0.5,
   hours_confidence: 'medium',
   urgency: 'normal',
@@ -149,15 +146,16 @@ test('zero configuration: the built-in engine routes over the catalog Cindy pass
   assert.equal(askClf.result.classifier.timeoutMs, 65000);
   // Phase 2: classification result is validated against the pending attempt, cached to score-cache.json, and routed.
   const [reply] = rpc(p, [prepare(p, task, 1, CATALOG, {
-    ...classified({realtime_loop: true}, askClf.result.classifier.attemptId),
+    ...classified({wants_fast: true}, askClf.result.classifier.attemptId),
     classifyViaHost: true,
   })]);
   assert.equal(reply.result?.router?.status, 'native', JSON.stringify(reply));
   assert.equal(reply.result.engine, 'builtin');
   assert.equal(reply.result.router.decision.profile_source, 'classifier');
   assert.equal(reply.result.router.decision.classifier_model, QUICK_MODEL);
-  assert.deepEqual(reply.result.router.decision.classifier_calibration_cases, {included: 53, total: 53});
-  assert.equal(reply.result.router.decision.realtime_loop, true);
+  assert.equal(reply.result.router.decision.classifier_calibration_cases.total, 66);
+  assert.ok(reply.result.router.decision.classifier_calibration_cases.included >= 60, JSON.stringify(reply.result.router.decision.classifier_calibration_cases));
+  assert.equal(reply.result.router.decision.wants_fast, true);
   // A second session rolling the identical task text hits score-cache.json directly without a second classification step.
   const [cachedReply] = rpc(p, [{
     id: 9,
@@ -219,7 +217,7 @@ test('built-in split, self, Pi for exploration and fast mode with fresh Codex qu
   const sessions = path.join(p.home, '.codex', 'sessions', '2026', '11', '03');
   fs.mkdirSync(sessions, {recursive: true});
   fs.writeFileSync(path.join(sessions, 'rollout-x.jsonl'), JSON.stringify({type: 'event_msg', payload: {type: 'token_count',
-    rate_limits: {primary: {used_percent: 12, window_minutes: 300, resets_at: Math.floor(Date.now() / 1000) + 3600}, secondary: null, plan_type: 'pro'}}}) + '\n');
+    rate_limits: {primary: {used_percent: 12, window_minutes: 300, resets_at: Math.floor(Date.now() / 1000) + 3600}, secondary: {used_percent: 12, window_minutes: 10080, resets_at: Math.floor(Date.now() / 1000) + 86400}, plan_type: 'pro'}}}) + '\n');
   const replies = rpc(p, [
     prepare(p, 'Two independent tasks:\n1. Add a dark theme to the settings page.\n2. Fix the CSV export encoding bug in report.py.', 1, CATALOG, withProfile({multi_task: true, task_count: '2'})),
     prepare(p, 'What is the difference between a mutex and a semaphore?', 2, CATALOG, withProfile({self: true})),
@@ -454,7 +452,7 @@ test('B1 & M3 regression: two-phase classification handshake verifies the pendin
   assert.equal(receipts(p).length, 1);
 });
 
-test('m2 & m4 regression: config.json validation matches README (timeout 100..65000, the old model keys are no settings any more) and no_model_meets_floor returns structured blocked', () => {
+test('m2 & m4 regression: config.json validation matches README (timeout 100..65000, the old model keys are no settings any more) and no_route returns structured blocked', () => {
   const p = plugin(codex, 0, 'none');
 
   for (const badTimeout of [0, 50, 99, 65001, 120000, -10, '1000']) {
@@ -468,26 +466,25 @@ test('m2 & m4 regression: config.json validation matches README (timeout 100..65
   assert.deepEqual(Object.keys(configured.result.classifier).sort(), ['attemptId', 'prompt', 'timeoutMs']);
   assert.equal(configured.result.classifier.timeoutMs, 5000);
 
-  // m4: when no catalog model meets the capability floor, worker.cjs returns structured blocked (not an RPC error).
+  // m4: when no catalog row can be routed (here one AgentCompass has no scores for), worker.cjs returns structured blocked (not an RPC error).
   fs.rmSync(path.join(p.stateHome, 'config.json'), {force: true});
-  const minimalOnlyCatalog = {
+  const unscoredOnlyCatalog = {
     models: [
-      {route: {agentKind: 'pi', providerId: 'openai', model: 'chatgpt/gpt-6-luna', effort: 'minimal', fastMode: false}, efforts: ['minimal'], supportsFastMode: false},
+      {route: {agentKind: 'pi', providerId: 'openai', model: 'chatgpt/some-model-nobody-scored', effort: 'high', fastMode: false}, efforts: ['high'], supportsFastMode: false},
     ],
   };
-  const [floorBlocked] = rpc(p, [prepare(p, 'Prove formal distributed consensus safety.', 1, minimalOnlyCatalog, withProfile({
+  const [noRoute] = rpc(p, [prepare(p, 'Prove formal distributed consensus safety.', 1, unscoredOnlyCatalog, withProfile({
     work_kind: 'direction_reasoning',
     interaction_style: 'advisory',
     reasoning_depth: 4,
     code_complexity: 3,
-    context_scale: 3,
-    hallucination_risk: 3,
-    error_cost: 3,
+    axis_demand: {divergence: 2, coding: 3, aesthetics: 0, tool_operation: 0},
   }))]);
-  assert.equal(floorBlocked.error, undefined, 'm4: no_model_meets_floor does not throw an RPC error');
-  assert.equal(floorBlocked.result?.state, 'blocked');
-  assert.equal(floorBlocked.result?.router?.status, 'blocked');
-  assert.equal(floorBlocked.result?.router?.decision?.reason, 'no_model_meets_floor');
+  assert.equal(noRoute.error, undefined, 'm4: no_route does not throw an RPC error');
+  assert.equal(noRoute.result?.state, 'blocked');
+  assert.equal(noRoute.result?.router?.status, 'blocked');
+  assert.equal(noRoute.result?.router?.decision?.reason, 'no_route');
+  assert.ok(noRoute.result.router.decision.excluded.some(line => /data error/.test(line)), JSON.stringify(noRoute.result.router.decision.excluded));
 });
 
 test('R1: a failed classification cools the channel: the retry answers at once with the failure and the plugin card, without asking Cindy; it expires, doubles, and a classified task clears it', () => {
@@ -553,7 +550,7 @@ test('r1: phase 2 needs a live request of this session and task; a forged, stale
   const pendingFile = path.join(p.stateHome, ask.result.operation, 'pending-classify.json');
   assert.ok(fs.existsSync(pendingFile));
   // Another session has no request of its own, whatever attempt it names; ours stays usable.
-  refused(rpc(p, [prepareAs(2, other, classified({realtime_loop: true}, ask.result.classifier.attemptId))])[0]);
+  refused(rpc(p, [prepareAs(2, other, classified({wants_fast: true}, ask.result.classifier.attemptId))])[0]);
   assert.ok(fs.existsSync(pendingFile));
   // Every field of the answer is required: each of these also uses the request up.
   for (const answer of [
@@ -643,8 +640,8 @@ test('R3: a task of more than 15,000 characters is classified whole; one that ca
   const [routed] = rpc(p, [prepare(p, long, 2, CATALOG, classified({}, ask.result.classifier.attemptId))]);
   assert.equal(routed.result.router.status, 'native');
   const cases = routed.result.router.decision.classifier_calibration_cases;
-  assert.equal(cases.total, 53);
-  assert.ok(cases.included > 0 && cases.included < 53, JSON.stringify(cases));
+  assert.equal(cases.total, 66);
+  assert.ok(cases.included > 0 && cases.included < 66, JSON.stringify(cases));
 
   const [tooLong] = rpc(p, [prepare(p, 'x'.repeat(32768), 3, CATALOG, {classifyViaHost: true})]);
   assert.equal(tooLong.result.state, 'blocked');
@@ -800,9 +797,8 @@ test('m3: through the worker, both steps, the same answer routes every text in t
     });
   };
   const tasks = [BASE_TASK, ...KEYWORD_CORPUS];
-  for (const overrides of [{}, {realtime_loop: true, wants_fast: true, urgency: 'high'}]) {
+  for (const overrides of [{}, {wants_fast: true, urgency: 'high'}]) {
     const [expected, ...rest] = route(overrides, tasks);
-    assert.equal(expected.decision.profile.realtime_loop, overrides.realtime_loop === true);
     assert.equal(expected.decision.profile.wants_fast, overrides.wants_fast === true);
     rest.forEach((actual, index) => assert.deepEqual(actual, expected, KEYWORD_CORPUS[index].slice(0, 60)));
   }
@@ -848,11 +844,12 @@ test('Step 2 & 3 regression: read_only_review with nonzero code_complexity, inac
   assert.equal(blockedAccount.result.router.decision.accounts[0].dispatchable, false);
   assert.equal(receipts(p).length, 0, 'a blocked account check writes no prepared receipt');
 
-  // Corrupt session log: first sight persists failing_since in <stateHome>/quota-state.json and still dispatches; after 6h in quota-state.json, excludes and blocks.
+  // Corrupt session log: first sight persists failing_since in <stateHome>/quota-state.json; the log names no plan and no window, so no Codex row is routed
+  // automatically (v0.6.0), and nothing starts; after 6h in quota-state.json, the account is excluded.
   fs.writeFileSync(sessionFile, '{"payload":{"rate_limits":BROKEN_JSON\n');
   const [firstCorrupt] = rpc(p, [prepare(p, 'Fix corrupt-first.py', 2, CATALOG, withProfile())]);
-  assert.equal(firstCorrupt.result.state, 'prepared', 'first-seen corrupt log still dispatches');
-  assert.equal(firstCorrupt.result.router.status, 'native');
+  assert.equal(firstCorrupt.result.state, 'blocked', 'first-seen corrupt log: nothing to price the Codex rows with');
+  assert.equal(firstCorrupt.result.router.decision.reason, 'no_route');
   assert.equal(firstCorrupt.result.router.decision.accounts[0].state, 'usage_failing');
   assert.equal(firstCorrupt.result.router.decision.accounts[0].dispatchable, true);
   assert.ok(firstCorrupt.result.router.decision.warnings.some(w => /usage_failing.*corrupt rate-limit snapshot/.test(w)));
@@ -869,12 +866,15 @@ test('Step 2 & 3 regression: read_only_review with nonzero code_complexity, inac
   assert.equal(expiredCorrupt.result.router.reason, 'accounts_unavailable');
   assert.equal(expiredCorrupt.result.router.decision.accounts[0].dispatchable, false);
 
-  // External CLI returning structured accounts_unavailable is preserved as a blocked router result with actionable guidance.
-  const cliBlocked = plugin({status: 'blocked', error: 'accounts_unavailable'}, 2);
+  // External CLI (AgentCompass v0.6.0) whose classifiers are all down answers scorer_unavailable: a blocked router result, no receipt, nothing started.
+  const cliBlocked = plugin({status: 'scorer_unavailable', next: 'Run agentcompass doctor.'}, 2);
   const [cliReply] = rpc(cliBlocked, [prepare(cliBlocked, 'x')]);
-  assert.deepEqual(stateOf(cliReply), ['blocked', 'accounts_unavailable'], JSON.stringify(cliReply));
-  assert.equal(cliReply.result.router.reason, 'accounts_unavailable');
-  assert.match(cliReply.result.router.error, /All candidate accounts are unavailable/);
-  assert.match(cliReply.result.router.next_action, /roll again/);
+  assert.equal(cliReply.result?.state, 'blocked', JSON.stringify(cliReply));
+  assert.equal(cliReply.result.router.status, 'blocked');
+  assert.equal(cliReply.result.router.engine, 'cli');
+  assert.equal(cliReply.result.router.profile_source, 'unavailable');
+  assert.equal(cliReply.result.router.decision.reason, 'scorer_unavailable');
+  assert.match(cliReply.result.router.error, /nothing was started/);
+  assert.match(cliReply.result.router.next_action, /agentcompass doctor/);
   assert.equal(receipts(cliBlocked).length, 0);
 });

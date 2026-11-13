@@ -603,14 +603,11 @@ const BASE_PROFILE={
   interaction_style:'engineering',
   reasoning_depth:2,
   code_complexity:2,
-  context_scale:1,
-  divergence:1,
-  hallucination_risk:1,
-  error_cost:2,
+  access:'write',
+  axis_demand:{divergence:1,coding:2,aesthetics:0,tool_operation:1},
   needs_visual:false,
   needs_gui:false,
   local_only:true,
-  realtime_loop:false,
   expected_hours:0.5,
   hours_confidence:'medium',
   urgency:'normal',
@@ -639,7 +636,7 @@ function classifierFixture(options={}) {
             classifier:{attemptId:'attempt-'+operation.slice(0,8),prompt:req.prompt,timeoutMs:options.timeoutMs ?? req.timeoutMs}}};
         }
         const routed=routeTask(params.task,params.catalog,{
-          ...(options.routeOptions || {quota:{source:'test',status:'ok',used_percent:15}}),
+          ...(options.routeOptions || {quota:{source:'test',status:'ok',used_percent:15,plan:'pro'}}),
           profile:params.profile ?? null,
           classification:params.classification ?? null,
         });
@@ -695,7 +692,7 @@ function classifierFixture(options={}) {
 
 test('R4: classification is one quick-text request carrying the task: no model named, no task of its own, cached for the next session',async()=>{
   clearClassifierCache();
-  const f=classifierFixture({profileOverrides:{realtime_loop:true}});
+  const f=classifierFixture({profileOverrides:{wants_fast:true}});
   const taskText='Watch the live flash-sale countdown in the browser and click buy at 00:00.';
   const first=await f.send('roll',{task:taskText});
   assert.equal(first.ok,true,JSON.stringify(first));
@@ -710,7 +707,7 @@ test('R4: classification is one quick-text request carrying the task: no model n
   assert.deepEqual([f.named('cancel'),f.named('archive')],[[],[]],'nothing to clean up after a classification');
   assert.doesNotMatch(source,/:classify:|setHidden|hidden:true/,'no classifier task, request key or hiding is left in the plugin');
   const decision=f.records.get(first.result.operation).router.decision;
-  assert.deepEqual([decision.profile_source,decision.classifier_model,decision.realtime_loop,decision.profile.realtime_loop],['classifier',QUICK_MODEL,true,true]);
+  assert.deepEqual([decision.profile_source,decision.classifier_model,decision.wants_fast,decision.profile.wants_fast],['classifier',QUICK_MODEL,true,true]);
 
   const second=await f.send('roll',{task:taskText},{...ctx,session_id:'second-parent'});
   assert.equal(second.result.status,'running');
@@ -833,15 +830,15 @@ test('r7: classification needs no working folder, so self and split answer from 
 test('M5 & r5: a complete caller profile asks Cindy nothing; an incomplete one starts nothing and does not fall back to classifying',async()=>{
   clearClassifierCache();
   const caller=classifierFixture();
-  const {reason,...complete}={...BASE_PROFILE,realtime_loop:true};
+  const {reason,...complete}={...BASE_PROFILE,wants_fast:true};
   const called=await caller.send('roll',{task:'Task with explicit caller profile',profile:complete});
   assert.equal(called.ok,true,JSON.stringify(called));
   assert.equal(called.result.status,'running');
   assert.deepEqual(caller.oneshots(),[]);
   const decision=caller.records.get(called.result.operation).router.decision;
-  assert.deepEqual([decision.profile_source,decision.realtime_loop,decision.classifier_model],['caller',true,null]);
+  assert.deepEqual([decision.profile_source,decision.wants_fast,decision.classifier_model],['caller',true,null]);
 
-  for (const partial of [{},{work_kind:'general_implementation',reasoning_depth:2,code_complexity:2,realtime_loop:true}]) {
+  for (const partial of [{},{work_kind:'general_implementation',reasoning_depth:2,code_complexity:2,wants_fast:true}]) {
     const f=classifierFixture();
     const res=(await f.send('roll',{task:'Task with partial profile',profile:partial})).result;
     assert.deepEqual([res.status,res.decision.reason],['blocked','invalid_caller_profile'],JSON.stringify(partial));
@@ -885,20 +882,19 @@ test('M1 regression: native roll and status returns surface warnings and compact
     fs.writeFileSync(corruptFile,'{"payload":{"rate_limits":BROKEN_JSON\n');
     fs.utimesSync(corruptFile,new Date(now-60000),new Date(now-60000));
 
-    // 1. First-seen corrupt log on realCatalog: dispatches natively and surfaces warnings + accounts on roll and status.
+    // 1. First-seen corrupt log on realCatalog: the log names no plan and no window, so the engine can price nothing and no Codex row is routed
+    // automatically (v0.6.0: the plan is read, never assumed); the answer still surfaces warnings + accounts, and nothing is started.
     const f1=classifierFixture({routeOptions:{env:{CODEX_HOME:corruptHome},stateFile,now}});
     const roll1=(await f1.send('roll',{task:'Fix bug in m1-first.py'})).result;
-    assert.equal(roll1.status,'running');
+    assert.equal(roll1.status,'blocked');
+    assert.equal(roll1.decision?.reason,'no_route');
+    assert.equal(f1.workerCreates(),0);
     assert.ok(Array.isArray(roll1.warnings) && roll1.warnings.some(w=>/codex\/openai: usage_failing.*corrupt rate-limit snapshot/.test(w)),JSON.stringify(roll1));
     assert.equal(roll1.accounts?.[0]?.key,'codex/openai');
     assert.equal(roll1.accounts?.[0]?.state,'usage_failing');
     assert.equal(roll1.accounts?.[0]?.dispatchable,true);
     assert.equal(roll1.accounts?.[0]?.failing_since,new Date(now).toISOString());
 
-    const status1=(await f1.send('status',{operation:roll1.operation})).result;
-    assert.equal(status1.status,'running');
-    assert.deepEqual(status1.warnings,roll1.warnings);
-    assert.deepEqual(status1.accounts,roll1.accounts);
 
     // 2. After 6h of continuous failure with Claude signed in: Codex is excluded, rerouted to Claude, and roll still surfaces the Codex warning and accounts.
     clearClassifierCache();
@@ -911,13 +907,18 @@ test('M1 regression: native roll and status returns surface warnings and compact
     assert.ok(Array.isArray(roll2.warnings) && roll2.warnings.some(w=>/codex\/openai: usage_failing, excluded from dispatch/.test(w)),JSON.stringify(roll2));
     assert.equal(roll2.accounts?.[0]?.state,'usage_failing');
     assert.equal(roll2.accounts?.[0]?.dispatchable,false);
+    const status2=(await f2.send('status',{operation:roll2.operation})).result;
+    assert.deepEqual(status2.warnings,roll2.warnings);
+    assert.deepEqual(status2.accounts,roll2.accounts);
 
-    // 3. When every runnable route is short of quota (decision.warning), roll surfaces that warning in warnings as well.
+    // 3. When the only quota account is exhausted, its rows leave automatic routing: roll is blocked, says why, and starts nothing.
     clearClassifierCache();
-    const f3=classifierFixture({routeOptions:{quota:{source:'test',status:'exhausted',used_percent:97}}});
+    const f3=classifierFixture({routeOptions:{quota:{source:'test',status:'exhausted',used_percent:100,plan:'pro'}}});
     const roll3=(await f3.send('roll',{task:'Fix bug in m1-short-quota.py'})).result;
-    assert.equal(roll3.status,'running');
-    assert.ok(Array.isArray(roll3.warnings) && roll3.warnings.some(w=>/every runnable route is short of quota/.test(w)),JSON.stringify(roll3));
+    assert.equal(roll3.status,'blocked',JSON.stringify(roll3));
+    assert.equal(roll3.decision?.reason,'no_route');
+    assert.ok(roll3.decision.excluded.some(line=>/exhausted|quota/.test(line)),JSON.stringify(roll3.decision.excluded));
+    assert.equal(f3.workerCreates(),0);
 
     // 4. Empty task returns Task is empty without the unrelated "Check plugin permissions, task directory and exact account mapping" suffix.
     for (const emptyTask of ['','   \n\t ']) {
@@ -979,7 +980,7 @@ test('all candidate accounts unavailable: roll returns accounts_unavailable, sur
 
     // Seed first-seen failure at `now`, then roll at `now + 6h` when the sole account (codex/openai) is excluded.
     const fSeed=classifierFixture({routeOptions:{env:{CODEX_HOME:corruptHome},stateFile,now}});
-    assert.equal((await fSeed.send('roll',{task:'Seed initial corrupt reading'})).result.status,'running');
+    assert.equal((await fSeed.send('roll',{task:'Seed initial corrupt reading'})).result.status,'blocked');
 
     clearClassifierCache();
     const sixHourNow=now+6*3600*1000;

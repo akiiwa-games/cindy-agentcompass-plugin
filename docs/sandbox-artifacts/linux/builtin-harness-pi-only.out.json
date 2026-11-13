@@ -1,0 +1,436 @@
+{
+ "results": [
+  {
+   "label": "catalog",
+   "fixture": {
+    "catalog": "pi-only",
+    "classifierProfile": {
+     "work_kind": "exploration_analysis",
+     "interaction_style": "exploration",
+     "code_complexity": 0,
+     "access": "read-only",
+     "axis_demand": {
+      "divergence": 2,
+      "coding": 0,
+      "aesthetics": 0,
+      "tool_operation": 1
+     }
+    }
+   }
+  },
+  {
+   "label": "roll",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-1",
+     "ok": true,
+     "result": {
+      "status": "running",
+      "operation": "5c09e0469b7a9ddc7f28e77c27db0d4162c67998",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "task_id": "task-1",
+      "run_id": "run-1",
+      "error": null,
+      "error_code": null,
+      "automatic_callback": false,
+      "warnings": [
+       "candidate name chatgpt/gpt-5.3-codex-spark is not in the catalog: no scores: a demanded category is a data error, so it leaves automatic routing (name it to dispatch it)"
+      ],
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "5c09e0469b7a9ddc7f28e77c27db0d4162c67998"
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "label": "status while running",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-2",
+     "ok": true,
+     "result": {
+      "status": "running",
+      "operation": "5c09e0469b7a9ddc7f28e77c27db0d4162c67998",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "outputMessageId": null,
+      "output_available": false,
+      "messages_complete": false,
+      "message_pages_read": 0,
+      "final_result_summary": "",
+      "summary_shortened": false,
+      "full_result_artifacts": [],
+      "warnings": [
+       "candidate name chatgpt/gpt-5.3-codex-spark is not in the catalog: no scores: a demanded category is a data error, so it leaves automatic routing (name it to dispatch it)"
+      ],
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "status",
+       "args": {
+        "operation": "5c09e0469b7a9ddc7f28e77c27db0d4162c67998"
+       }
+      },
+      "next_action": "No automatic callback. Call next_tool to collect this same run; stop requests scoped cancellation."
+     }
+    }
+   ]
+  },
+  {
+   "label": "finished",
+   "fixture": {
+    "runStatus": "completed",
+    "outputMessageId": "out-final",
+    "pages": 2,
+    "finalText": "[Worker final report] harness-pi-only"
+   }
+  },
+  {
+   "label": "status",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-3",
+     "ok": true,
+     "result": {
+      "status": "completed",
+      "operation": "5c09e0469b7a9ddc7f28e77c27db0d4162c67998",
+      "taskId": "task-1",
+      "runId": "run-1",
+      "error": null,
+      "outputMessageId": "out-final",
+      "output_available": true,
+      "messages_complete": true,
+      "message_pages_read": 2,
+      "final_result_summary": "[Worker final report] harness-pi-only",
+      "summary_shortened": false,
+      "full_result_artifacts": [
+       "<sandbox>/home/.agent-compass/cindy-plugin/5c09e0469b7a9ddc7f28e77c27db0d4162c67998/messages-44e6d3178a2ecd2b.json",
+       "<sandbox>/home/.agent-compass/cindy-plugin/5c09e0469b7a9ddc7f28e77c27db0d4162c67998/messages-0b82280f9a8f5b1e.json"
+      ],
+      "warnings": [
+       "candidate name chatgpt/gpt-5.3-codex-spark is not in the catalog: no scores: a demanded category is a data error, so it leaves automatic routing (name it to dispatch it)"
+      ],
+      "next_tool": {
+       "ghost_id": "agentcompass",
+       "tool": "cleanup",
+       "args": {
+        "operation": "5c09e0469b7a9ddc7f28e77c27db0d4162c67998"
+       }
+      },
+      "next_action": "Read the exact output message/artifacts. Cleanup archives when supported, otherwise gives the confirmed task ID for manual archiving in Cindy."
+     }
+    }
+   ]
+  },
+  {
+   "label": "cleanup",
+   "replies": [
+    {
+     "type": "tool-result",
+     "callId": "call-4",
+     "ok": true,
+     "result": {
+      "status": "cleaned",
+      "operation": "5c09e0469b7a9ddc7f28e77c27db0d4162c67998",
+      "taskId": "task-1",
+      "task_id": "task-1"
+     }
+    }
+   ]
+  }
+ ],
+ "calls": [
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "models"
+  },
+  {
+   "name": "create",
+   "requestKey": "5c09e0469b7a9ddc7f28e77c27db0d4162c67998:create",
+   "route": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6.1-sol",
+    "providerId": "openai",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions"
+  },
+  {
+   "name": "send",
+   "taskId": "task-1",
+   "expectedRevision": 1,
+   "requestKey": "5c09e0469b7a9ddc7f28e77c27db0d4162c67998:send",
+   "chars": 457
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "readMessages",
+   "after": null
+  },
+  {
+   "name": "readMessages",
+   "after": "1"
+  },
+  {
+   "name": "capabilities"
+  },
+  {
+   "name": "listRuns",
+   "taskId": "task-1"
+  },
+  {
+   "name": "getRun",
+   "runId": "run-1"
+  },
+  {
+   "name": "archive",
+   "taskId": "task-1"
+  }
+ ],
+ "oneshotCalls": [
+  {
+   "kind": "oneshot_text",
+   "chars": 32434,
+   "expectJson": true,
+   "callId": "call-1"
+  }
+ ],
+ "nodeCalls": [
+  "prepare",
+  "prepare",
+  "load",
+  "save",
+  "save",
+  "save",
+  "load",
+  "save",
+  "load",
+  "output",
+  "save",
+  "output",
+  "save",
+  "save",
+  "load",
+  "save"
+ ],
+ "sent": [
+  {
+   "runId": "run-1",
+   "file": "<sandbox>/report/cindy/cindy-sent-run-1.txt",
+   "sha256": "e2e7ae61de0947499a53e30d80c4d2d33f3e446895c93fe379e3840156ff946d",
+   "chars": 457
+  }
+ ],
+ "prepared": {
+  "operation": "5c09e0469b7a9ddc7f28e77c27db0d4162c67998",
+  "parent": "cindy-session-1",
+  "state": "prepared",
+  "engine": "builtin",
+  "router": {
+   "status": "native",
+   "engine": "builtin",
+   "route": {
+    "bundle": {
+     "provider": "pi",
+     "harness": "pi",
+     "account": "openai",
+     "providerId": "openai",
+     "model": "chatgpt/gpt-6.1-sol",
+     "effort": "high",
+     "fast": false,
+     "modeId": "full-access"
+    }
+   },
+   "decision": {
+    "work_kind": "exploration_analysis",
+    "difficulty": "hard",
+    "axis_demand": {
+     "divergence": 2,
+     "coding": 0,
+     "aesthetics": 0,
+     "tool_operation": 1
+    },
+    "profile": {
+     "work_kind": "exploration_analysis",
+     "reasoning_depth": 2,
+     "code_complexity": 0,
+     "needs_visual": false,
+     "needs_gui": false,
+     "local_only": true,
+     "wants_fast": false,
+     "read_only_review": false,
+     "access": "read-only",
+     "expected_hours": 0.5,
+     "hours_confidence": "medium",
+     "urgency": "normal",
+     "interaction_style": "exploration",
+     "reason": "fixture classification from fake Cindy host model",
+     "multi_task": false,
+     "task_count": "1",
+     "axis_demand": {
+      "divergence": 2,
+      "coding": 0,
+      "aesthetics": 0,
+      "tool_operation": 1
+     },
+     "self": false
+    },
+    "profile_source": "classifier",
+    "classifier_model": "fixture-quick-text",
+    "read_only_review": false,
+    "classifier_calibration_cases": {
+     "included": 63,
+     "total": 66
+    },
+    "quota": {
+     "source": "codex-cli-sessions",
+     "status": "unknown",
+     "reason": "no Codex connection in catalog"
+    },
+    "canonical_model": "gpt-6.1-sol",
+    "score": 1.2969999999999997,
+    "components": {
+     "duration_source": "aa",
+     "duration_multiplier": 0.6766,
+     "divergence": -2.0153,
+     "coding": -0.4061,
+     "aesthetics": -0.3941,
+     "tool_operation": -0.7322,
+     "share_divergence": 0.3921,
+     "share_coding": 0.8546,
+     "share_aesthetics": 0.8638,
+     "share_tool_operation": 0.7432,
+     "five_axis_level": -2.0153,
+     "five_axis_shortfall": 0,
+     "fit": 1.297,
+     "continuity": 0,
+     "opportunity_cost": 0,
+     "quota_price": 0,
+     "need_probability": 0,
+     "need_probability_end": 0,
+     "earliest_reset_hours": null,
+     "harness_place": 0,
+     "decided_by": "completion_hours"
+    },
+    "selected_quota": null,
+    "wants_fast": false,
+    "warnings": [
+     "candidate name chatgpt/gpt-5.3-codex-spark is not in the catalog: no scores: a demanded category is a data error, so it leaves automatic routing (name it to dispatch it)"
+    ],
+    "alternatives": [
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6.1-sol",
+      "effort": "xhigh",
+      "fast": false,
+      "score": 1.2969999999999997
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6-astra",
+      "effort": "xhigh",
+      "fast": false,
+      "score": 1.2969999999999997
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6.1-sol",
+      "effort": "max",
+      "fast": false,
+      "score": 1.2969999999999997
+     },
+     {
+      "agentKind": "pi",
+      "providerId": "openai",
+      "model": "chatgpt/gpt-6-astra",
+      "effort": "max",
+      "fast": false,
+      "score": 1.2969999999999997
+     }
+    ]
+   }
+  },
+  "bundle": {
+   "provider": "pi",
+   "harness": "pi",
+   "account": "openai",
+   "providerId": "openai",
+   "model": "chatgpt/gpt-6.1-sol",
+   "effort": "high",
+   "fast": false,
+   "modeId": "full-access"
+  },
+  "prompt": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi only-1794557985334]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "directory": "<sandbox>/work dir",
+  "mappings": [],
+  "attempts": 1
+ },
+ "duplicateCreate": 0,
+ "duplicateSend": 0,
+ "tasks": [
+  {
+   "taskId": "task-1",
+   "revision": 2,
+   "resolvedConfig": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6.1-sol",
+    "providerId": "openai",
+    "effort": "high",
+    "fastMode": false
+   },
+   "permissionMode": "bypassPermissions",
+   "planModeEnabled": false,
+   "workingDir": "<sandbox>/work dir",
+   "archived": true
+  }
+ ],
+ "runs": [
+  {
+   "runId": "run-1",
+   "taskId": "task-1",
+   "inputMessageId": "plugin-task:run-1",
+   "status": "completed",
+   "acceptedConfig": {
+    "agentKind": "pi",
+    "model": "chatgpt/gpt-6.1-sol",
+    "providerId": "openai",
+    "effort": "high",
+    "fastMode": false
+   },
+   "inputText": "Investigate why the login request fails: trace it through logs/ and the auth module and report the findings only. [pi only-1794557985334]\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+   "outputMessageId": "out-final"
+  }
+ ],
+ "workerStderr": ""
+}
