@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-13T08:19:17.292Z",
+   "started_at": "2026-11-13T08:44:55.307Z",
    "operations": [
     {
      "name": "isolation",
@@ -33,7 +33,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 128 passed, 0 failed",
+       "name": "node --test: 127 passed, 0 failed",
        "ok": true
       },
       {
@@ -621,7 +621,7 @@
        "ok": true
       },
       {
-       "name": "explore: the router chose the claude harness (claude-opus-5-5/medium) with that harness's launcher mode",
+       "name": "explore: with Claude signed out the router routed the ChatGPT subscription: the pi harness (gpt-6.1-sol/high) with its launcher mode",
        "ok": true
       },
       {
@@ -664,11 +664,11 @@
     "agentcompass_version": "0.6.0",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:46749/v1"
+    "scorer": "http://127.0.0.1:37733/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 128,
+     "pass": 127,
      "fail": 0
     },
     "python": {
@@ -690,7 +690,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-13T08:19:49.217Z",
+   "finished_at": "2026-11-13T08:45:27.187Z",
    "summary": {
     "operations": 28,
     "checks": 120,
@@ -702,7 +702,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-13T08:16:41.187Z",
+   "started_at": "2026-11-13T08:43:18.535Z",
    "operations": [
     {
      "name": "isolation",
@@ -731,7 +731,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 128 passed, 0 failed",
+       "name": "node --test: 127 passed, 0 failed",
        "ok": true
       },
       {
@@ -1319,7 +1319,7 @@
        "ok": true
       },
       {
-       "name": "explore: the router chose the claude harness (claude-opus-5-5/medium) with that harness's launcher mode",
+       "name": "explore: with Claude signed out the router routed the ChatGPT subscription: the pi harness (gpt-6.1-sol/high) with its launcher mode",
        "ok": true
       },
       {
@@ -1362,11 +1362,11 @@
     "agentcompass_version": "0.6.0",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:65341/v1"
+    "scorer": "http://127.0.0.1:64492/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 128,
+     "pass": 127,
      "fail": 0
     },
     "python": {
@@ -1388,7 +1388,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-13T08:18:04.111Z",
+   "finished_at": "2026-11-13T08:44:35.941Z",
    "summary": {
     "operations": 28,
     "checks": 120,

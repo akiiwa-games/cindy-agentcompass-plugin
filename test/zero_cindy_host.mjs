@@ -4,7 +4,7 @@
 //             JSON-RPC over stdio, as Cindy's node bridge does), and through it the built-in engine or the real public
 //             `agentcompass roll`
 //   fixture:  the host itself - trusted session_context injection and the experimental `cindy.tasks` API.
-//             Production behavior is validated separately (see docs/CINDY_REAL_ACCEPTANCE_AND_CANCEL_FIX.md).
+//             Production behavior is validated separately (see docs/real-cindy-0.1.121/README.md).
 //
 // usage: node zero_cindy_host.mjs <plugin dir> <scenario.json> <out.json>
 // scenario: {workdir, session, steps:[...]}. A step is

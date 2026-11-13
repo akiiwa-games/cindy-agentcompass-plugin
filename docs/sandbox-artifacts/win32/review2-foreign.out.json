@@ -17,7 +17,7 @@
      "ok": true,
      "result": {
       "status": "unknown_send",
-      "operation": "86f538c3f11116137033dbb91fa3109dae0f3ae1",
+      "operation": "7de46adabab94261216e96bb589d468cf708d28b",
       "taskId": "task-1",
       "runId": null,
       "task_id": "task-1",
@@ -32,7 +32,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "86f538c3f11116137033dbb91fa3109dae0f3ae1"
+        "operation": "7de46adabab94261216e96bb589d468cf708d28b"
        }
       }
      }
@@ -48,7 +48,7 @@
      "ok": true,
      "result": {
       "status": "unknown_send",
-      "operation": "86f538c3f11116137033dbb91fa3109dae0f3ae1",
+      "operation": "7de46adabab94261216e96bb589d468cf708d28b",
       "taskId": "task-1",
       "error": "CONNECTION_LOST after the input was accepted",
       "warnings": [
@@ -58,7 +58,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "86f538c3f11116137033dbb91fa3109dae0f3ae1"
+        "operation": "7de46adabab94261216e96bb589d468cf708d28b"
        }
       },
       "next_action": "Delivery to task task-1 is unconfirmed. Status keeps checking its durable runs; the input is never resent."
@@ -75,7 +75,7 @@
      "ok": true,
      "result": {
       "status": "cleanup_refused",
-      "operation": "86f538c3f11116137033dbb91fa3109dae0f3ae1",
+      "operation": "7de46adabab94261216e96bb589d468cf708d28b",
       "taskId": "task-1",
       "state": "unknown_send",
       "archived": false,
@@ -84,7 +84,7 @@
        "ghost_id": "agentcompass",
        "tool": "status",
        "args": {
-        "operation": "86f538c3f11116137033dbb91fa3109dae0f3ae1"
+        "operation": "7de46adabab94261216e96bb589d468cf708d28b"
        }
       }
      }
@@ -104,7 +104,7 @@
   },
   {
    "name": "create",
-   "requestKey": "86f538c3f11116137033dbb91fa3109dae0f3ae1:create",
+   "requestKey": "7de46adabab94261216e96bb589d468cf708d28b:create",
    "route": {
     "agentKind": "codex",
     "model": "gpt-6-astra",
@@ -118,7 +118,7 @@
    "name": "send",
    "taskId": "task-1",
    "expectedRevision": 1,
-   "requestKey": "86f538c3f11116137033dbb91fa3109dae0f3ae1:send",
+   "requestKey": "7de46adabab94261216e96bb589d468cf708d28b:send",
    "chars": 436
   },
   {
@@ -147,7 +147,7 @@
  "oneshotCalls": [
   {
    "kind": "oneshot_text",
-   "chars": 32415,
+   "chars": 32411,
    "expectJson": true,
    "callId": "call-1"
   }
@@ -166,12 +166,12 @@
   {
    "runId": "run-1",
    "file": "<sandbox>\\report\\cindy\\cindy-sent-run-1.txt",
-   "sha256": "02c019d148cb01c3e24a97b73ed408e6f7136102e2b4c1968cc49150a6d6ab5e",
+   "sha256": "e29def750e3890fa49419915927c28f83dff4e7ba39c8dca51edc7d1f30b32ac",
    "chars": 436
   }
  ],
  "prepared": {
-  "operation": "86f538c3f11116137033dbb91fa3109dae0f3ae1",
+  "operation": "7de46adabab94261216e96bb589d468cf708d28b",
   "parent": "cindy-session-1",
   "state": "prepared",
   "engine": "builtin",
@@ -312,7 +312,7 @@
    "fast": false,
    "modeId": "full-access"
   },
-  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [2df94407]\nFIXTURE-SCENARIO: ok review2-foreign\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
+  "prompt": "Rename the helper foo to bar in util.py and update its two callers. [2db88176]\nFIXTURE-SCENARIO: ok review2-foreign\n\nCindy plugin task return channel: this task has no worker-to-parent mailbox. Return [Worker final report] or BLOCKED / needs_input as your final assistant reply. The parent collects that exact result through the AgentCompass plugin status tool. Do not use Paseo, askpass routes, user-dialog tools or invent a callback.\n",
   "directory": "<sandbox>\\work dir",
   "mappings": [],
   "attempts": 1

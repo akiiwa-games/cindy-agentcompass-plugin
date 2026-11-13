@@ -1,4 +1,4 @@
-Rename the helper foo to bar in util.py and update its two callers. [b0de4b03]
+Rename the helper foo to bar in util.py and update its two callers. [d0f16733]
 FIXTURE-SCENARIO: ok review5-a
 
 

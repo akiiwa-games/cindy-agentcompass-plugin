@@ -452,7 +452,7 @@ test('B1 & M3 regression: two-phase classification handshake verifies the pendin
   assert.equal(receipts(p).length, 1);
 });
 
-test('m2 & m4 regression: config.json validation matches README (timeout 100..65000, the old model keys are no settings any more) and no_route returns structured blocked', () => {
+test('m2 & m4 regression: config.json validation (timeout 100..65000, the old model keys are no settings any more) and no_route returns structured blocked', () => {
   const p = plugin(codex, 0, 'none');
 
   for (const badTimeout of [0, 50, 99, 65001, 120000, -10, '1000']) {
@@ -782,7 +782,6 @@ test('m2: the hint says a fix the plugin cannot see still waits out the cooldown
     assert.match(hint, /auxiliary model[^.]*permission[^.]*up to 5 minutes/);
     assert.match(hint, /`profile`/);
   }
-  assert.match(fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8'), /auxiliary model[^.]*permission[^.]*up to 5 minutes/);
 });
 
 test('m3: through the worker, both steps, the same answer routes every text in the corpus the same; opposite answers on the same text go opposite ways', () => {

@@ -1,7 +1,7 @@
 """scripts/cindy_0_1_121_cancel_hotfix.py refuses anything but the reviewed 0.1.121 build and then changes nothing.
 
 The positive apply/restore path needs the real signed Cindy 0.1.121 installation; that evidence is in
-docs/CINDY_REAL_ACCEPTANCE_AND_CANCEL_FIX.md, not here.
+docs/real-cindy-0.1.121/README.md, not here.
 """
 import hashlib
 import json

@@ -650,9 +650,9 @@ test('R5: the prompt carries the AgentCompass rubric, route definitions and all 
   assert.ok(prompt.indexOf('calibration_cases') < prompt.indexOf('untrusted_task_evidence":'), 'the task comes after the instructions');
 });
 
-// AgentCompass skills/agent-compass/references/classifier-cases.json at v0.6.0. To update: replace the fixture and the shipped
+// AgentCompass skills/agent-compass/references/classifier-cases.json at AgentCompass a04902a (v0.6.0 plus the one change that drops a machine path from a case). To update: replace the fixture and the shipped
 // copy together, then this digest; a change on one side alone fails below.
-const CASE_FILE_SHA256 = 'b31a4e7c5227a307589a9389a699b21cb5dba46b845783e7ab0e308e16a9b045';
+const CASE_FILE_SHA256 = '52643d90815b4bfb371af99f6450be9f7075cb1e172d14cb42d1cb80d899b678';
 const CASE_FILE_VERSION = '2026-11-11';
 
 test('a5: `npm test` itself compares the case file: the fixture is the AgentCompass one, the shipped copy matches it, the file is sound, and a checkout at hand is compared too', t => {
@@ -1300,12 +1300,6 @@ test('a4: an exception is one exact call, counted: a second copy of it or a call
   assert.deepEqual(scanOwnFile(rel, `${source}\n// task.includes("urgent")\n/* /urgent/.test(task) */\n`), []);
 });
 
-test('a6: the acceptance document no longer says the built-in engine classifies with the profiler', () => {
-  const doc = ownSource('docs/CINDY_REAL_ACCEPTANCE_AND_CANCEL_FIX.md');
-  assert.doesNotMatch(doc, /AgentCompass profiler and allocator/);
-  assert.match(doc, /the split and self gates, the classifier profile and the AgentCompass allocator/);
-});
-
 test('A1: the classifier must state self, wants_fast and read_only_review: an answer without them is invalid, never defaulted; a caller must also state wants_fast and read_only_review, and may only leave self (and reason) out', () => {
   for (const field of ['self', 'wants_fast', 'read_only_review']) {
     const {[field]: _, ...without} = makeProfile();
@@ -1655,7 +1649,7 @@ test('Review 9: the vendoring script reads the commit it is given, by default th
   }
 });
 
-test('m1: the documents state the limit and the first signal lost as they are measured', () => {
+test('m1: the reference states the prompt limit as it is measured, and 63 of the 66 cases fit a short task', () => {
   let limit = 0;
   for (let low = 1, high = ONESHOT_PROMPT_LIMIT; low <= high;) {
     const size = (low + high) >> 1;
@@ -1663,26 +1657,10 @@ test('m1: the documents state the limit and the first signal lost as they are me
     else high = size - 1;
   }
   const rounded = groupedNumber(Math.floor(limit / 100) * 100);
-  for (const doc of ['README.md', 'docs/CINDY_REAL_ACCEPTANCE_AND_CANCEL_FIX.md']) {
-    assert.ok(ownSource(doc).includes(`about ${rounded} characters once JSON-escaped`), `${doc}: ${rounded}`);
-  }
-  assert.ok(ownSource('docs/sandbox-real-e2e/README.md').includes(`one over about ${rounded} being refused`));
-
-  const depths = [...new Set(CASES.map(row => row.expected_profile.reasoning_depth))].sort();
-  const levels = axis => [...new Set(CASES.map(row => row.expected_profile.axis_demand[axis]))].sort();
-  const signals = {
-    multi_task: rows => rows.some(row => row.expected_profile.multi_task === true),
-    ...Object.fromEntries(depths.map(depth => [`depth ${depth}`, rows => rows.some(row => row.expected_profile.reasoning_depth === depth)])),
-    ...Object.fromEntries(FIVE_AXES.flatMap(axis => levels(axis).map(level => [`${axis} ${level}`, rows => rows.some(row => row.expected_profile.axis_demand[axis] === level)]))),
-  };
-  let firstLost = null;
-  for (let size = 1000; !firstLost && size <= limit; size += 5) {
-    const rows = keptCases(size);
-    firstLost = Object.keys(signals).find(name => !signals[name](rows)) || null;
-  }
-  assert.ok(firstLost, 'some signal is lost before the limit');
-  const readme = ownSource('README.md');
-  assert.ok(readme.includes(`${firstLost} goes first`), `README says ${firstLost} goes first`);
+  const reference = ownSource('docs/REFERENCE.md');
+  assert.ok(reference.includes(`about ${rounded} characters once JSON-escaped`), `REFERENCE.md: ${rounded}`);
+  assert.equal(keptCases(10).length, 63);
+  assert.ok(reference.includes(`${keptCases(10).length} of the ${CASES.length} cases fit a short task`));
 });
 
 const NOW = Date.parse('2026-11-07T00:00:00Z');
@@ -2116,7 +2094,7 @@ test('Review minors regression: classifier reason >240 chars is truncated to 300
     assert.throws(() => validateClassifierProfile(makeProfile({reason: emptyReason})), /Invalid reason/);
   }
 
-  // 2. route.mjs comment accurately states CRITICAL RULES 2-7 removed (matching README.md).
+  // 2. route.mjs comment accurately states CRITICAL RULES 2-7 removed (matching docs/REFERENCE.md).
   const routeSrc = ownSource('plugin/engine/route.mjs');
   assert.match(routeSrc, /without its CRITICAL RULES 2-5:/);
   assert.doesNotMatch(routeSrc, /without its CRITICAL RULES 2-7:/);

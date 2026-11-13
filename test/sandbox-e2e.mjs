@@ -8,7 +8,7 @@
 //
 // Substituted, and only that: the Cindy host and its experimental tasks API (test/zero_cindy_host.mjs), the model behind
 // the router's classifier (a local OpenAI-compatible server below) and the provider CLI (a discovery placeholder; Cindy,
-// not AgentCompass, would run the worker). Real-host evidence is docs/CINDY_REAL_ACCEPTANCE_AND_CANCEL_FIX.md.
+// not AgentCompass, would run the worker). Real-host evidence is docs/real-cindy-0.1.121/README.md.
 //
 // Environment:
 //   AGENTCOMPASS_CHECKOUT   AgentCompass source checkout (default: ../AgentCompass next to this repository, or next to its main checkout from a git worktree)
@@ -71,6 +71,11 @@ const referenceFleet = path.join(state, 'reference-accounts.json');
   const readDoc = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
   const fleet = readDoc(path.join(CHECKOUT, 'skills', 'agent-compass', 'scripts', 'fixtures', 'reference-accounts.json'));
   fleet.families = readDoc(path.join(CHECKOUT, 'skills', 'agent-compass', 'references', 'accounts.json')).families;
+  // The Codex Plus plan has a weekly and a five-hour window (plan-templates.json), and the usage cache below reports both. The fixture's own Codex
+  // account declares only the weekly one, and a window that is observed but not declared has no capacity: every Codex and Pi row would then be out
+  // of automatic routing (`five_hour capacity_unknown`), which is what routed everything to Claude before.
+  const plusWindows = readDoc(path.join(CHECKOUT, 'skills', 'agent-compass', 'references', 'plan-templates.json')).codex.plus.windows;
+  fleet.accounts.codex.windows = plusWindows;
   fs.writeFileSync(referenceFleet, JSON.stringify(fleet));
 }
 const pathParts = [bin, path.dirname(process.execPath), path.dirname(python.exe)];
@@ -88,6 +93,8 @@ const baseEnv = {
   ROUTER_ACCOUNTS_FILE: referenceFleet,
   ROUTER_ACCOUNTS_OVERRIDE: path.join(state, 'override.json'), ROUTER_LEDGER: path.join(state, 'router-ledger.jsonl'),
   ROUTER_DISPATCH_DB: path.join(state, 'dispatch.sqlite3'), ROUTER_USAGE_CACHE: path.join(state, 'usage.json'), ROUTER_SCORE_CACHE: 'off',
+  // The CLI refreshes its public reference data from the network by default; the sandbox routes on the checkout's own data and makes no request.
+  AGENTCOMPASS_PUBLIC_DATA: 'off',
   PYTHONIOENCODING: 'utf-8', PYTHONDONTWRITEBYTECODE: '1', NO_COLOR: '1',
 };
 // Discovery placeholders for the routed CLIs with synthetic sign-in data; nothing executes them (Cindy runs the worker).
@@ -782,12 +789,12 @@ try {
       check(`${name}: Cindy creates the cc row of that bundle with bypassPermissions and the run completes`, mirrorsBundle(h),
         {create: h.create, bundle: b, replies: JSON.stringify(h.r).slice(0, 600)});
     }
-    // A read-only exploration with everything signed in: which harness and model the net score prefers is the router's decision. Whatever it picks
-    // must reach Cindy as its own catalog row on the connection the map names for that account.
-    const pi = await harness('explore', 'explore', market, zcEnv);
+    // Claude signed out, a read-only exploration: Codex and Pi, both on the one ChatGPT subscription, are all there is, and which of the two the net
+    // score prefers is the router's decision. Whatever it picks must reach Cindy as its own catalog row on the connection the map names for that account.
+    const pi = await signedOut([path.join(baseEnv.CLAUDE_CONFIG_DIR, '.credentials.json')], () => harness('explore', 'explore', market, zcEnv));
     const pb = pi.receipt.bundle || {};
-    check(`explore: the router chose the ${pb.harness} harness (${pb.model}/${pb.effort}) with that harness's launcher mode`,
-      pb.harness in CREATE_KIND && pb.provider === pb.harness && pb.modeId === (pb.harness === 'claude' ? 'bypassPermissions' : 'full-access') && !pb.fast,
+    check(`explore: with Claude signed out the router routed the ChatGPT subscription: the ${pb.harness} harness (${pb.model}/${pb.effort}) with its launcher mode`,
+      ['codex', 'pi'].includes(pb.harness) && pb.provider === pb.harness && pb.modeId === 'full-access' && !pb.fast,
       {bundle: pb, router: pi.receipt.router?.status, stderr: pi.result.stderr.slice(-300), reply: JSON.stringify(pi.r).slice(0, 500)});
     check('explore: Cindy creates the exact row of that bundle on its mapped connection with bypassPermissions and the run completes',
       mirrorsBundle(pi) && pi.create.route?.providerId === (mappedConnection(pb) ?? pb.account),
