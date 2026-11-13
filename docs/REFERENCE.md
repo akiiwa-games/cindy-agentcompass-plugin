@@ -135,4 +135,4 @@ also compares `engine/classifier-cases.json` with the AgentCompass file it pins 
 network request. Its latest Windows and Linux runs are in `docs/sandbox-e2e-report.json` with every scenario's input and host record under `docs/sandbox-artifacts/`; `npm run test:sandbox:linux` updates its own part, and
 `CINDY_REPORT_MERGE_INTO=docs/sandbox-e2e-report.json npm run test:sandbox` the Windows one (copy its artifacts by hand).
 
-Run records: [real Cindy 0.1.121, plugin 0.3.0](real-cindy-0.1.121/README.md) and [the setup gate of the quick-text classifier](sandbox-real-e2e/README.md). The classifier itself has not been run on real Cindy.
+Run records: [real Cindy 0.1.135 signed in, plugin 0.4.0: the quick-text classifier and the v0.6.0 engine](real-cindy-0.1.135-plugin-0.4.0/README.md), [real Cindy 0.1.121, plugin 0.3.0](real-cindy-0.1.121/README.md) and [the setup gate of the quick-text classifier, signed out](sandbox-real-e2e/README.md). The scripts that drive a real-Cindy run are in [`test/real-cindy/`](../test/real-cindy/README.md). A Codex-only, Claude-only and Codex + Claude + Grok sign-in configuration has not been run on real Cindy.

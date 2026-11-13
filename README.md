@@ -24,7 +24,7 @@ the plugin makes no network request.
 
 - **A Cindy account is required.** While Cindy is signed out, every tool of the plugin stops at Cindy's Setup card; Codex, Claude or Grok sign-ins do not count. The plugin
   asks Cindy's quick-text channel to profile each task (`cindy.text: ["oneshot"]`), and Cindy demands its own account for any plugin that declares that. Measured on
-  Cindy 0.1.121: [evidence](docs/sandbox-real-e2e/README.md).
+  Cindy 0.1.121: [evidence](docs/sandbox-real-e2e/README.md). Signed in, the classifier ran on Cindy 0.1.135: [evidence](docs/real-cindy-0.1.135-plugin-0.4.0/README.md).
 - **What it reads.** The live model catalog from Cindy (`tasks.models()`); the tail of the local Codex session logs (`$CODEX_HOME`, else `~/.codex` and Cindy's own
   `codex-home`) for the Codex plan and quota windows; and the `errand` entry of Cindy's `owners/*/ghost-errand-prefs.json`, only to notice that the model on the plugin card changed
   (a digest is kept, nothing else). It writes receipts and caches under `~/.agent-compass/cindy-plugin/`.
@@ -76,7 +76,7 @@ The same engine routes Claude Code, Codex CLI, Pi, Paseo and others through `age
 ### 必须知道的规则
 
 - **需要 Cindy 账号。** Cindy 未登录时，插件的每个工具都会停在 Cindy 的设置卡片；Codex、Claude、Grok 的登录不算数。插件通过 Cindy 的 quick-text 通道让模型为每个任务做画像
-  （`cindy.text: ["oneshot"]`），而 Cindy 对声明了它的插件一律要求自己的账号。已在 Cindy 0.1.121 上实测：[证据](docs/sandbox-real-e2e/README.md)。
+  （`cindy.text: ["oneshot"]`），而 Cindy 对声明了它的插件一律要求自己的账号。已在 Cindy 0.1.121 上实测：[证据](docs/sandbox-real-e2e/README.md)；登录后分类器在 Cindy 0.1.135 上的实测见[这里](docs/real-cindy-0.1.135-plugin-0.4.0/README.md)。
 - **读取什么。** 来自 Cindy 的实时模型目录（`tasks.models()`）；本机 Codex 会话日志的尾部（`$CODEX_HOME`，否则 `~/.codex` 与 Cindy 自己的 `codex-home`），用于得到 Codex 套餐与额度窗口；
   以及 Cindy 的 `owners/*/ghost-errand-prefs.json` 中的 `errand` 项，仅用于发现插件卡片上的模型被更换（只保留摘要）。回执与缓存写在 `~/.agent-compass/cindy-plugin/`。
 - **绝不做什么。** 不联网、不碰凭据、没有自己的模型 API。任务由模型分类，从不按任务文本里的关键词判断。Cindy 无法原样复现的模型、连接、档位或权限一律拒绝，不会放宽。

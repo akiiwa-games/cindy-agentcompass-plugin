@@ -3,12 +3,14 @@
 Conclusion on 2026-11-07:
 
 1. **Setup gate, measured on real Cindy 0.1.121: a user who is not signed in to a Cindy account is stopped on every tool of this plugin.**
-2. **The classification chain is not covered on real Cindy, because that needs a Cindy account sign-in.** The user chose not to sign in for this run.
-   Nothing below is a result of the classifier on real Cindy.
+2. **The classification chain was not covered in this run, because that needs a Cindy account sign-in.** The user chose not to sign in for this run.
 
-## What is and is not covered
+**Update 2026-11-13:** the classification chain has since been run on real Cindy 0.1.135 with a signed-in account, plugin 0.4.0, in a disposable Windows Sandbox guest:
+[../real-cindy-0.1.135-plugin-0.4.0/README.md](../real-cindy-0.1.135-plugin-0.4.0/README.md). That run covers the default route and its classifier model, the GUI profile,
+a task over 15,000 characters classified and one over the limit refused, `blocked` with the cooldown, the `split`/`self` gates, a caller `profile`, and no leftovers in the
+task list. The sections below are the signed-out run of 2026-11-07 and stay as measured then.
 
-Not covered on real Cindy, in any sign-in configuration:
+## What was not covered in the signed-out run
 
 - the default route returning valid JSON with `profile_source: "classifier"`, and which model Cindy actually used;
 - a task whose profile demands a GUI (`needs_gui`, `axis_demand.tool_operation` 3) and one that only reads (`read_only_review`), each routed by the profile alone;
@@ -17,8 +19,9 @@ Not covered on real Cindy, in any sign-in configuration:
 - no leftovers in the task list;
 - the `split` and `self` gates deciding from the profile, and a caller `profile` running through;
 - a Codex + Claude + Grok configuration and a Claude-only configuration: only the Codex login was ever copied into the guest, and only to reach the gate.
+  Still not covered after 2026-11-13: the 0.1.135 run used the Cindy AI gateway (one provider for every harness), not separate Codex, Claude and Grok sign-ins.
 
-What covers these instead, with a fake host and not real Cindy:
+What covered these in the signed-out run, with a fake host and not real Cindy:
 
 - `npm run test:sandbox` on Windows, 120/120, rerun on 2026-11-13 on the engine vendored from Magpie ac494f3 (AgentCompass v0.6.0) against an AgentCompass checkout;
 - `npm run test:sandbox:linux`, 120/120, rerun on 2026-11-13 on the same engine;
@@ -27,9 +30,7 @@ What covers these instead, with a fake host and not real Cindy:
 
 They show the plugin's logic against the host contract as read from Cindy's source. They do not show that real Cindy behaves that way.
 
-To cover it later: sign in to a Cindy account in a disposable guest and run the items above. A signed-in account brings a default model on the Cindy AI
-gateway, which this run could not reach, so natural `NO_CANDIDATE` will be rare; pin the plugin card to an unavailable model to reach `blocked`. The driving
-scripts were scratch files and are not kept.
+The driving scripts of the 2026-11-13 run are kept in [../../test/real-cindy/](../../test/real-cindy/README.md).
 
 ## The Setup gate
 
