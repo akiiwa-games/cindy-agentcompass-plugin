@@ -650,10 +650,10 @@ export function codexQuota(env = process.env, now = Date.now(), homes = codexHom
 }
 
 // ---- routing -------------------------------------------------------------------------------------------------------
-// Where the user can act on a classifier failure: Cindy, not this plugin, chooses the quick-text model. The plugin sees a change of the
-// card, oneshotModel and the catalog; it cannot see the auxiliary chain or a permission, so those wait for the cooldown to run out.
+// Where the user can act on a classifier failure: Cindy, not this plugin, chooses the quick-text model. The plugin sees a change of
+// oneshotModel and of the catalog; it cannot see the model picked on the plugin card, the auxiliary chain or a permission, so those wait for the cooldown to run out.
 const CLASSIFIER_UNSEEN_FIX =
-  'A fix the plugin cannot see, such as the auxiliary model in Cindy settings or a permission, still waits out the cooldown, up to 5 minutes; a complete explicit `profile` does not wait.';
+  'A fix the plugin cannot see, such as another model on the plugin card, the auxiliary model in Cindy settings or a permission, still waits out the cooldown, up to 5 minutes; a complete explicit `profile` does not wait.';
 const CLASSIFIER_MODEL_HINT =
   'Cindy chooses the classifier model: the model picked on the AgentCompass plugin card, else its auxiliary model chain. ' +
   'Pick another model on the plugin card (or fix the auxiliary model in Cindy settings), or pass a complete explicit `profile`, then roll again. ' +
@@ -691,7 +691,7 @@ export function classifierCoolingRoute(entry, now = Date.now()) {
     entry.model || null,
     {
       cooldown: {reason: entry.reason, failures: entry.failures, retry_after_seconds: retryAfterSeconds},
-      nextAction: `Cindy is asked again after ${retryAfterSeconds} s, or at once when the model on the AgentCompass plugin card, its declared oneshotModel or the catalog changes. ` +
+      nextAction: `Cindy is asked again after ${retryAfterSeconds} s, or at once when the declared oneshotModel or the catalog changes. ` +
         `Pick another model on the plugin card, or pass a complete explicit \`profile\`, which needs no classifier. ${CLASSIFIER_UNSEEN_FIX} Nothing was started.`,
     },
   );

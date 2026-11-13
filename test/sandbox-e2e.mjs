@@ -514,12 +514,13 @@ try {
   const REAL = readJson(path.join(REPO, 'test', 'fixtures', 'cindy-0.1.121-catalog.json'));
   const builtinEnv = {CODEX_HOME: D('codex home without telemetry')};
   // A Codex CLI rate-limit snapshot, as codex writes it into ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl.
+  // A Plus plan declares both windows the log reports; under AgentCompass v0.6.0 a Pro plan with a five-hour window takes every Codex row out of routing.
   const telemetry = (name, used) => {
     const dir = D(`codex home ${name}`), day = path.join(dir, 'sessions', '2026', '11', '03');
     fs.mkdirSync(day, {recursive: true});
     fs.writeFileSync(path.join(day, 'rollout-sandbox.jsonl'), JSON.stringify({type: 'event_msg', payload: {type: 'token_count', rate_limits: {limit_id: 'codex',
       primary: {used_percent: used, window_minutes: 300, resets_at: Math.floor(Date.now() / 1000) + 7200},
-      secondary: {used_percent: used, window_minutes: 10080, resets_at: Math.floor(Date.now() / 1000) + 86400}, plan_type: 'pro'}}}) + '\n');
+      secondary: {used_percent: used, window_minutes: 10080, resets_at: Math.floor(Date.now() / 1000) + 86400}, plan_type: 'plus'}}}) + '\n');
     return {CODEX_HOME: dir};
   };
   const cliName = WIN ? 'agentcompass.exe' : 'agentcompass';

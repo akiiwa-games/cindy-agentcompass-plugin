@@ -7,7 +7,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
-export const DEFAULT_COMMIT = 'ac494f31dda6dc516e985594208e28fca85aa5fb';
+export const DEFAULT_COMMIT = '35a7aea5b6bc4028bb78c460482b6d3ad8708948';
 
 // plugin/engine/<name>.mjs: src/<source>.js
 export const VENDORED_SOURCES = {

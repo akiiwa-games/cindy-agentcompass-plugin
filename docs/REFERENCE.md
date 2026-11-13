@@ -3,7 +3,7 @@
 What only this plugin has: its tools, two engines, profile contract, classifier, state files, safety boundary and tests. Scoring formulas, tie-breaks, quota
 pricing and the account model belong to AgentCompass and are not repeated here: [technical reference](https://github.com/akiiwa-games/AgentCompass/blob/v0.6.0/docs/technical-reference.md),
 [router internals](https://github.com/akiiwa-games/AgentCompass/blob/v0.6.0/skills/agent-compass/references/router-internals.md). The engine in `plugin/engine/` is pinned to
-AgentCompass v0.6.0 as ported by [Magpie](https://github.com/akiiwa-games/magpie-agentcompass-router) `ac494f3`.
+AgentCompass v0.6.0 plus `2844342` (a `needs_visual` task requires image input at every `tool_operation` level), as ported by [Magpie](https://github.com/akiiwa-games/magpie-agentcompass-router) `35a7aea` (0.2.1).
 
 ## Layout
 
@@ -78,10 +78,9 @@ receipt as `router.stdout.json`.
   longer than about 19,800 characters once JSON-escaped is refused with `task_too_long_for_classifier`. `decision.classifier_calibration_cases` records `{included, total}`.
 - **Validation.** The answer must satisfy `TASK_PROFILE_SCHEMA` with every field present; `task_count` is a JSON string (a positive whole number is read as its bucket `1`, `2`, `3` or `>3` and checked like the string);
   `expected_hours` is `0.05..24`; a `reason` over 300 characters is truncated.
-- **Cache.** Answers are kept in memory and in `score-cache.json`, keyed by prompt digest and full task input, for 10 minutes by default.
+- **Cache.** Answers are kept in memory and in `score-cache.json`, keyed by prompt digest and full task input, for 10 minutes by default; a model changed on the plugin card is picked up by the next classification after that.
 - **Cooldown.** After a failed classification `roll` answers `classifier_cooling_down` at once for 30 s, doubling to 5 min per consecutive failure (`classifier-cooldowns.json`). `classifier_no_candidate` and
-  `classifier_permission_denied` hold up every task, `classifier_rate_limited` none, others only that text. A successful classification clears it, and so does a change of what picks the model (the card, `oneshotModel`,
-  the catalog). A fix the plugin cannot see (the auxiliary model, a permission) waits out the cooldown, at most 5 minutes. Cached tasks and explicit profiles are never held up.
+  `classifier_permission_denied` hold up every task, `classifier_rate_limited` none, others only that text. A successful classification clears it, and so does a change of `oneshotModel` or of the catalog. A fix the plugin cannot see (another model on the plugin card, the auxiliary model, a permission) waits out the cooldown, at most 5 minutes; the plugin does not read Cindy's `owners/*/ghost-errand-prefs.json`, which is Cindy's private app data. Cached tasks and explicit profiles are never held up.
 - **Configuration** (`~/.agent-compass/cindy-plugin/config.json`, all optional, validated on every request): `classifierTimeoutMs` (integer 100..65000, default 65000), `classifierCacheTtlMs` (integer
   0..86400000, default 600000; 0 disables cache hits), `stateRoot` (non-empty string). Model keys of earlier versions are ignored: the model is chosen on the plugin card.
 
@@ -130,9 +129,9 @@ npm run test:sandbox:linux  # the same plus the unit tests in the WSL docker-des
 
 `test/test_market_contract.mjs` checks `plugin/` against the market repository's gate: the pinned Cindy manifest validator (vendored unmodified under `test/vendor/`), id, version, tools, icon, locales, and that the engine imports only
 Node built-ins and package files. The unit tests assert rules (exact catalog rows, gates, quota, fast mode), not a chosen winner, and a scan test forbids any read of task text outside a counted list of reasons. `npm test`
-also compares `engine/classifier-cases.json` with the AgentCompass file it pins (a04902a), at `AGENTCOMPASS_CHECKOUT` or a checkout found next to the repository. The sandbox substitutes only the Cindy host
+also compares `engine/classifier-cases.json` with the AgentCompass file it pins (2844342), at `AGENTCOMPASS_CHECKOUT` or a checkout found next to the repository. The sandbox substitutes only the Cindy host
 (`test/zero_cindy_host.mjs`, fed the catalog a real Cindy 0.1.121 reported), the model behind the CLI's classifier and discovery placeholders for provider CLIs; it runs with the CLI's public-data refresh off, so it makes no
 network request. Its latest Windows and Linux runs are in `docs/sandbox-e2e-report.json` with every scenario's input and host record under `docs/sandbox-artifacts/`; `npm run test:sandbox:linux` updates its own part, and
 `CINDY_REPORT_MERGE_INTO=docs/sandbox-e2e-report.json npm run test:sandbox` the Windows one (copy its artifacts by hand).
 
-Run records: [real Cindy 0.1.135 signed in, plugin 0.4.0: the quick-text classifier and the v0.6.0 engine](real-cindy-0.1.135-plugin-0.4.0/README.md), [real Cindy 0.1.121, plugin 0.3.0](real-cindy-0.1.121/README.md) and [the setup gate of the quick-text classifier, signed out](sandbox-real-e2e/README.md). The scripts that drive a real-Cindy run are in [`test/real-cindy/`](../test/real-cindy/README.md). A Codex-only, Claude-only and Codex + Claude + Grok sign-in configuration has not been run on real Cindy.
+Run records: [real Cindy 0.1.135 signed in, plugin 0.4.0: the quick-text classifier and the v0.6.0 engine](real-cindy-0.1.135-plugin-0.4.0/README.md); release notes in [CHANGELOG.md](../CHANGELOG.md), [real Cindy 0.1.121, plugin 0.3.0](real-cindy-0.1.121/README.md) and [the setup gate of the quick-text classifier, signed out](sandbox-real-e2e/README.md). The scripts that drive a real-Cindy run are in [`test/real-cindy/`](../test/real-cindy/README.md). A Codex-only, Claude-only and Codex + Claude + Grok sign-in configuration has not been run on real Cindy.

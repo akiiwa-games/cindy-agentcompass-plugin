@@ -1,6 +1,6 @@
 {
   "name": "cindy-agentcompass-plugin",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "Cindy plugin that delegates work from a Cindy session through the built-in AgentCompass engine (or the public AgentCompass router) and collects exact Cindy task results.",
   "type": "module",

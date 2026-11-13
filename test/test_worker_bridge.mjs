@@ -710,35 +710,31 @@ test('a2: only a channel failure cools every task; RATE_LIMITED cools nothing an
   assert.equal(askAgain(p, 'Task during a burst.').result.state, 'classify');
 });
 
-test('a2: changing the plugin card, oneshotModel or the catalog ends a cooldown at once; nothing else in the settings does', () => {
-  const prefsFile = p => {
-    const dir = path.join(process.platform === 'darwin' ? path.join(p.home, 'Library', 'Application Support') : path.join(p.home, 'AppData'), 'CindyGlobal', 'owners', '0123456789abcdef0123');
-    fs.mkdirSync(dir, {recursive: true});
-    return path.join(dir, 'ghost-errand-prefs.json');
-  };
+test("a2: changing oneshotModel or the catalog ends a cooldown at once; the plugin card, which the plugin cannot see, only waits it out", () => {
   const failed = p => {
     classifyWith(p, 'First task.', id => refusedBy('classifier_no_candidate', id));
     assert.deepEqual(stateOf(askAgain(p, 'Second task.')), ['blocked', 'classifier_cooling_down']);
   };
 
+  // Cindy's own prefs file is private app data: the plugin never reads it, so a model picked on the plugin card changes nothing here.
   const card = plugin(codex, 0, 'none');
-  const file = prefsFile(card);
-  fs.writeFileSync(file, JSON.stringify({errand: {agentcompass: {model: 'bad-model', agentKind: 'codex'}}, sessions: {}}));
+  const prefs = path.join(card.home, 'AppData', 'CindyGlobal', 'owners', '0123456789abcdef0123', 'ghost-errand-prefs.json');
+  fs.mkdirSync(path.dirname(prefs), {recursive: true});
+  fs.writeFileSync(prefs, JSON.stringify({errand: {agentcompass: {model: 'bad-model', agentKind: 'codex'}}}));
   failed(card);
-  // The sessions map of the same file changes on its own and says nothing about the model.
-  fs.writeFileSync(file, JSON.stringify({errand: {agentcompass: {model: 'bad-model', agentKind: 'codex'}}, sessions: {agentcompass: 'session-1'}}));
-  assert.deepEqual(stateOf(askAgain(card, 'Second task.')), ['blocked', 'classifier_cooling_down']);
-  fs.writeFileSync(file, JSON.stringify({errand: {agentcompass: {model: 'good-model', agentKind: 'codex'}}, sessions: {agentcompass: 'session-1'}}));
-  assert.equal(askAgain(card, 'Second task.').result.state, 'classify', 'the card changed');
-  assert.deepEqual(classifierCooldownsOf(card), {});
+  fs.writeFileSync(prefs, JSON.stringify({errand: {agentcompass: {model: 'good-model', agentKind: 'codex'}}}));
+  assert.deepEqual(stateOf(askAgain(card, 'Second task.')), ['blocked', 'classifier_cooling_down'], 'the card is not read; the cooldown runs out');
+  assert.ok(Object.values(classifierCooldownsOf(card)).every(entry => !('card' in entry) && !JSON.stringify(entry).includes('good-model')));
+  const entry = Object.values(classifierCooldownsOf(card))[0];
+  assert.ok(entry.until - Date.now() <= 5 * 60000, 'and never later than 5 minutes');
 
   // A task's own cooldown too: a slower model may have been its trouble.
   const slow = plugin(codex, 0, 'none');
   classifyWith(slow, 'A long question.', id => refusedBy('classifier_timeout', id));
   assert.deepEqual(stateOf(askAgain(slow, 'A long question.')), ['blocked', 'classifier_cooling_down']);
-  fs.writeFileSync(prefsFile(slow), JSON.stringify({errand: {agentcompass: {model: 'quick-model'}}}));
+  const slowManifest = path.join(slow.out, 'ghost.json'), slowParsed = JSON.parse(fs.readFileSync(slowManifest, 'utf8'));
+  fs.writeFileSync(slowManifest, JSON.stringify({...slowParsed, cindy: {...slowParsed.cindy, oneshotModel: 'codex/gpt-6.1-sol'}}));
   assert.equal(askAgain(slow, 'A long question.').result.state, 'classify');
-
   const declared = plugin(codex, 0, 'none');
   failed(declared);
   const manifest = path.join(declared.out, 'ghost.json');

@@ -517,6 +517,22 @@ test("with no CODEX_HOME the telemetry Cindy's own Codex writes (<app data>/Cind
   } finally {fs.rmSync(home, {recursive: true, force: true});}
 });
 
+// Engine rule at Magpie 35a7aea: a needs_visual task requires image input at every tool_operation level, not only at 3
+// (the Cindy 0.1.135 catalog measured deepseek/deepseek-v4-pro, image_input: no, routing for needs_visual below level 3).
+test('a needs_visual task never routes to a model that does not accept image input, at any tool_operation level', () => {
+  const row = model => ({route: {agentKind: 'pi', providerId: 'xd', model, effort: 'high', fastMode: false}, efforts: ['high'], supportsFastMode: false});
+  const only = routeWithProfile('Compare screenshots of the login dialog.', {
+    work_kind: 'visual_analysis', needs_visual: true, needs_gui: false, axis_demand: {divergence: 0, coding: 0, aesthetics: 2, tool_operation: 1},
+  }, {models: [row('deepseek/deepseek-v4-pro')]});
+  assert.equal(only.status, 'blocked');
+  assert.match(JSON.stringify(only), /model does not accept image input/);
+  const withImage = routeWithProfile('Compare screenshots of the login dialog.', {
+    work_kind: 'visual_analysis', needs_visual: true, needs_gui: false, axis_demand: {divergence: 0, coding: 0, aesthetics: 2, tool_operation: 1},
+  }, {models: [row('deepseek/deepseek-v4-pro'), row('google/gemini-3.8-flash')]});
+  assert.equal(withImage.status, 'native');
+  assert.equal(withImage.route.bundle.model, 'google/gemini-3.8-flash');
+});
+
 test('profile fields reach the decision as stated; two Codex connections never share a quota snapshot nobody bound; efforts are the ones a row offers', () => {
   const visual = routeWithClassifier('Compare screenshots of the login dialog.', {
     work_kind: 'visual_analysis',
@@ -657,7 +673,7 @@ test('R5: the prompt carries the AgentCompass rubric, route definitions and all 
   assert.ok(prompt.indexOf('calibration_cases') < prompt.indexOf('untrusted_task_evidence":'), 'the task comes after the instructions');
 });
 
-// AgentCompass skills/agent-compass/references/classifier-cases.json at AgentCompass a04902a (v0.6.0 plus the one change that drops a machine path from a case). To update: replace the fixture and the shipped
+// AgentCompass skills/agent-compass/references/classifier-cases.json at AgentCompass 2844342 (unchanged since a04902a, v0.6.0 plus the one change that drops a machine path from a case). To update: replace the fixture and the shipped
 // copy together, then this digest; a change on one side alone fails below.
 const CASE_FILE_SHA256 = '52643d90815b4bfb371af99f6450be9f7075cb1e172d14cb42d1cb80d899b678';
 const CASE_FILE_VERSION = '2026-11-11';
@@ -1197,8 +1213,8 @@ const TEXT_CALL_EXCEPTIONS = {
       "newSet(['classifier_no_candidate','classifier_permission_denied'])", "newSet(['classifier_rate_limited'])", ['Object.entries(all)', 2],
       ['for(constchildofchildren)', 3], 'for(const[key,entry]ofObject.entries(all))', 'for(const[other,entry]ofObject.entries(all))',
     ],
-    "Cindy's prefs file and which RPC method this is": [
-      'for(constappofmod.cindyAppDirs(process.env,os.homedir()))', 'for(constownerofowners)', "method==='prepare'", "method==='load'",
+    'which RPC method this is': [
+      "method==='prepare'", "method==='load'",
       "method==='save'", "method==='output'",
     ],
   },
@@ -1579,14 +1595,21 @@ test('m1, seventh review: a5 goes without a checkout only when there is none: on
   assert.match(ownSource('test/sandbox-e2e.mjs'), /env: \{AGENTCOMPASS_PYTHON: python\.exe, AGENTCOMPASS_CHECKOUT: CHECKOUT\}/, 'the sandbox names its checkout to the unit tests');
 });
 
+// Cindy's own data directory holds private app data. The only thing the plugin reads there is the Codex session log under codex-home (the quota);
+// the per-owner prefs file (the plugin card's model) is never read, and no digest or option of it is kept.
+test("the plugin reads nothing of Cindy's private app data: no owners directory, no prefs file", () => {
+  const files = ['plugin/main.js', 'plugin/worker.cjs', 'plugin/engine/route.mjs', 'plugin/ghost.json', ...fs.readdirSync(new URL('../plugin/locales/', import.meta.url)).map(n => `plugin/locales/${n}`)];
+  for (const rel of files) assert.doesNotMatch(ownSource(rel), /ghost-errand-prefs|['"`]owners['"`]|[\/]owners/, rel);
+});
+
 // akiiwa-games/magpie-agentcompass-router at this commit, src/<source>.js. To update: run scripts/vendor_engine.mjs, then these digests.
-const MAGPIE_COMMIT = 'ac494f31dda6dc516e985594208e28fca85aa5fb';
+const MAGPIE_COMMIT = '35a7aea5b6bc4028bb78c460482b6d3ad8708948';
 const MAGPIE_SHA256 = {
   'axis-scores': '6b409b771703a9fbea1ce31bff40f942510eff4afa0e5a3bb336baf897d93e00',
   allocator: '555237281c319a95f78a4d16aca14883889f4bfb9de3ca684f461dbbe0fefa40',
-  'candidate-eval': '496bb6f93331fa2a905292e4e5654d3e509670c5cbdd97398a92f85edc45f074',
+  'candidate-eval': '9db246a1dbdc968866a1cd023b7965807569061dde2b1212dbd495284f66bf8b',
   'candidate-ranking': 'c2fb21010962d4145f4fc496864e27a3cbbbc69cf56ed8a383a867793d773537',
-  catalog: '81923d2923933192af33243a21eebea019d66873e8cdfe3df83d7f2dee778df6',
+  catalog: '26557b1b37c0a3aac3f0eeecb980654cf5f63304910ae300ed15d6fcf2f7e041',
   continuity: 'cb5dd919cda85416f6e1379eb69f03b320110d6c937f82d3cb90da2c5a2d2e6a',
   fleet: '93b9406e10cb6283a83986eb67d9d33701b3191ede641cd3a009e52aee5e24ce',
   plans: 'dc07135b26501a1cfe4d65cb471d13319070afa25c38fe16b6834f6dad04400a',
@@ -1595,7 +1618,7 @@ const MAGPIE_SHA256 = {
   'quota-loader': '63910970a5b7e30625431f6417ee257588e4c07e4827deed4ab760bfc5690ebb',
   'quota-pools': '8579d5b5735715a1019cf81b91b49a4c7c3ac8b44e31d1110671dc2f5cbbb79a',
   quota: 'c53b851ea4554f00a9d2ab6c0ebb1193e149d1e5c21d2e3bb8acc83977f8357b',
-  'reference-data': 'af445fa3d0b371aa970f6534a9c4c6486a448fe8793fbf6e2082d3d6cf355f8f',
+  'reference-data': '4e2c4bedf024aa6ac81d152b9ce1e4918b3a988a65d5fb460b1ea81c4c1ce74f',
   'task-intake': '87a2103076cc1b9ddba8db16f0d50ef75d45479990fd244482e9233a531f5f9f',
   'user-scores': 'b500e406bda4a8d221e9e4bc2b0f879ec19651c8857bfb286a3c5507c068bb38',
 };

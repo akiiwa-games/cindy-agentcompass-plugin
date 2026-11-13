@@ -26,8 +26,7 @@ the plugin makes no network request.
   asks Cindy's quick-text channel to profile each task (`cindy.text: ["oneshot"]`), and Cindy demands its own account for any plugin that declares that. Measured on
   Cindy 0.1.121: [evidence](docs/sandbox-real-e2e/README.md). Signed in, the classifier ran on Cindy 0.1.135: [evidence](docs/real-cindy-0.1.135-plugin-0.4.0/README.md).
 - **What it reads.** The live model catalog from Cindy (`tasks.models()`); the tail of the local Codex session logs (`$CODEX_HOME`, else `~/.codex` and Cindy's own
-  `codex-home`) for the Codex plan and quota windows; and the `errand` entry of Cindy's `owners/*/ghost-errand-prefs.json`, only to notice that the model on the plugin card changed
-  (a digest is kept, nothing else). It writes receipts and caches under `~/.agent-compass/cindy-plugin/`.
+  `codex-home`) for the Codex plan and quota windows. It reads nothing else of Cindy's own data; a model changed on the plugin card is picked up by the next classification once the cached answer (10 minutes) or a cooldown (at most 5 minutes) has run out. It writes receipts and caches under `~/.agent-compass/cindy-plugin/`.
 - **What it never does.** No network, no credentials, no model API of its own. A task is classified by a model, never by keywords in its text. A model, connection, effort or
   permission Cindy cannot reproduce exactly is refused, never widened. A send whose answer was lost is never sent again.
 - **When nothing can be routed**, `roll` answers `status: "blocked"` with a `decision.reason` (for example `no_route`, `accounts_unavailable`, `classifier_no_candidate`) and says what to
@@ -78,7 +77,7 @@ The same engine routes Claude Code, Codex CLI, Pi, Paseo and others through `age
 - **需要 Cindy 账号。** Cindy 未登录时，插件的每个工具都会停在 Cindy 的设置卡片；Codex、Claude、Grok 的登录不算数。插件通过 Cindy 的 quick-text 通道让模型为每个任务做画像
   （`cindy.text: ["oneshot"]`），而 Cindy 对声明了它的插件一律要求自己的账号。已在 Cindy 0.1.121 上实测：[证据](docs/sandbox-real-e2e/README.md)；登录后分类器在 Cindy 0.1.135 上的实测见[这里](docs/real-cindy-0.1.135-plugin-0.4.0/README.md)。
 - **读取什么。** 来自 Cindy 的实时模型目录（`tasks.models()`）；本机 Codex 会话日志的尾部（`$CODEX_HOME`，否则 `~/.codex` 与 Cindy 自己的 `codex-home`），用于得到 Codex 套餐与额度窗口；
-  以及 Cindy 的 `owners/*/ghost-errand-prefs.json` 中的 `errand` 项，仅用于发现插件卡片上的模型被更换（只保留摘要）。回执与缓存写在 `~/.agent-compass/cindy-plugin/`。
+  不读取 Cindy 其他的私有数据；插件卡片上更换模型后，待缓存答案（10 分钟）或冷却（至多 5 分钟）过期，下一次分类即采用新模型。回执与缓存写在 `~/.agent-compass/cindy-plugin/`。
 - **绝不做什么。** 不联网、不碰凭据、没有自己的模型 API。任务由模型分类，从不按任务文本里的关键词判断。Cindy 无法原样复现的模型、连接、档位或权限一律拒绝，不会放宽。
   答复丢失的发送绝不重发。
 - **无法路由时**，`roll` 返回 `status: "blocked"` 与 `decision.reason`（如 `no_route`、`accounts_unavailable`、`classifier_no_candidate`），并说明该改什么，不启动任何任务。`split` 与 `self` 同样不启动任务。
