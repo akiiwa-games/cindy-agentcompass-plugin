@@ -55,7 +55,7 @@ and `unknown_create` "Requested permission exceeds plugin dispatch policy" (a pr
    (the guest was closed): that row is now excluded with "model does not accept image input" at `tool_operation` 0 and 1 on the `pi`, `cc` and `codex` harnesses; the previous engine routed it.
 3. **Undeclared quota window.** Valid, fixed in the plugin (`plugin/engine/route.mjs`, 9f78178): every window the Codex log reports now goes to the engine, which takes every Codex row out of automatic routing
    when a window is not declared (`capacity_unknown`, plus "confirmed exhausted or below launch floor" at 0% left). Plus declares both windows, so the owner's account still routes; a Codex Pro or Pro100 log carrying a five-hour window
-   now leaves Codex rows out, as in v0.6.0.
+   now leaves Codex rows out, as in v0.6.0. Superseded in 0.4.1, which removes the Codex log read altogether (see the quota attribution below).
 
 ## Quota attribution (not fixed)
 
@@ -66,6 +66,7 @@ The Codex session-log quota is attributed to the Cindy AI gateway connection.
   The 0.1.121 fixture had a separate Codex connection with `providerId` `openai`.
 - What it should have distinguished: a Codex-harness connection that authenticates with a Codex sign-in (whose log is the quota source) from the gateway connection that only offers the codex harness.
   Catalog rows carry no field for it besides `providerId`, so the plugin cannot tell.
+  Plugin 0.4.1 removes the Codex log read and attaches no quota to any connection, so this attribution no longer happens; that was verified with `npm test` and the fake-host sandbox and not re-run on real Cindy.
 
 ## Cindy-side findings
 

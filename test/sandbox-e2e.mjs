@@ -506,15 +506,14 @@ try {
 
   // -------------------------------------------------------------------------------------------------------------
   // The market install: plugin/ copied as is. No router.json, no AgentCompass CLI, no account map: the built-in engine
-  // routes over the catalog Cindy 0.1.121 really reported (test/fixtures), with no Codex quota telemetry unless a
-  // scenario writes one.
+  // routes over the catalog Cindy 0.1.121 really reported (test/fixtures). It reads no Codex log and no file of Cindy's: a scenario
+  // that writes a Codex log shows that nothing reacts to it.
   const market = path.join(ROOT, 'market install', 'agentcompass');
   fs.cpSync(path.join(REPO, 'plugin'), market, {recursive: true});
   const stateHome = path.join(home, '.agent-compass', 'cindy-plugin');
   const REAL = readJson(path.join(REPO, 'test', 'fixtures', 'cindy-0.1.121-catalog.json'));
   const builtinEnv = {CODEX_HOME: D('codex home without telemetry')};
-  // A Codex CLI rate-limit snapshot, as codex writes it into ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl.
-  // A Plus plan declares both windows the log reports; under AgentCompass v0.6.0 a Pro plan with a five-hour window takes every Codex row out of routing.
+  // A Codex CLI rate-limit snapshot, as codex writes it into ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl: something the plugin must ignore.
   const telemetry = (name, used) => {
     const dir = D(`codex home ${name}`), day = path.join(dir, 'sessions', '2026', '11', '03');
     fs.mkdirSync(day, {recursive: true});
@@ -555,10 +554,10 @@ try {
     JSON.stringify(first(zc.r, 'roll')).slice(0, 500) + zc.result.stderr.slice(-300) + (zc.record.workerStderr || ''));
   check('Cindy creates a row of its own catalog (codex on the openai connection) with bypassPermissions', isRow(zc.create.route, REAL) &&
     zc.create.route.agentKind === 'codex' && zc.create.route.providerId === 'openai' && zc.create.permissionMode === 'bypassPermissions', zc.create);
-  check('the decision is explained: work kind, profile_source classifier, classifier_model, wants_fast, axis_demand, score, alternatives, quota source; the classification asked Cindy once, over the quick-text channel',
+  check('the decision is explained: work kind, profile_source classifier, classifier_model, wants_fast, axis_demand, score, alternatives, and no quota or account; the classification asked Cindy once, over the quick-text channel',
     Boolean(zc.receipt.router?.decision?.work_kind && zc.receipt.router?.decision?.profile_source === 'classifier' &&
     zc.receipt.router?.decision?.classifier_model === 'fixture-quick-text' && typeof zc.receipt.router?.decision?.wants_fast === 'boolean' && Boolean(zc.receipt.router?.decision?.axis_demand) &&
-    zc.receipt.router.decision.alternatives?.length && zc.receipt.router.decision.quota?.source === 'codex-cli-sessions' &&
+    zc.receipt.router.decision.alternatives?.length && zc.receipt.router.decision.quota === undefined && zc.receipt.router.decision.accounts === undefined &&
     zc.record.oneshotCalls?.length === 1 && zc.record.oneshotCalls[0].expectJson === true && count(zc.record, 'create') === 1), zc.receipt.router?.decision);
   check('the text sent to Cindy is the whole task byte for byte plus the return channel', zc.sentText.startsWith(zcTask) && zc.sentText.includes('Cindy plugin task return channel') &&
     zc.receipt.prompt === zc.sentText, [zc.sentText.length, zcTask.length]);
@@ -593,7 +592,7 @@ try {
       h.create.permissionMode === 'bypassPermissions' && lifecycle(h), {create: h.create, replies: JSON.stringify(h.r).slice(0, 600)});
   }
 
-  operation('built-in split, self, fast and quota', 'split and self come back from the built-in engine and start nothing; fast mode follows the classified profile and the Codex quota telemetry; an exhausted Codex window moves the route to Claude');
+  operation('built-in split, self and fast', 'split and self come back from the built-in engine and start nothing; fast mode is never chosen and wants_fast stays in the decision; a Codex log, fresh or exhausted, changes no route and is not listed');
   ({record, result} = await drive(market, 'builtin-split-self', [
     {label: 'catalog', fixture: {
       catalog: 'real',
@@ -618,17 +617,20 @@ try {
   const fastTask = n => `Use fast mode: rename the helper foo to bar in util.py and update its two callers. [${n}-${Date.now()}]`;
   const fastProfile = {wants_fast: true, urgency: 'high'};
   const fast = await builtinLife('fast', fastTask('fast'), {env: telemetry('fast', 12), classifierProfile: fastProfile});
-  check('fast with fresh telemetry (12% used): Cindy creates codex fastMode true on a row that supports it', fast.create.route?.agentKind === 'codex' && fast.create.route?.fastMode === true &&
-    isRow(fast.create.route, REAL) && fast.receipt.router?.decision?.quota?.used_percent === 12 && lifecycle(fast), {create: fast.create, quota: fast.receipt.router?.decision?.quota});
-  const busy = await builtinLife('fast-busy', fastTask('busy'), {env: telemetry('busy', 70), classifierProfile: fastProfile});
-  check('fast asked but the Codex window is 70% used: no fast mode', busy.create.route?.fastMode === false && lifecycle(busy), busy.create);
+  check('fast asked with a fresh Codex log (12% used): Cindy creates a catalog row with fastMode false, wants_fast stays true, and no quota is listed', fast.create.route?.fastMode === false &&
+    isRow(fast.create.route, REAL) && fast.receipt.router?.decision?.wants_fast === true && fast.receipt.router?.decision?.quota === undefined &&
+    fast.receipt.router?.decision?.accounts === undefined && lifecycle(fast), {create: fast.create, decision: fast.receipt.router?.decision});
   const blind = await builtinLife('fast-blind', fastTask('blind'), {classifierProfile: fastProfile});
-  check('fast asked with no telemetry at all: no fast mode', blind.create.route?.fastMode === false && blind.receipt.router?.decision?.quota?.status === 'unknown' && lifecycle(blind), blind.create);
-  const drained = await builtinLife('quota-exhausted', `Rename the helper foo to bar in util.py and update its two callers. [drained-${Date.now()}]`,
-    {catalog: 'real+claude', env: telemetry('drained', 97)});
-  check('quota: with the Codex window 97% used the edit goes to Claude on its own connection', drained.create.route?.agentKind === 'cc' &&
-    drained.receipt.router?.decision?.quota?.status === 'exhausted' && lifecycle(drained),
-    {create: drained.create, quota: drained.receipt.router?.decision?.quota});
+  check('fast asked with no Codex log at all: the same row, still not fast', blind.create.route?.fastMode === false && lifecycle(blind) &&
+    JSON.stringify(blind.create.route) === JSON.stringify(fast.create.route), {fast: fast.create.route, blind: blind.create.route});
+  // Two different task texts of the same kind: the same text would replay the first receipt instead of starting a second run.
+  const drainedText = 'Rename the helper foo to bar in util.py and update its two callers.';
+  const drained = await builtinLife('quota-exhausted', `${drainedText} [drained-${Date.now()}]`, {catalog: 'real+claude', env: telemetry('drained', 97)});
+  const undrained = await builtinLife('quota-none', `${drainedText} [undrained-${Date.now()}]`, {catalog: 'real+claude'});
+  check('an exhausted Codex log (97% used) changes no route: the same row as with no log, and no quota or account is listed', lifecycle(drained) && lifecycle(undrained) &&
+    JSON.stringify(drained.create.route) === JSON.stringify(undrained.create.route) &&
+    drained.receipt.router?.decision?.quota === undefined && drained.receipt.router?.decision?.accounts === undefined,
+    {drained: drained.create.route, undrained: undrained.create.route});
 
   // -------------------------------------------------------------------------------------------------------------
   operation('review 1: receipt save fails after an accepted send', 'the run exists although its receipt could not be written: roll returns operation, task_id and run_id; status settles the `sending` receipt from the host runs; nothing is resent');

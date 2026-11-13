@@ -259,11 +259,9 @@ async function builtin(input, catalog, dir, root, conf = {}, extra = {}) {
     }
   }
   const result = mod.routeTask(input, catalog, {
-    env: process.env,
     cooling: cooldowns(root),
     config: conf,
     cacheFile,
-    stateFile: path.join(root, 'quota-state.json'),
     profile: extra.profile ?? null,
     classification,
   });
@@ -272,7 +270,7 @@ async function builtin(input, catalog, dir, root, conf = {}, extra = {}) {
   writeDiag(path.join(dir,'router.stdout.json'),JSON.stringify(result,null,2));
   if (result.status === 'blocked') {
     if (result.decision?.reason === 'no_runnable_model') throw Error(result.error);
-    if (result.decision?.reason === 'no_route' || result.decision?.reason === 'accounts_unavailable' || result.profile_source === 'unavailable') return result;
+    if (result.decision?.reason === 'no_route' || result.profile_source === 'unavailable') return result;
     throw Error(result.error);
   }
   return result;

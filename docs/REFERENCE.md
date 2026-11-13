@@ -12,7 +12,7 @@ AgentCompass v0.6.0 plus `2844342` (a `needs_visual` task requires image input a
 | `plugin/ghost.json` | Cindy v3 manifest: `minCindyVersion` `0.1.121`, `sessionContext`, `agent.tasks`, `cindy.text: ["oneshot"]`, a Node worker; four tools; `en`, `zh-CN`, `ja`, `ko` in `plugin/locales/` |
 | `plugin/main.js` | Logic page: asks Cindy's quick-text channel to classify, picks the one catalog row that equals the route, creates and checks the draft, sends once, collects results |
 | `plugin/worker.cjs` | Node worker: validates the host context, runs the engine or the external CLI, makes the launcher permission explicit, keeps receipts and message pages |
-| `plugin/engine/route.mjs` | The plugin's own router around the engine: classifier prompt, schema and cache, split and self gates, Codex quota reading, fast mode |
+| `plugin/engine/route.mjs` | The plugin's own router around the engine: classifier prompt, schema and cache, split and self gates, ranking of catalog rows (no quota reading, no fast mode) |
 | `plugin/engine/*.mjs`, `classifier-cases.json` | AgentCompass's engine modules and rubric, vendored unchanged by `scripts/vendor_engine.mjs <magpie checkout> [commit]` (reads that commit, never a working tree; `test/test_engine.mjs` pins the digests). They read no file and no environment variable |
 | `scripts/build_plugin.py` | Optional: writes a plugin source directory bound to one external AgentCompass install |
 | `scripts/cindy_0_1_121_cancel_hotfix.py`, `patches/cindy-0.1.121-cancel.patch` | Optional local fix for cancelling on Cindy 0.1.121 (see below) |
@@ -61,11 +61,11 @@ An answer or `profile` missing a required field is refused, never defaulted. Fie
 | `blocked` / `task_too_long_for_classifier` | The task does not fit the classifier prompt; give a `profile` |
 | `blocked` / `no_runnable_model` | The catalog has no Claude, Codex or Pi model |
 | `blocked` / `no_route` | No row can run the task; `decision.excluded` gives one line per reason with the rows it removes |
-| `blocked` / `accounts_unavailable` | Every candidate account is excluded; `accounts` and `warnings` say why |
+| `blocked` / `accounts_unavailable` | Only from an external AgentCompass CLI: every account it knows is excluded; `accounts` and `warnings` say why. The built-in engine has no accounts |
 | `blocked` / `unsolicited_or_mismatched_classification` | A classification the worker did not ask for |
 | `split`, `self` | The profile says several independent deliverables (`task_count`) or an answer for the current session; nothing starts |
 
-`decision` also carries `profile_source` (`classifier`, `caller`, `unavailable`), `classifier_model`, `axis_demand`, `components`, `score`, `alternatives`, `warnings` and the quota used. It is saved with the
+`decision` also carries `profile_source` (`classifier`, `caller`, `unavailable`), `classifier_model`, `axis_demand`, `components`, `score`, `alternatives` and `warnings`; the built-in engine lists no quota or account. It is saved with the
 receipt as `router.stdout.json`.
 
 ## Classifier
@@ -90,15 +90,15 @@ receipt as `router.stdout.json`.
   the same score, the harness order of the work kind decides.
 - **Data gaps.** A row with missing category scores, an unpriced billed account or unknown capacity leaves automatic routing and is listed in `decision.excluded`; naming the model (`constraintModel` / `pinnedModel`,
   `constraintEffort` in `routeTask`) dispatches it with a `data error:` warning. The `roll` tool takes no such argument today.
-- **Quota.** The newest rate-limit snapshot the Codex CLI wrote to its session logs (`$CODEX_HOME`, else `~/.codex` and `<app data>/CindyGlobal/codex-home`) is the one account the engine prices; the plan it
-  reports is read, never assumed, and a reading without a usable plan takes that account's Codex and Pi rows out. Claude rows and Codex rows with no log yet draw on an unmetered account. A snapshot is applied to a
-  connection only when a caller bound it (`providerId`) if there are several Codex connections. Account states are `ready`, `plan_inactive`, `usage_failing`, `auth_failed`; `roll` and `status` return `warnings` and `accounts`.
-  A log that cannot be read warns at once and excludes the account after 6 hours of continuous failure (`quota-state.json`).
-- **Fast mode.** Only when the profile has `wants_fast: true`, the row is a Codex row Cindy offers fast mode for, the model's AgentCompass data declares a fast mode, and the snapshot shows under 60% used. `urgency` alone
-  never turns it on; unknown quota never does.
+- **No quota.** The built-in engine reads no quota and no file of Cindy's or of any Codex home. A quota reading belongs to the account it was read from, and the catalog gives only a `providerId` per row: it cannot tell the
+  user's own Codex sign-in from the Cindy AI gateway (on a signed-in Cindy 0.1.135 all 84 rows were `xd`; on 0.1.121 signed in to Codex only they were `openai`), so the local Codex log, which is the quota of the user's own
+  sign-in, would have been attached to the gateway. Every row therefore runs on the engine's built-in unmetered gateway account, with no plan, window, capacity or price, and is ranked by capability fit; nothing leaves
+  automatic routing for a quota reason and a decision lists no `accounts`. This stays until Cindy offers connection kind and quota through its plugin API.
+- **Fast mode.** Never chosen: it needed a quota reading attached to the Codex sign-in's own connection. `wants_fast` stays in the profile and in `decision.wants_fast` as the classifier or caller stated it; `bundle.fast` is
+  always `false`. (An external CLI may still return a fast bundle; the plugin starts it only on a row that offers fast mode.)
 - **Refused routes cool down.** When `tasks.create` refuses because of the route (`ROUTE_UNAVAILABLE`, `UNSUPPORTED_CAPABILITY`, `PERMISSION_DENIED`), that route is skipped for 15 minutes, doubling per consecutive
   refusal up to 2 hours (`route-cooldowns.json`; `decision.cooling_down`). When every runnable route is cooling down the roll still routes and sets `cooldown_warning`.
-- **Not carried from AgentCompass.** User scores and pricing configuration, metered (billed) accounts, a `--constraint` or `--effort` option on `roll`, continuity between rolls, and AgentCompass's own account fleet (the
+- **Not carried from AgentCompass.** User scores and pricing configuration, quota readings and account states, metered (billed) accounts, a `--constraint` or `--effort` option on `roll`, continuity between rolls, and AgentCompass's own account fleet (the
   accounts are the Cindy connections).
 
 ## Safety boundary
@@ -128,7 +128,7 @@ npm run test:sandbox:linux  # the same plus the unit tests in the WSL docker-des
 ```
 
 `test/test_market_contract.mjs` checks `plugin/` against the market repository's gate: the pinned Cindy manifest validator (vendored unmodified under `test/vendor/`), id, version, tools, icon, locales, and that the engine imports only
-Node built-ins and package files. The unit tests assert rules (exact catalog rows, gates, quota, fast mode), not a chosen winner, and a scan test forbids any read of task text outside a counted list of reasons. `npm test`
+Node built-ins and package files. The unit tests assert rules (exact catalog rows, gates, no quota or Codex-home read, fast mode never chosen), not a chosen winner, and a scan test forbids any read of task text outside a counted list of reasons. `npm test`
 also compares `engine/classifier-cases.json` with the AgentCompass file it pins (2844342), at `AGENTCOMPASS_CHECKOUT` or a checkout found next to the repository. The sandbox substitutes only the Cindy host
 (`test/zero_cindy_host.mjs`, fed the catalog a real Cindy 0.1.121 reported), the model behind the CLI's classifier and discovery placeholders for provider CLIs; it runs with the CLI's public-data refresh off, so it makes no
 network request. Its latest Windows and Linux runs are in `docs/sandbox-e2e-report.json` with every scenario's input and host record under `docs/sandbox-artifacts/`; `npm run test:sandbox:linux` updates its own part, and

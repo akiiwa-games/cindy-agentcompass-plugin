@@ -23,9 +23,9 @@ task list. The sections below are the signed-out run of 2026-11-07 and stay as m
 
 What covered these in the signed-out run, with a fake host and not real Cindy:
 
-- `npm run test:sandbox` on Windows, 120/120, rerun on 2026-11-13 on plugin 0.4.1 with the engine vendored from Magpie 35a7aea (AgentCompass 2844342) against an AgentCompass checkout;
-- `npm run test:sandbox:linux`, 120/120, rerun on 2026-11-13 on the same engine;
-- `npm test`: 129/129 Node tests and 8 Python tests, none skipped; it compares the case file with `test/fixtures/agentcompass/` by itself, and with an AgentCompass
+- `npm run test:sandbox` on Windows, 119/119, rerun on 2026-11-13 on plugin 0.4.1 (Codex quota read removed) with the engine vendored from Magpie 35a7aea (AgentCompass 2844342) against an AgentCompass checkout;
+- `npm run test:sandbox:linux`, 119/119, rerun on 2026-11-13 on the same engine;
+- `npm test`: 125/125 Node tests and 8 Python tests, none skipped; it compares the case file with `test/fixtures/agentcompass/` by itself, and with an AgentCompass
   checkout named or found; one without the file, or with another file, fails.
 
 They show the plugin's logic against the host contract as read from Cindy's source. They do not show that real Cindy behaves that way.

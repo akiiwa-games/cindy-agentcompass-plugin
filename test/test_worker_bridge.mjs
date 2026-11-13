@@ -212,12 +212,22 @@ test('a route Cindy refused to create on cools down for the retry; a request ref
   assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), {}, 'a task created on the route clears it');
 });
 
-test('built-in split, self, Pi for exploration and fast mode with fresh Codex quota telemetry', () => {
+test('built-in split, self and Pi for exploration; fast mode is never chosen, and no Codex log or Cindy prefs file is read', () => {
   const p = plugin(codex, 0, 'none');
-  const sessions = path.join(p.home, '.codex', 'sessions', '2026', '11', '03');
-  fs.mkdirSync(sessions, {recursive: true});
-  fs.writeFileSync(path.join(sessions, 'rollout-x.jsonl'), JSON.stringify({type: 'event_msg', payload: {type: 'token_count',
-    rate_limits: {primary: {used_percent: 12, window_minutes: 300, resets_at: Math.floor(Date.now() / 1000) + 3600}, secondary: {used_percent: 12, window_minutes: 10080, resets_at: Math.floor(Date.now() / 1000) + 86400}, plan_type: 'plus'}}}) + '\n');
+  // Files a quota reading or a card model would have been taken from: an exhausted Codex log in each Codex home, and the per-owner prefs
+  // file. Nothing may react to them; the same tasks on a home without them route alike (checked below).
+  const logLine = JSON.stringify({type: 'event_msg', payload: {type: 'token_count', rate_limits: {plan_type: 'plus',
+    primary: {used_percent: 100, window_minutes: 300, resets_at: Math.floor(Date.now() / 1000) + 3600},
+    secondary: {used_percent: 100, window_minutes: 10080, resets_at: Math.floor(Date.now() / 1000) + 86400}}}}) + '\n';
+  const appData = process.platform === 'darwin' ? path.join(p.home, 'Library', 'Application Support') : path.join(p.home, 'AppData', 'Roaming');
+  for (const home of [path.join(p.home, '.codex'), path.join(appData, 'CindyGlobal', 'codex-home')]) {
+    const day = path.join(home, 'sessions', '2026', '11', '03');
+    fs.mkdirSync(day, {recursive: true});
+    fs.writeFileSync(path.join(day, 'rollout-x.jsonl'), logLine);
+  }
+  const owner = path.join(appData, 'CindyGlobal', 'owners', '0123456789abcdef0123');
+  fs.mkdirSync(owner, {recursive: true});
+  fs.writeFileSync(path.join(owner, 'ghost-errand-prefs.json'), JSON.stringify({errand: {agentcompass: {model: 'bad-model', agentKind: 'codex'}}}));
   const replies = rpc(p, [
     prepare(p, 'Two independent tasks:\n1. Add a dark theme to the settings page.\n2. Fix the CSV export encoding bug in report.py.', 1, CATALOG, withProfile({multi_task: true, task_count: '2'})),
     prepare(p, 'What is the difference between a mutex and a semaphore?', 2, CATALOG, withProfile({self: true})),
@@ -227,8 +237,15 @@ test('built-in split, self, Pi for exploration and fast mode with fresh Codex qu
   assert.deepEqual([replies[0].result.router.status, replies[0].result.router.task_count, replies[0].result.bundle], ['split', '2', null]);
   assert.deepEqual([replies[1].result.router.status, replies[1].result.bundle], ['self', null]);
   assert.equal(replies[2].result.bundle.harness, 'pi');
-  assert.deepEqual([replies[3].result.bundle.harness, replies[3].result.bundle.fast], ['codex', true]);
-  assert.equal(replies[3].result.router.decision.quota.used_percent, 12);
+  assert.equal(replies[3].result.bundle.fast, false, 'fast mode is never chosen');
+  assert.equal(replies[3].result.router.decision.wants_fast, true, 'what the profile said is kept');
+  for (const reply of replies.slice(2)) {
+    assert.equal(reply.result.router.decision.accounts, undefined, 'no quota account is listed');
+    assert.equal(reply.result.router.decision.quota, undefined);
+  }
+  const clean = plugin(codex, 0, 'none');
+  const [cleanReply] = rpc(clean, [prepare(clean, 'Use fast mode: rename the helper foo to bar in util.py and update its two callers.', 4, CATALOG, withProfile({work_kind: 'general_implementation', urgency: 'high', wants_fast: true}))]);
+  assert.deepEqual(replies[3].result.bundle, cleanReply.result.bundle, 'the same route on a home without those files');
 });
 
 test('the built-in engine is the default even with `agentcompass` on PATH; an empty catalog is a clear error', () => {
@@ -818,48 +835,11 @@ test('M1, fifth review: through the worker, an unquoted count splits with its co
   }
 });
 
-test('Step 2 & 3 regression: read_only_review with nonzero code_complexity, inactive Codex plan, and quota-state.json first-seen persistence through worker.cjs', () => {
+test('Step 2 regression: read_only_review with nonzero code_complexity is refused; an external CLI whose classifiers are down answers scorer_unavailable', () => {
   const p = plugin(codex, 0, 'none');
   const badReview = classifyWith(p, 'Review PR #42.', id => classified({read_only_review: true, code_complexity: 1}, id));
   assert.deepEqual(stateOf(badReview), ['blocked', 'invalid_classifier_output']);
   assert.match(badReview.result.router.error, /must be 0 when read_only_review is true/);
-
-  const day = path.join(p.home, '.codex', 'sessions', '2026', '11', '07');
-  fs.mkdirSync(day, {recursive: true});
-  const sessionFile = path.join(day, 'rollout-1.jsonl');
-  const now = new Date();
-  fs.writeFileSync(
-    sessionFile,
-    `${JSON.stringify({timestamp: now.toISOString(), payload: {rate_limits: {plan_type: 'Free × 2', secondary: {used_percent: 10, resets_at: Math.floor((now.getTime() + 86400000) / 1000)}}}})}\n`,
-  );
-  const [blockedAccount] = rpc(p, [prepare(p, 'Fix util.py', 1, CATALOG, withProfile())]);
-  assert.deepEqual(stateOf(blockedAccount), ['blocked', 'accounts_unavailable'], JSON.stringify(blockedAccount));
-  assert.equal(blockedAccount.result.router.reason, 'accounts_unavailable');
-  assert.equal(blockedAccount.result.router.decision.accounts[0].state, 'plan_inactive');
-  assert.equal(blockedAccount.result.router.decision.accounts[0].dispatchable, false);
-  assert.equal(receipts(p).length, 0, 'a blocked account check writes no prepared receipt');
-
-  // Corrupt session log: first sight persists failing_since in <stateHome>/quota-state.json; the log names no plan and no window, so no Codex row is routed
-  // automatically (v0.6.0), and nothing starts; after 6h in quota-state.json, the account is excluded.
-  fs.writeFileSync(sessionFile, '{"payload":{"rate_limits":BROKEN_JSON\n');
-  const [firstCorrupt] = rpc(p, [prepare(p, 'Fix corrupt-first.py', 2, CATALOG, withProfile())]);
-  assert.equal(firstCorrupt.result.state, 'blocked', 'first-seen corrupt log: nothing to price the Codex rows with');
-  assert.equal(firstCorrupt.result.router.decision.reason, 'no_route');
-  assert.equal(firstCorrupt.result.router.decision.accounts[0].state, 'usage_failing');
-  assert.equal(firstCorrupt.result.router.decision.accounts[0].dispatchable, true);
-  assert.ok(firstCorrupt.result.router.decision.warnings.some(w => /usage_failing.*corrupt rate-limit snapshot/.test(w)));
-  const quotaStatePath = path.join(p.stateHome, 'quota-state.json');
-  assert.ok(fs.existsSync(quotaStatePath), 'worker.cjs persists quota-state.json in stateHome');
-
-  const persisted = JSON.parse(fs.readFileSync(quotaStatePath, 'utf8'));
-  for (const key of Object.keys(persisted.entries)) {
-    persisted.entries[key].failing_since = Date.now() - 6 * 3600 * 1000 - 1000;
-  }
-  fs.writeFileSync(quotaStatePath, JSON.stringify(persisted, null, 2));
-  const [expiredCorrupt] = rpc(p, [prepare(p, 'Fix corrupt-6h.py', 3, CATALOG, withProfile())]);
-  assert.deepEqual(stateOf(expiredCorrupt), ['blocked', 'accounts_unavailable']);
-  assert.equal(expiredCorrupt.result.router.reason, 'accounts_unavailable');
-  assert.equal(expiredCorrupt.result.router.decision.accounts[0].dispatchable, false);
 
   // External CLI (AgentCompass v0.6.0) whose classifiers are all down answers scorer_unavailable: a blocked router result, no receipt, nothing started.
   const cliBlocked = plugin({status: 'scorer_unavailable', next: 'Run agentcompass doctor.'}, 2);

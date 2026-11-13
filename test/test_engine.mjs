@@ -10,7 +10,6 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {BASE_TASK, KEYWORD_CORPUS} from './task_text_corpus.mjs';
 import * as engine from '../plugin/engine/route.mjs';
 import {
-  ACCOUNT_STATES,
   CALLER_REQUIRED_KEYS,
   CLASSIFIER_CASES,
   HARNESS,
@@ -20,14 +19,8 @@ import {
   WORK_KINDS,
   buildClassifierPrompt,
   clearClassifierCache,
-  codexHomes,
-  codexQuota,
-  formatQuotaAccountList,
-  listQuotaAccounts,
-  normalizePlan,
   parseClassifierOutput,
   prepareClassifierRequest,
-  quotaAccountWarnings,
   routeKey,
   routeTask,
   scoreCacheKey,
@@ -51,7 +44,6 @@ const REAL = JSON.parse(fs.readFileSync(new URL('./fixtures/cindy-0.1.121-catalo
 const WITH_CLAUDE = {models: [...REAL.models,
   ...['claude-opus-5-5', 'claude-sonnet-5-5'].map(model => ({route: {agentKind: 'cc', providerId: 'anthropic', model, effort: 'high', fastMode: false},
     efforts: ['low', 'medium', 'high', 'max'], supportsFastMode: false}))]};
-const OK = {source: 'test', status: 'ok', used_percent: 17, plan: 'pro'};
 
 function makeProfile(overrides = {}) {
   return {
@@ -77,14 +69,14 @@ function makeProfile(overrides = {}) {
   };
 }
 
-const routeWithProfile = (task, profileOverrides = {}, catalog = REAL, quota = OK, extra = {}) =>
-  routeTask(task, catalog, {quota, profile: makeProfile(profileOverrides), ...extra});
+const routeWithProfile = (task, profileOverrides = {}, catalog = REAL, extra = {}) =>
+  routeTask(task, catalog, {profile: makeProfile(profileOverrides), ...extra});
 
 // What the logic page hands back after Cindy's quick-text channel answered.
 const QUICK_MODEL = 'quick-text-model';
 const answered = (profileOverrides = {}) => ({ok: true, model: QUICK_MODEL, rawOutput: JSON.stringify(makeProfile(profileOverrides))});
-const routeWithClassifier = (task, profileOverrides = {}, catalog = REAL, quota = OK, extra = {}) =>
-  routeTask(task, catalog, {quota, useCache: false, classification: answered(profileOverrides), ...extra});
+const routeWithClassifier = (task, profileOverrides = {}, catalog = REAL, extra = {}) =>
+  routeTask(task, catalog, {useCache: false, classification: answered(profileOverrides), ...extra});
 
 // Every native answer must be one row Cindy listed, at an effort and fast mode that row offers.
 function inCatalog(result, catalog) {
@@ -143,7 +135,7 @@ test('split and self gates are decided solely by profile, never by task text pat
 test('classifier unavailable, timed out, or invalid output returns blocked and never falls back to keyword profiling', () => {
   clearClassifierCache();
   // No classifier and no caller profile -> blocked with profile_source: 'unavailable'
-  const noClassifier = routeTask('Rename the helper foo to bar in util.py and update its two callers.', REAL, {quota: OK});
+  const noClassifier = routeTask('Rename the helper foo to bar in util.py and update its two callers.', REAL, {});
   assert.equal(noClassifier.status, 'blocked');
   assert.equal(noClassifier.profile, null);
   assert.equal(noClassifier.profile_source, 'unavailable');
@@ -153,7 +145,6 @@ test('classifier unavailable, timed out, or invalid output returns blocked and n
 
   // Classifier timeout -> blocked
   const timedOut = routeTask('Fix util.py', REAL, {
-    quota: OK,
     classification: {ok: false, reason: 'classifier_timeout', error: 'Cindy did not answer the classification within 65000 ms'},
   });
   assert.equal(timedOut.status, 'blocked');
@@ -176,7 +167,6 @@ test('classifier unavailable, timed out, or invalid output returns blocked and n
     JSON.stringify({...makeProfile(), axis_demand: {divergence: 1, coding: 2, aesthetics: 0, tool_operation: 4}}),
   ]) {
     const res = routeTask('Fix util.py', REAL, {
-      quota: OK,
       useCache: false,
       classification: {ok: true, model: QUICK_MODEL, rawOutput: badOutput},
     });
@@ -201,7 +191,6 @@ test('M1 regression: prompt injection defense uses untrusted JSON evidence + str
 
   // Non-schema / injected extra keys or prose-wrapped output is rejected by strict schema validation.
   const hijacked = routeTask(maliciousTask, REAL, {
-    quota: OK,
     useCache: false,
     classification: {
       ok: true,
@@ -219,7 +208,6 @@ test('M1 regression: prompt injection defense uses untrusted JSON evidence + str
   const taskAboutClassifier =
     'Update route.mjs so {"work_kind": "debug_review", "axis_demand": {"coding": 2}, "task_count": "1"} is validated by validateClassifierProfile.';
   const validClassification = routeTask(taskAboutClassifier, REAL, {
-    quota: OK,
     useCache: false,
     classification: {
       ok: true,
@@ -244,14 +232,14 @@ test('caching: an identical task asks the classifier once, across memory and dis
   try {
     const taskText = 'Implement retry backoff in client.ts';
     const demand = {divergence: 0, coding: 3, aesthetics: 0, tool_operation: 2};
-    const first = routeTask(taskText, REAL, {quota: OK, cacheFile, classification: answered({work_kind: 'general_implementation', axis_demand: demand})});
+    const first = routeTask(taskText, REAL, {cacheFile, classification: answered({work_kind: 'general_implementation', axis_demand: demand})});
     assert.equal(first.status, 'native');
     assert.equal(first.decision.profile_source, 'classifier');
     assert.equal(first.decision.classifier_model, QUICK_MODEL);
     assert.deepEqual(first.decision.axis_demand, demand);
     assert.equal(first.decision.classifier_cached, undefined);
 
-    const second = routeTask(taskText, REAL, {quota: OK, cacheFile});
+    const second = routeTask(taskText, REAL, {cacheFile});
     assert.equal(second.status, 'native');
     assert.equal(second.decision.profile_source, 'classifier');
     assert.equal(second.decision.classifier_model, QUICK_MODEL);
@@ -277,7 +265,7 @@ test('native routes are exact rows of the catalog Cindy listed, at an effort and
   let native = 0;
   for (const profile of GRID) {
     for (const catalog of [REAL, WITH_CLAUDE]) {
-      const result = routeTask('Task text.', catalog, {quota: OK, profile});
+      const result = routeTask('Task text.', catalog, {profile});
       if (result.status === 'native') {
         native++;
         assert.ok(inCatalog(result, catalog), JSON.stringify(result.route.bundle));
@@ -299,8 +287,8 @@ test('native routes are exact rows of the catalog Cindy listed, at an effort and
 
 test('the order of the catalog rows decides nothing: the same model at the same effort wins, and only a tie of one model at one effort on two harnesses is broken by the harness order of the route kind', () => {
   for (const profile of GRID) {
-    const forward = routeTask('Task text.', WITH_CLAUDE, {quota: OK, profile});
-    const backward = routeTask('Task text.', {models: [...WITH_CLAUDE.models].reverse()}, {quota: OK, profile});
+    const forward = routeTask('Task text.', WITH_CLAUDE, {profile});
+    const backward = routeTask('Task text.', {models: [...WITH_CLAUDE.models].reverse()}, {profile});
     assert.equal(forward.status, backward.status, JSON.stringify(profile.axis_demand));
     if (forward.status !== 'native') continue;
     assert.equal(chosen(forward), chosen(backward), `${profile.work_kind} ${JSON.stringify(profile.axis_demand)}`);
@@ -327,7 +315,7 @@ test('a row whose data has a gap leaves automatic routing and says why; naming i
     assert.equal(automatic.status, 'blocked');
     assert.equal(automatic.decision.reason, 'no_route');
     assert.ok(automatic.decision.excluded.some(line => /data error/.test(line) && line.includes(leaf(row.route.model))), JSON.stringify(automatic.decision.excluded));
-    const named = routeWithProfile('Task text.', {}, only, OK, {constraintModel: leaf(row.route.model)});
+    const named = routeWithProfile('Task text.', {}, only, {constraintModel: leaf(row.route.model)});
     assert.equal(named.status, 'native', JSON.stringify(named.decision?.excluded));
     assert.equal(named.route.bundle.model, row.route.model);
     assert.ok(inCatalog(named, only));
@@ -344,177 +332,71 @@ test('a named model or effort holds on every task: nothing else stands in, and a
   const task = 'Task text.';
   for (const profile of GRID.filter((_, index) => index % 7 === 0)) {
     for (const row of REAL.models.filter(r => r.route.agentKind === 'codex')) {
-      const named = routeTask(task, REAL, {quota: OK, profile, constraintModel: row.route.model});
+      const named = routeTask(task, REAL, {profile, constraintModel: row.route.model});
       if (named.status !== 'native') continue;
       assert.equal(leaf(named.route.bundle.model), row.route.model, 'the named model, never another');
     }
-    const effort = routeTask(task, REAL, {quota: OK, profile, constraintEffort: 'low'});
+    const effort = routeTask(task, REAL, {profile, constraintEffort: 'low'});
     if (effort.status === 'native') assert.equal(effort.route.bundle.effort, 'low');
   }
-  const none = routeWithProfile(task, {}, REAL, OK, {constraintModel: 'a-model-cindy-does-not-list'});
+  const none = routeWithProfile(task, {}, REAL, {constraintModel: 'a-model-cindy-does-not-list'});
   assert.equal(none.status, 'blocked');
   assert.match(none.error, /named/);
   assert.match(none.decision.refusal, /pin_not_in_pool/);
   assert.equal(none.route, undefined);
-  const byNameAndEffort = routeWithProfile(task, {}, REAL, OK, {constraintModel: 'gpt-6-sol:high'});
+  const byNameAndEffort = routeWithProfile(task, {}, REAL, {constraintModel: 'gpt-6-sol:high'});
   assert.equal(byNameAndEffort.status, 'native');
   assert.deepEqual([leaf(byNameAndEffort.route.bundle.model), byNameAndEffort.route.bundle.effort], ['gpt-6-sol', 'high']);
 });
 
-test('a Codex account is priced only with the plan it reports: with none its rows leave automatic routing, and another connection still routes', () => {
-  const noPlan = {source: 'test', status: 'ok', used_percent: 17};
-  const onlyCodex = routeWithProfile('Task text.', {}, REAL, noPlan);
-  assert.equal(onlyCodex.status, 'blocked', 'nothing else to route to');
-  assert.ok(onlyCodex.decision.excluded.some(line => /capacity[_ ]unknown/.test(line)), JSON.stringify(onlyCodex.decision.excluded.slice(0, 3)));
-  const withClaude = routeWithProfile('Task text.', {}, WITH_CLAUDE, noPlan);
-  assert.equal(withClaude.status, 'native');
-  assert.equal(withClaude.route.bundle.harness, 'claude', 'the connection with no quota account runs unmetered');
-  const planned = routeWithProfile('Task text.', {}, WITH_CLAUDE, OK);
-  assert.equal(planned.status, 'native');
-  assert.equal(planned.decision.quota.plan, 'pro');
-  assert.equal(planned.decision.accounts[0].plan_known, true);
-  // Naming a Codex model dispatches it even without a plan, and says what is missing.
-  const named = routeWithProfile('Task text.', {}, WITH_CLAUDE, noPlan, {constraintModel: 'gpt-6-sol'});
+test('no quota is attached to any connection: every row runs on the built-in gateway account, nothing leaves routing for a quota reason, and a decision lists no account', () => {
+  for (const catalog of [REAL, WITH_CLAUDE, {models: [...REAL.models].reverse()}]) {
+    const routed = routeWithProfile('Task text.', {}, catalog);
+    assert.equal(routed.status, 'native', 'a catalog of Codex rows only still routes');
+    assert.ok(inCatalog(routed, catalog));
+    assert.equal(routed.decision.accounts, undefined, 'no quota account is listed');
+    assert.equal(routed.decision.quota, undefined);
+    assert.equal(routed.decision.selected_quota, undefined);
+    assert.deepEqual(routed.decision.excluded ?? [], []);
+    assert.ok(!routed.decision.warnings.some(line => /quota|capacity|account/i.test(line)), JSON.stringify(routed.decision.warnings));
+  }
+  // Naming a model still dispatches it.
+  const named = routeWithProfile('Task text.', {}, WITH_CLAUDE, {constraintModel: 'gpt-6-sol'});
   assert.equal(named.status, 'native');
   assert.equal(leaf(named.route.bundle.model), 'gpt-6-sol');
-  assert.ok(named.decision.warnings.some(line => /capacity[_ ]unknown/.test(line)));
 });
-
-test('fast mode is driven by profile.wants_fast, a codex row of a model its data declares fast-capable and known quota under 60%; urgency alone never enables it', () => {
+test('fast mode is never chosen: wants_fast stays in the profile and the decision as stated, whatever the row offers', () => {
   const task = 'Task text.';
   const sol = {constraintModel: 'gpt-6.1-sol:medium'};
-  const fast = routeWithProfile(task, {wants_fast: true, urgency: 'high'}, REAL, OK, sol);
-  assert.equal(fast.route.bundle.fast, true);
-  assert.equal(fast.route.bundle.harness, 'codex');
-  assert.equal(fast.decision.wants_fast, true);
-  assert.ok(inCatalog(fast, REAL));
-  assert.equal(routeWithProfile(task, {wants_fast: false, urgency: 'normal'}, REAL, OK, sol).route.bundle.fast, false, 'wants_fast false');
-  assert.equal(routeWithProfile(task, {wants_fast: false, urgency: 'high'}, REAL, OK, sol).route.bundle.fast, false, 'urgency high alone does not enable fast mode');
-  assert.equal(routeWithProfile(task, {wants_fast: true}, REAL, {...OK, used_percent: 70}, sol).route.bundle.fast, false, 'quota at 70%');
-  assert.equal(routeWithProfile(task, {wants_fast: true}, REAL, {source: 'test', status: 'unknown'}, sol).route.bundle.fast, false, 'unknown quota');
-  // A Pi row is never fast, and a Codex row whose Cindy row offers no fast mode is not either.
-  const piOnly = {models: REAL.models.filter(row => row.route.agentKind === 'pi')};
-  const piRoute = routeWithProfile(task, {wants_fast: true}, piOnly, OK, {constraintModel: 'gpt-6.1-sol:medium'});
-  assert.equal(piRoute.route.bundle.harness, 'pi');
-  assert.equal(piRoute.route.bundle.fast, false, 'Pi has no fast feature');
-  const noFastRow = {models: REAL.models.map(row => ({...row, supportsFastMode: false}))};
-  assert.equal(routeWithProfile(task, {wants_fast: true}, noFastRow, OK, sol).route.bundle.fast, false, 'the row does not offer it');
-  assert.equal(routeWithClassifier(task, {urgency: 'high', wants_fast: false}, REAL, OK, sol).decision.wants_fast, false);
-  assert.equal(routeWithClassifier(task, {urgency: 'high', wants_fast: true}, REAL, OK, sol).decision.wants_fast, true);
-});
-
-test('quota: a window the Codex CLI reports exhausted takes that account out of automatic routing, and another connection routes', () => {
-  const task = 'Task text.';
-  const prof = makeProfile({reasoning_depth: 2, code_complexity: 1, axis_demand: {divergence: 1, coding: 1, aesthetics: 0, tool_operation: 1}});
-  const now = Date.now();
-  const window = (used, minutes) => ({used_percent: used, window_minutes: minutes, resets_at: now / 1000 + 3600});
-  const exhausted = {source: 'test', status: 'exhausted', used_percent: 100, plan: 'pro', windows: [window(100, 10080)]};
-  const moved = routeTask(task, WITH_CLAUDE, {quota: exhausted, profile: prof, now});
-  assert.equal(moved.route.bundle.harness, 'claude');
-  assert.equal(moved.decision.quota.status, 'exhausted');
-  assert.ok(moved.decision.accounts.length === 1 && moved.decision.accounts[0].key === 'codex/openai');
-  const only = routeTask(task, REAL, {quota: exhausted, profile: prof, now});
-  assert.equal(only.status, 'blocked', 'with no other connection nothing is started');
-  assert.equal(only.decision.reason, 'no_route');
-  assert.ok(only.decision.excluded.length > 0);
-  // The same account with room left routes to Codex rows again.
-  const roomy = routeTask(task, REAL, {quota: {...exhausted, status: 'ok', used_percent: 30, windows: [window(30, 10080)]}, profile: prof, now});
-  assert.equal(roomy.status, 'native');
-  assert.ok(['codex', 'pi'].includes(roomy.route.bundle.harness));
-  // The engine prices what the window of the plan says: more of it used never makes a route cheaper.
-  const cost = used => routeTask(task, REAL, {quota: {...exhausted, status: 'ok', used_percent: used, windows: [window(used, 10080)]}, profile: prof, now, constraintModel: 'gpt-6.1-sol:high'}).decision.selected_quota.cost;
-  assert.ok(cost(10) <= cost(50) && cost(50) <= cost(80), `${cost(10)} ${cost(50)} ${cost(80)}`);
-  // AgentCompass v0.6.0 `applicable_windows`: a window the log reports binds the account whether or not its plan declares it. With no cited
-  // capacity it is never priced and never ignored, so the Codex rows leave automatic routing with the engine's own reason (and a window with
-  // nothing left says so as well); a connection that is not limited routes instead.
-  for (const left of [70, 0]) {
-    const undeclared = routeTask(task, REAL, {quota: {...exhausted, status: 'ok', used_percent: 30, windows: [window(100 - left, 300), window(30, 10080)]}, profile: prof, now});
-    assert.equal(undeclared.status, 'blocked', `an undeclared window with ${left}% left must not be dropped`);
-    assert.ok(undeclared.decision.excluded.some(line => /capacity[_ ]unknown/.test(line)), JSON.stringify(undeclared.decision.excluded?.slice(0, 3)));
-    if (left === 0) assert.ok(undeclared.decision.excluded.some(line => /exhausted|below launch floor/.test(line)), JSON.stringify(undeclared.decision.excluded?.slice(0, 4)));
-    const elsewhere = routeTask(task, WITH_CLAUDE, {quota: {...exhausted, status: 'ok', used_percent: 30, windows: [window(100 - left, 300), window(30, 10080)]}, profile: prof, now});
-    assert.equal(elsewhere.route.bundle.harness, 'claude', 'the other connection still routes');
+  const offersFast = REAL.models.some(row => row.route.agentKind === 'codex' && row.route.model === 'gpt-6.1-sol' && row.supportsFastMode);
+  assert.ok(offersFast, 'the catalog has a Codex row that offers fast mode');
+  for (const wants of [true, false]) {
+    const routed = routeWithProfile(task, {wants_fast: wants, urgency: 'high'}, REAL, sol);
+    assert.equal(routed.route.bundle.harness, 'codex');
+    assert.equal(routed.route.bundle.fast, false, `wants_fast ${wants}: no quota reading is attached, so fast mode is never on`);
+    assert.equal(routed.decision.wants_fast, wants);
+    assert.ok(inCatalog(routed, REAL));
+    assert.ok(routed.decision.alternatives.every(alt => alt.fast === false));
   }
-  // Plus has both windows: a five-hour window that is nearly spent keeps the account's rows out of a task that needs more than is left.
-  const plusSpent = routeTask(task, REAL, {quota: {source: 'test', status: 'ok', used_percent: 99, plan: 'plus', windows: [window(99, 300), window(20, 10080)]}, profile: prof, now});
-  assert.ok(plusSpent.status === 'blocked' && plusSpent.decision.excluded.some(line => /five_hour/.test(line)), JSON.stringify(plusSpent.decision?.excluded?.slice(0, 2)));
+  assert.equal(routeWithClassifier(task, {urgency: 'high', wants_fast: true}, REAL, sol).decision.wants_fast, true);
+  assert.equal(routeWithClassifier(task, {urgency: 'high', wants_fast: false}, REAL, sol).decision.wants_fast, false);
 });
-
 test('a route Cindy recently refused is skipped while another can run, and used anyway when none can', () => {
   const task = 'Task text.';
   const prof = makeProfile({reasoning_depth: 1, code_complexity: 1});
   const now = Date.now();
-  const first = routeTask(task, REAL, {quota: OK, now, profile: prof}).route.bundle;
+  const first = routeTask(task, REAL, {now, profile: prof}).route.bundle;
   const cooling = {[routeKey(first.harness, first.providerId, first.model)]: {until: now + 60000, code: 'ROUTE_UNAVAILABLE'}};
-  const moved = routeTask(task, REAL, {quota: OK, now, cooling, profile: prof});
+  const moved = routeTask(task, REAL, {now, cooling, profile: prof});
   assert.notEqual(moved.route.bundle.model + moved.route.bundle.providerId, first.model + first.providerId);
   assert.deepEqual(moved.decision.cooling_down.map(c => [c.model, c.code, c.minutes_left]), [[first.model, 'ROUTE_UNAVAILABLE', 1]]);
   assert.equal(moved.decision.cooldown_warning, undefined);
-  assert.deepEqual(routeTask(task, REAL, {quota: OK, now: now + 60001, cooling, profile: prof}).route.bundle, first, 'an expired cooldown is ignored');
+  assert.deepEqual(routeTask(task, REAL, {now: now + 60001, cooling, profile: prof}).route.bundle, first, 'an expired cooldown is ignored');
   const all = Object.fromEntries(REAL.models.map(r => [routeKey(HARNESS[r.route.agentKind], r.route.providerId, r.route.model),
     {until: now + 60000, code: 'ROUTE_UNAVAILABLE'}]));
-  const every = routeTask(task, REAL, {quota: OK, now, cooling: all, profile: prof});
+  const every = routeTask(task, REAL, {now, cooling: all, profile: prof});
   assert.deepEqual(every.route.bundle, first, 'with every route cooling down the roll is not blocked');
   assert.match(every.decision.cooldown_warning, /refused/);
-});
-
-test('quota telemetry is the newest rate-limit snapshot the Codex CLI wrote; reset windows are ignored', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-home-'));
-  try {
-    assert.equal(codexQuota({CODEX_HOME: home}).status, 'unknown');
-    const day = path.join(home, 'sessions', '2026', '11', '03');
-    fs.mkdirSync(day, {recursive: true});
-    const now = Date.UTC(2026, 10, 3, 12);
-    const line = (used, resets) => JSON.stringify({type: 'event_msg', payload: {type: 'token_count',
-      rate_limits: {limit_id: 'codex', primary: {used_percent: used, window_minutes: 300, resets_at: resets}, secondary: null, plan_type: 'pro'}}});
-    fs.writeFileSync(path.join(day, 'rollout-a.jsonl'), [line(10, now / 1000 + 600), line(96, now / 1000 + 600)].join('\n') + '\n');
-    const seen = codexQuota({CODEX_HOME: home}, now);
-    assert.deepEqual([seen.status, seen.used_percent, seen.plan], ['exhausted', 96, 'pro']);
-    fs.writeFileSync(path.join(day, 'rollout-a.jsonl'), line(96, now / 1000 - 1) + '\n');
-    assert.equal(codexQuota({CODEX_HOME: home}, now).status, 'unknown', 'that window has reset');
-    const padding = JSON.stringify({type: 'event_msg', payload: {type: 'tool_output', text: 'x'.repeat(4096)}}) + '\n';
-    fs.writeFileSync(path.join(day, 'rollout-a.jsonl'), padding.repeat(80) + line(42, now / 1000 + 600) + '\n');
-    assert.equal(codexQuota({CODEX_HOME: home}, now).used_percent, 42);
-    const prevDay = path.join(home, 'sessions', '2026', '11', '02');
-    fs.mkdirSync(prevDay, {recursive: true});
-    const todayFile = path.join(day, 'rollout-a.jsonl');
-    const prevFile = path.join(prevDay, 'rollout-prev.jsonl');
-    fs.writeFileSync(todayFile, line(10, now / 1000 + 600) + '\n');
-    fs.writeFileSync(prevFile, line(98, now / 1000 + 600) + '\n');
-    fs.utimesSync(todayFile, new Date(now - 60000), new Date(now - 60000));
-    fs.utimesSync(prevFile, new Date(now - 1000), new Date(now - 1000));
-    const crossDay = codexQuota({CODEX_HOME: home}, now);
-    assert.deepEqual([crossDay.status, crossDay.used_percent, crossDay.file], ['exhausted', 98, prevFile]);
-  } finally {fs.rmSync(home, {recursive: true, force: true});}
-});
-
-test("with no CODEX_HOME the telemetry Cindy's own Codex writes (<app data>/CindyGlobal/codex-home) counts, newest first", () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'user-home-'));
-  try {
-    const env = {APPDATA: path.join(home, 'AppData', 'Roaming'), XDG_CONFIG_HOME: path.join(home, '.config')};
-    const homes = codexHomes(env, home);
-    assert.equal(homes[0], path.join(home, '.codex'));
-    assert.match(homes[1], /CindyGlobal[\\/]codex-home$/);
-    assert.deepEqual(codexHomes({CODEX_HOME: '/x'}, home), ['/x'], 'an explicit CODEX_HOME is the only place');
-    const now = Date.UTC(2026, 10, 3, 12);
-    const write = (root, used, age) => {
-      const day = path.join(root, 'sessions', '2026', '11', '03');
-      fs.mkdirSync(day, {recursive: true});
-      const file = path.join(day, 'rollout-a.jsonl');
-      fs.writeFileSync(file, JSON.stringify({type: 'event_msg', payload: {type: 'token_count',
-        rate_limits: {primary: {used_percent: used, window_minutes: 10080, resets_at: now / 1000 + 600}, secondary: null}}}) + '\n');
-      const at = new Date(now - age);
-      fs.utimesSync(file, at, at);
-    };
-    assert.equal(codexQuota(env, now, homes).status, 'unknown', 'neither place has a session yet');
-    write(homes[1], 22, 1000);
-    assert.deepEqual([codexQuota(env, now, homes).used_percent, codexQuota(env, now, homes).file.startsWith(homes[1])], [22, true],
-      "only Cindy's Codex has run: its snapshot is the quota");
-    write(homes[0], 70, 60000);
-    assert.equal(codexQuota(env, now, homes).used_percent, 22, 'the newer session wins whichever home it is in');
-    write(homes[0], 99, 100);
-    assert.equal(codexQuota(env, now, homes).used_percent, 22, 'standalone ~/.codex does not override Cindy codex-home');
-  } finally {fs.rmSync(home, {recursive: true, force: true});}
 });
 
 // Engine rule at Magpie 35a7aea: a needs_visual task requires image input at every tool_operation level, not only at 3
@@ -533,7 +415,7 @@ test('a needs_visual task never routes to a model that does not accept image inp
   assert.equal(withImage.route.bundle.model, 'google/gemini-3.8-flash');
 });
 
-test('profile fields reach the decision as stated; two Codex connections never share a quota snapshot nobody bound; efforts are the ones a row offers', () => {
+test('profile fields reach the decision as stated; efforts are the ones a row offers', () => {
   const visual = routeWithClassifier('Compare screenshots of the login dialog.', {
     work_kind: 'visual_analysis',
     needs_visual: true,
@@ -555,20 +437,6 @@ test('profile fields reach the decision as stated; two Codex connections never s
   assert.equal(gui.decision.profile.needs_gui, true);
   assert.equal(gui.decision.axis_demand.tool_operation, 3);
 
-  const multiCodex = {models: [
-    {route: {agentKind: 'codex', providerId: 'openai-a', model: 'gpt-6.1-sol', effort: 'high', fastMode: false}, efforts: ['high'], supportsFastMode: true},
-    {route: {agentKind: 'codex', providerId: 'openai-b', model: 'gpt-6.1-sol', effort: 'high', fastMode: false}, efforts: ['high'], supportsFastMode: true},
-  ]};
-  const prof = makeProfile({work_kind: 'general_implementation', wants_fast: true, urgency: 'high'});
-  const exhausted = {source: 'test', status: 'exhausted', used_percent: 100, plan: 'pro'};
-  const unbound = routeTask('Rename foo to bar in util.py.', multiCodex, {quota: exhausted, profile: prof});
-  assert.equal(unbound.status, 'native', 'an unbound single-home snapshot is not applied across several Codex connections');
-  assert.equal(unbound.decision.accounts, undefined);
-  const bound = routeTask('Rename foo to bar in util.py.', multiCodex, {quota: {...exhausted, providerId: 'openai-a'}, profile: prof});
-  assert.equal(bound.status, 'native');
-  assert.equal(bound.route.bundle.providerId, 'openai-b', 'a bound snapshot takes out only its own connection');
-  assert.equal(bound.route.bundle.fast, false, 'fast mode is never on for a connection whose quota is not the snapshot');
-
   const emptyEffortCatalog = {models: [
     {route: {agentKind: 'codex', providerId: 'openai', model: 'gpt-6.1-sol', effort: '', fastMode: false}, efforts: [], supportsFastMode: false},
   ]};
@@ -578,14 +446,14 @@ test('profile fields reach the decision as stated; two Codex connections never s
 
   const sparseEffortCatalog = {models: [{route: {agentKind: 'pi', providerId: 'openai', model: 'chatgpt/gpt-6.1-sol', effort: 'xhigh', fastMode: false}, efforts: ['minimal', 'xhigh']}]};
   for (const profile of GRID.filter((_, index) => index % 5 === 0)) {
-    const sparse = routeTask('Task text.', sparseEffortCatalog, {quota: OK, profile});
+    const sparse = routeTask('Task text.', sparseEffortCatalog, {profile});
     if (sparse.status === 'native') assert.ok(['minimal', 'xhigh'].includes(sparse.route.bundle.effort), sparse.route.bundle.effort);
   }
-  const sparseNamed = routeWithProfile('Task text.', {}, sparseEffortCatalog, OK, {constraintModel: 'gpt-6.1-sol:xhigh'});
+  const sparseNamed = routeWithProfile('Task text.', {}, sparseEffortCatalog, {constraintModel: 'gpt-6.1-sol:xhigh'});
   assert.equal(sparseNamed.route.bundle.effort, 'xhigh', 'a named effort the row offers is the one launched');
   // An effort the row does not offer, and one the row offers but AgentCompass has no data for, are refused, never rounded to another.
   for (const effort of ['high', 'minimal']) {
-    const refused = routeWithProfile('Task text.', {}, sparseEffortCatalog, OK, {constraintModel: `gpt-6.1-sol:${effort}`});
+    const refused = routeWithProfile('Task text.', {}, sparseEffortCatalog, {constraintModel: `gpt-6.1-sol:${effort}`});
     assert.equal(refused.status, 'blocked', effort);
     assert.equal(refused.route, undefined);
   }
@@ -593,7 +461,7 @@ test('profile fields reach the decision as stated; two Codex connections never s
   const multiSegmentPiCatalog = {models: [
     {route: {agentKind: 'pi', providerId: 'openrouter', model: 'openrouter/qwen/qwen3.8-max', effort: 'high', fastMode: false}, efforts: ['medium', 'high'], supportsFastMode: false},
   ]};
-  const multiSeg = routeWithProfile('Rename foo to bar in util.py.', {reasoning_depth: 1, code_complexity: 1}, multiSegmentPiCatalog, OK, {constraintModel: 'openrouter/qwen/qwen3.8-max'});
+  const multiSeg = routeWithProfile('Rename foo to bar in util.py.', {reasoning_depth: 1, code_complexity: 1}, multiSegmentPiCatalog, {constraintModel: 'openrouter/qwen/qwen3.8-max'});
   assert.equal(multiSeg.status, 'native', 'a multi-segment Pi model id stays the same string through the engine ids');
   assert.equal(multiSeg.route.bundle.model, 'openrouter/qwen/qwen3.8-max');
 });
@@ -601,7 +469,7 @@ test('profile fields reach the decision as stated; two Codex connections never s
 test('nothing runnable: an empty or foreign catalog is blocked, never guessed', () => {
   assert.equal(routeWithProfile('Rename foo to bar in util.py.', {}, {models: []}).status, 'blocked');
   assert.equal(routeWithProfile('Rename foo to bar in util.py.', {}, {models: [{route: {agentKind: 'gemini', providerId: 'g', model: 'x', effort: ''}}]}).status, 'blocked');
-  assert.equal(routeTask('Rename foo to bar in util.py.', undefined, {quota: OK, profile: makeProfile()}).status, 'blocked');
+  assert.equal(routeTask('Rename foo to bar in util.py.', undefined, {profile: makeProfile()}).status, 'blocked');
 });
 
 test('R2: Cindy chooses the quick-text model, so the plugin names none; a Spark row is routed as itself, never as Luna', () => {
@@ -744,7 +612,7 @@ test('R3: a long task keeps every character and costs calibration cases, whole o
 
 test('r5: a caller profile must state what routing uses: {} and partial profiles start nothing', () => {
   for (const partial of [{}, {work_kind: 'general_implementation'}, {self: true}, {multi_task: true, task_count: '2'}]) {
-    const result = routeTask('Fix util.py', REAL, {quota: OK, profile: partial});
+    const result = routeTask('Fix util.py', REAL, {profile: partial});
     assert.equal(result.status, 'blocked', JSON.stringify(partial));
     assert.equal(result.decision.reason, 'invalid_caller_profile');
     assert.equal(result.route, undefined);
@@ -753,7 +621,7 @@ test('r5: a caller profile must state what routing uses: {} and partial profiles
   }
   const {reason, ...noReason} = makeProfile();
   assert.deepEqual(CALLER_REQUIRED_KEYS.filter(key => !(key in noReason)), []);
-  assert.equal(routeTask('Fix util.py', REAL, {quota: OK, profile: noReason}).status, 'native', 'a reason is optional');
+  assert.equal(routeTask('Fix util.py', REAL, {profile: noReason}).status, 'native', 'a reason is optional');
   for (const key of CALLER_REQUIRED_KEYS) {
     const {[key]: _, ...without} = makeProfile();
     assert.throws(() => validateCallerProfile(without), new RegExp(`missing required field.*${key}`), key);
@@ -824,10 +692,7 @@ const NOT_TASK_CLASSIFICATION = {
     'text.startsWith': 2, // parseClassifierOutput: the model's answer
     '.exec(text': 1, // parseClassifierOutput: unwrapping a fenced answer from the model
     'text.endsWith': 1, // parseClassifierOutput: the model's answer
-    'text.indexOf': 2, // codexQuota: the Codex session log
-    'text.lastIndexOf': 2, // codexQuota: the Codex session log
-    'text.slice': 2, // readTail, codexQuota: the Codex session log
-    'text.length': 2, // fnv1a64, codexQuota: a hash loop and the log length
+    'text.length': 1, // fnv1a64: a hash loop
     'text.charCodeAt': 1, // fnv1a64: a hash loop
     'evidence.length': 1, // buildClassifierPrompt: Cindy's prompt size limit
     'desc.length': 1, // scoreCacheKey: a cache key suffix
@@ -1042,10 +907,9 @@ const TEXT_CALL_EXCEPTIONS = {
       "evidence.length",
       "desc.length",
     ],
-    "a hash loop over the whole text, or the Codex session log it also reads": [
-      ["text.length", 2],
+    "a hash loop over the whole text": [
+      "text.length",
       "text.charCodeAt(i)",
-      "text.slice(lineStart,(text.indexOf('\\n',at)+1||text.length+1)-1)",
     ],
     "normalizeTaskEvidence: which fields a structured task has and whether one is empty, never what they say": [
       "Object.entries(input)",
@@ -1087,66 +951,34 @@ const TEXT_CALL_EXCEPTIONS = {
       "for(const[k,v]ofObject.entries(entries))",
       "for(conststaleofsortedKeys.slice(0,Math.max(0,sortedKeys.length-SCORE_CACHE_MAX)))",
     ],
-    "the Codex session logs and their directories: quota": [
-      "/^\\d+$/.test(n)",
-      "n.endsWith('.jsonl')",
-      "files.length",
-      "text.slice(text.indexOf('\\n')+1)",
-      "text.indexOf('\\n')",
-      "homes.length",
-      "homes.slice(1)",
-      "text.lastIndexOf('\"rate_limits\"',from)",
-      "text.lastIndexOf('\\n',at)",
-      "text.indexOf('\\n',at)",
-      "windows.length",
-      "DIRECT_SOURCES.includes(resolved.source)",
-      "codex.windows.length",
-      "for(constyearofdesc(path.join(home,'sessions')))",
-      "for(constmonthofdesc(year))",
-      "for(constdayofdesc(month))",
-      "for(constnameoffiles)",
-      "codex.status!=='unknown'",
-    ],
     "the engine's own output, read to word the answer: the lines it gives for rows it left out, its warnings and ranking": [
       "line.indexOf(':')",
       "line.slice(at+2)",
       "line.slice(0,at)",
       ["named.length", 3],
       "named.slice(0,ROWS_NAMED)",
-      "quotaAccounts.length",
       "String(candidate.id).slice(0,String(candidate.id).lastIndexOf(':'))",
       "String(candidate.id).lastIndexOf(':')",
-      "reasons.length",
-      "decision.warnings.includes(w)",
       "decision.topCandidates.slice(1)",
       "newSet(lines)",
-      "...newSet(quotaAccounts.filter(a=>a.dispatchable===false).map(a=>`${a.key}:${a.state}${a.reason?`(${a.reason})`:''}`))",
       "for(constlineofnewSet(lines))",
     ],
-    "the catalog's rows and the accounts they draw on": [
+    "the catalog's rows: how many there are, which efforts a row offers": [
       "row.efforts?.length",
       ["runnable.length", 2],
       ["skipped.length", 2],
       "offered.length",
       "offeredEfforts(row).filter(Boolean).length",
       ["newSet()", 2],
-      "newSet(rows.filter(r=>r.route.agentKind==='codex').map(r=>r.route.providerId))",
-      "r.route.agentKind==='codex'",
-      "a.key===`${HARNESS[row.route.agentKind]}/${row.route.providerId}`",
-      "a.provider==='codex'",
-      "HARNESS[row.route.agentKind]==='codex'",
     ],
     "an effort the caller named, read as the allocator reads it": [
       "String(constraintEffort).trim()",
       "String(constraintEffort).trim().toLowerCase()",
     ],
-    "a router status, the platform, or a Cindy failure code": [
+    "a router status or a Cindy failure code": [
       "'split'",
-      "process.platform==='win32'",
-      "process.platform==='darwin'",
       "reason==='classifier_rate_limited'",
       "decision.error==='invalid_caller_profile'",
-      "decision.error==='accounts_unavailable'",
     ],
   },
   'plugin/main.js': {
@@ -1205,7 +1037,7 @@ const TEXT_CALL_EXCEPTIONS = {
     "the router's answer: a status, a source or a decision reason": [
       "['self','split'].includes(result.status)", "'split'", "result.engine==='builtin'", "result.profile_source!=='unavailable'",
       ["result.status==='blocked'", 2], "result.decision?.reason==='no_runnable_model'", "result.decision?.reason==='no_route'",
-      "result.decision?.reason==='accounts_unavailable'", "result.status==='scorer_unavailable'", "result.error==='scorer_unavailable'",
+      "result.status==='scorer_unavailable'", "result.error==='scorer_unavailable'",
       "result.profile_source==='unavailable'", ["result.status==='classify'", 2], "result.status==='native'",
     ],
     'receipts, cooldown records and child processes': [
@@ -1325,7 +1157,7 @@ test('A1: the classifier must state self, wants_fast and read_only_review: an an
   for (const field of ['self', 'wants_fast', 'read_only_review']) {
     const {[field]: _, ...without} = makeProfile();
     assert.throws(() => validateClassifierProfile(without), new RegExp(`missing required field.*${field}`), field);
-    const blocked = routeTask('What is a mutex?', REAL, {quota: OK, useCache: false, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(without)}});
+    const blocked = routeTask('What is a mutex?', REAL, {useCache: false, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(without)}});
     assert.deepEqual([blocked.status, blocked.decision.reason, blocked.profile_source], ['blocked', 'invalid_classifier_output', 'unavailable'], field);
     assert.equal(blocked.route, undefined);
   }
@@ -1333,7 +1165,7 @@ test('A1: the classifier must state self, wants_fast and read_only_review: an an
     assert.ok(CALLER_REQUIRED_KEYS.includes(field), field);
     const {[field]: _, ...without} = makeProfile();
     assert.throws(() => validateCallerProfile(without), new RegExp(`missing required field.*${field}`), field);
-    const blocked = routeTask('Fix util.py', REAL, {quota: OK, profile: without});
+    const blocked = routeTask('Fix util.py', REAL, {profile: without});
     assert.deepEqual([blocked.status, blocked.decision.reason, blocked.profile_source], ['blocked', 'invalid_caller_profile', 'unavailable'], field);
     assert.equal(blocked.route, undefined);
   }
@@ -1459,12 +1291,12 @@ test('m1, fifth review: any other number, and a number that contradicts multi_ta
       assert.throws(() => validate(makeProfile({multi_task: multi, task_count: count})), /task_count/, `${name}: multi_task ${multi}, task_count ${String(count)}`);
     }
   }
-  const answer = rawOutput => ({quota: OK, useCache: false, classification: {ok: true, model: 'm', rawOutput}});
+  const answer = rawOutput => ({useCache: false, classification: {ok: true, model: 'm', rawOutput}});
   for (const [multi, count] of [[false, 2], [true, 1], [true, 0], [false, -1], [true, 2.5]]) {
     const raw = JSON.stringify(makeProfile({multi_task: multi, task_count: count}));
     const blocked = routeTask('Fix util.py', REAL, answer(raw));
     assert.deepEqual([blocked.status, blocked.decision.reason], ['blocked', 'invalid_classifier_output'], raw);
-    assert.equal(routeTask('Fix util.py', REAL, {quota: OK, profile: makeProfile({multi_task: multi, task_count: count})}).decision.reason, 'invalid_caller_profile', raw);
+    assert.equal(routeTask('Fix util.py', REAL, {profile: makeProfile({multi_task: multi, task_count: count})}).decision.reason, 'invalid_caller_profile', raw);
   }
   // A number too large for JSON.parse arrives as Infinity.
   const huge = JSON.stringify(makeProfile({multi_task: true, task_count: '2'})).replace('"task_count":"2"', '"task_count":1e999');
@@ -1481,14 +1313,14 @@ test('M1, fifth review: an unquoted count survives the score cache, in memory an
       const task = `task with parts, count ${JSON.stringify(count)}`;
       const cacheFile = path.join(dir, 'score-cache.json');
       clearClassifierCache();
-      const answered = routeTask(task, REAL, {quota: OK, cacheFile, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(makeProfile({multi_task: true, task_count: count}))}});
+      const answered = routeTask(task, REAL, {cacheFile, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(makeProfile({multi_task: true, task_count: count}))}});
       assert.deepEqual([answered.status, answered.task_count, answered.profile.task_count], ['split', bucket, bucket], task);
       assert.equal(prepareClassifierRequest(task, {cacheFile}).cached, true, `${task}: step one of the worker, from memory`);
-      const fromMemory = routeTask(task, REAL, {quota: OK, cacheFile});
+      const fromMemory = routeTask(task, REAL, {cacheFile});
       assert.deepEqual([fromMemory.status, fromMemory.task_count, fromMemory.classifier_model], ['split', bucket, 'm'], `${task}: from memory`);
       clearClassifierCache();
       assert.equal(prepareClassifierRequest(task, {cacheFile}).cached, true, `${task}: step one of the worker, from disk`);
-      const fromDisk = routeTask(task, REAL, {quota: OK, cacheFile});
+      const fromDisk = routeTask(task, REAL, {cacheFile});
       assert.deepEqual([fromDisk.status, fromDisk.task_count, fromDisk.classifier_model], ['split', bucket, 'm'], `${task}: from disk`);
     }
   } finally {
@@ -1595,11 +1427,15 @@ test('m1, seventh review: a5 goes without a checkout only when there is none: on
   assert.match(ownSource('test/sandbox-e2e.mjs'), /env: \{AGENTCOMPASS_PYTHON: python\.exe, AGENTCOMPASS_CHECKOUT: CHECKOUT\}/, 'the sandbox names its checkout to the unit tests');
 });
 
-// Cindy's own data directory holds private app data. The only thing the plugin reads there is the Codex session log under codex-home (the quota);
-// the per-owner prefs file (the plugin card's model) is never read, and no digest or option of it is kept.
-test("the plugin reads nothing of Cindy's private app data: no owners directory, no prefs file", () => {
+// Cindy's own data directory is private app data and a Codex home is the Codex CLI's: the plugin reads nothing under either. No source
+// of its own may name the per-owner prefs file, an owners directory, a Codex home, a Codex session log or Cindy's app-data directories,
+// and no quota reading is attached to a connection (the catalog cannot say which one is the user's own sign-in), so none is read at all.
+test("the plugin reads nothing of Cindy's private app data and nothing under a Codex home", () => {
   const files = ['plugin/main.js', 'plugin/worker.cjs', 'plugin/engine/route.mjs', 'plugin/ghost.json', ...fs.readdirSync(new URL('../plugin/locales/', import.meta.url)).map(n => `plugin/locales/${n}`)];
-  for (const rel of files) assert.doesNotMatch(ownSource(rel), /ghost-errand-prefs|['"`]owners['"`]|[\/]owners/, rel);
+  const banned = /ghost-errand-prefs|['"`]owners['"`]|[\/]owners|CODEX_HOME|codex-home|\.codex|CindyGlobal|rate_limits|session logs?|APPDATA|XDG_CONFIG_HOME|Application Support|quota-state|homedir\(\)\s*,\s*['"`]\.(?:codex|config)/i;
+  for (const rel of files) assert.doesNotMatch(ownSource(rel), banned, rel);
+  for (const name of ['codexQuota', 'codexHomes', 'cindyAppDirs']) assert.equal(typeof engine[name], 'undefined', name);
+  for (const rel of ['plugin/worker.cjs', 'plugin/engine/route.mjs']) assert.doesNotMatch(ownSource(rel), /listQuotaAccounts|quotaAccounts|stateFile/, rel);
 });
 
 // akiiwa-games/magpie-agentcompass-router at this commit, src/<source>.js. To update: run scripts/vendor_engine.mjs, then these digests.
@@ -1704,7 +1540,7 @@ const CORPUS_ANSWERS = {
 function firstCorpusDifference(route) {
   for (const [name, overrides] of Object.entries(CORPUS_ANSWERS)) {
     const answer = makeProfile(overrides);
-    const decide = text => route(text, REAL, {quota: OK, useCache: false, now: NOW, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(answer)}});
+    const decide = text => route(text, REAL, {useCache: false, now: NOW, classification: {ok: true, model: 'm', rawOutput: JSON.stringify(answer)}});
     const expected = decide(BASE_TASK);
     const profile = expected.profile ?? expected.decision.profile;
     for (const [field, value] of Object.entries(answer)) {
@@ -1806,22 +1642,20 @@ test('Step 2 regression: read_only_review requires code_complexity 0 and is surf
     assert.throws(() => validateClassifierProfile(contradictory), /must be 0 when read_only_review is true/);
     assert.throws(() => validateCallerProfile(contradictory), /must be 0 when read_only_review is true/);
     const blockedClassifier = routeTask('Review src/auth.py', WITH_CLAUDE, {
-      quota: OK,
       useCache: false,
       classification: {ok: true, model: 'm', rawOutput: JSON.stringify(contradictory)},
     });
     assert.deepEqual([blockedClassifier.status, blockedClassifier.decision.reason], ['blocked', 'invalid_classifier_output']);
-    const blockedCaller = routeTask('Review src/auth.py', WITH_CLAUDE, {quota: OK, profile: contradictory});
+    const blockedCaller = routeTask('Review src/auth.py', WITH_CLAUDE, {profile: contradictory});
     assert.deepEqual([blockedCaller.status, blockedCaller.decision.reason], ['blocked', 'invalid_caller_profile']);
   }
 
-  const routed = routeTask('Review src/auth.py', WITH_CLAUDE, {quota: OK, profile: validReview});
+  const routed = routeTask('Review src/auth.py', WITH_CLAUDE, {profile: validReview});
   assert.equal(routed.status, 'native');
   assert.equal(routed.decision.read_only_review, true);
   assert.equal(routed.decision.profile.read_only_review, true);
 
   const split = routeTask('Review two independent repos', WITH_CLAUDE, {
-    quota: OK,
     profile: {...validReview, multi_task: true, task_count: '2'},
   });
   assert.deepEqual([split.status, split.read_only_review, split.decision.read_only_review], ['split', true, true]);
@@ -1830,267 +1664,6 @@ test('Step 2 regression: read_only_review requires code_complexity 0 and is surf
 // The warnings of an account, not the engine's note that a listed model has no scores of its own (Spark).
 const quiet = decision => (decision.warnings || []).filter(line => !/is not in the catalog/.test(line));
 
-test('Step 3 regression: plan normalization matches full name before stripping trailing multiplier, and account states surface warnings and block broken accounts', () => {
-  // Q4: full-name-first plan matching before stripping trailing ×N ('Max ×20' -> max20, not stripped to 'Max' -> max5).
-  assert.deepEqual(normalizePlan('claude', 'Max ×20'), {key: 'max20', raw: 'Max ×20', known: true, inactive: false});
-  assert.deepEqual(normalizePlan('claude', 'Max ×5'), {key: 'max5', raw: 'Max ×5', known: true, inactive: false});
-  assert.deepEqual(normalizePlan('codex', 'Pro × 5'), {key: 'pro', raw: 'Pro × 5', known: true, inactive: false});
-  assert.deepEqual(normalizePlan('codex', 'Free × 3'), {key: null, raw: 'Free × 3', known: true, inactive: true});
-
-  assert.deepEqual(ACCOUNT_STATES, {
-    READY: 'ready',
-    PLAN_INACTIVE: 'plan_inactive',
-    USAGE_FAILING: 'usage_failing',
-    AUTH_FAILED: 'auth_failed',
-    DISABLED: 'disabled',
-  });
-
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-acct-'));
-  try {
-    const stateFile = path.join(dir, 'quota-state.json');
-
-    // 1. New user (no sessions directory, empty sessions directory, or empty day directory) -> dispatches on REAL with no warning.
-    const newHome = path.join(dir, 'new-user');
-    fs.mkdirSync(newHome, {recursive: true});
-    const newRoute = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: newHome}, stateFile, now: NOW, profile: makeProfile()});
-    assert.equal(newRoute.status, 'native');
-    assert.deepEqual(quiet(newRoute.decision), []);
-
-    // 2. Idle 3h, 7h, and 30h session logs (with un-reset window) -> session log mtime is NOT a reading failure: dispatches on REAL with state 'ready' and no usage_failing warning.
-    for (const idleHours of [3, 7, 30]) {
-      const idleHome = path.join(dir, `idle-${idleHours}h`);
-      const idleDay = path.join(idleHome, 'sessions', '2026', '11', '07');
-      fs.mkdirSync(idleDay, {recursive: true});
-      const idleDate = new Date(NOW - idleHours * 3600 * 1000);
-      const idleFile = path.join(idleDay, 'rollout-1.jsonl');
-      fs.writeFileSync(
-        idleFile,
-        `${JSON.stringify({timestamp: idleDate.toISOString(), payload: {rate_limits: {plan_type: 'pro', secondary: {used_percent: 20, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
-      );
-      fs.utimesSync(idleFile, idleDate, idleDate);
-      const idleRoute = routeTask('Fix util.py', REAL, {
-        env: {CODEX_HOME: idleHome},
-        stateFile,
-        now: NOW,
-        profile: makeProfile(),
-      });
-      assert.equal(idleRoute.status, 'native', `idle ${idleHours}h should dispatch on REAL`);
-      assert.equal(idleRoute.decision.accounts[0].state, 'ready', `idle ${idleHours}h state`);
-      assert.equal(idleRoute.decision.accounts[0].dispatchable, true, `idle ${idleHours}h dispatchable`);
-      assert.deepEqual(quiet(idleRoute.decision), [], `idle ${idleHours}h must not warn usage_failing`);
-    }
-
-    // Old snapshot whose windows have reset -> treated as unknown quota: dispatchable, no penalty, no fast mode, no usage_failing warning.
-    const resetHome = path.join(dir, 'reset-window');
-    const resetDay = path.join(resetHome, 'sessions', '2026', '11', '05');
-    fs.mkdirSync(resetDay, {recursive: true});
-    const resetDate = new Date(NOW - 30 * 3600 * 1000);
-    const resetFile = path.join(resetDay, 'rollout-1.jsonl');
-    fs.writeFileSync(
-      resetFile,
-      `${JSON.stringify({timestamp: resetDate.toISOString(), payload: {rate_limits: {plan_type: 'pro', primary: {used_percent: 96, resets_at: Math.floor((NOW - 3600000) / 1000)}}}})}\n`,
-    );
-    fs.utimesSync(resetFile, resetDate, resetDate);
-    const resetRoute = routeTask('Fix util.py', REAL, {
-      env: {CODEX_HOME: resetHome},
-      stateFile,
-      now: NOW,
-      profile: makeProfile({wants_fast: true, urgency: 'high'}),
-    });
-    assert.equal(resetRoute.status, 'native');
-    assert.equal(resetRoute.route.bundle.fast, false, 'unknown quota after window reset does not turn fast mode on');
-    assert.equal(resetRoute.decision.quota.status, 'unknown');
-    assert.deepEqual(quiet(resetRoute.decision), []);
-
-    // Partial last line (mid-write) with an earlier valid rate_limits snapshot in the same file -> uses the earlier valid snapshot, not usage_failing.
-    const partialHome = path.join(dir, 'partial');
-    const partialDay = path.join(partialHome, 'sessions', '2026', '11', '07');
-    fs.mkdirSync(partialDay, {recursive: true});
-    const partialFile = path.join(partialDay, 'rollout-1.jsonl');
-    fs.writeFileSync(
-      partialFile,
-      `${JSON.stringify({timestamp: new Date(NOW - 60000).toISOString(), payload: {rate_limits: {plan_type: 'pro', primary: {used_percent: 25, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n` +
-      '{"payload":{"rate_limits":{"plan_type":"pro","primary":{"used_per',
-    );
-    const qPartial = codexQuota({CODEX_HOME: partialHome}, NOW, codexHomes({CODEX_HOME: partialHome}), {stateFile});
-    assert.equal(qPartial.state, 'ready');
-    assert.equal(qPartial.used_percent, 25);
-
-    // 3. Corrupt Codex session log -> first sight records failing_since in quota-state.json, warns and dispatches; at 6h excludes; reading a healthy log clears the failure record.
-    const corruptHome = path.join(dir, 'corrupt');
-    const corruptDay = path.join(corruptHome, 'sessions', '2026', '11', '07');
-    fs.mkdirSync(corruptDay, {recursive: true});
-    const corruptFile = path.join(corruptDay, 'rollout-1.jsonl');
-    fs.writeFileSync(corruptFile, '{"payload":{"rate_limits":BROKEN_JSON\n');
-    fs.utimesSync(corruptFile, new Date(NOW - 60000), new Date(NOW - 60000));
-
-    // First seen at NOW: warns and still dispatches on REAL.
-    const firstSeenCorrupt = routeTask('Fix util.py', REAL, {
-      env: {CODEX_HOME: corruptHome},
-      stateFile,
-      now: NOW,
-      profile: makeProfile({wants_fast: true, urgency: 'high'}),
-    });
-    // A log with no readable window gives no plan and no quota window to price: with v0.6.0 the Codex rows leave automatic routing, and
-    // naming one still starts it, so a new run can write a fresh log.
-    assert.equal(firstSeenCorrupt.status, 'blocked', 'nothing to price the Codex rows with');
-    assert.equal(firstSeenCorrupt.route, undefined);
-    assert.ok(firstSeenCorrupt.decision.excluded.some(line => /no weekly quota window/.test(line)), JSON.stringify(firstSeenCorrupt.decision.excluded.slice(0, 2)));
-    const namedCorrupt = routeTask('Fix util.py', REAL, {
-      env: {CODEX_HOME: corruptHome}, stateFile, now: NOW, profile: makeProfile({wants_fast: true, urgency: 'high'}), constraintModel: 'gpt-6.1-sol',
-    });
-    assert.equal(namedCorrupt.status, 'native', 'naming a model starts it');
-    assert.equal(namedCorrupt.route.bundle.fast, false, 'fast mode off when usage reading is failing');
-    assert.equal(firstSeenCorrupt.decision.accounts[0].state, 'usage_failing');
-    assert.equal(firstSeenCorrupt.decision.accounts[0].dispatchable, true);
-    assert.equal(firstSeenCorrupt.decision.accounts[0].failing_since, new Date(NOW).toISOString());
-    assert.ok(firstSeenCorrupt.decision.warnings.some(w => /usage_failing.*corrupt rate-limit snapshot.*excluded after 6\.0h/.test(w)), JSON.stringify(firstSeenCorrupt.decision.warnings));
-    assert.ok(fs.existsSync(stateFile), 'first-seen failure is persisted to quota-state.json');
-
-    // At NOW + 3h: still within 6h grace window, keeps original failing_since, warns and dispatches.
-    const midCorrupt = routeTask('Fix util.py', REAL, {
-      env: {CODEX_HOME: corruptHome},
-      stateFile,
-      now: NOW + 3 * 3600 * 1000,
-      profile: makeProfile(),
-    });
-    assert.equal(midCorrupt.status, 'blocked');
-    assert.equal(midCorrupt.decision.accounts[0].dispatchable, true);
-    assert.equal(midCorrupt.decision.accounts[0].failing_since, new Date(NOW).toISOString());
-
-    // At NOW + 6h: 6h elapsed since first seen -> dispatchable: false -> blocked on REAL, rerouted to Claude on WITH_CLAUDE.
-    const sixHourNow = NOW + 6 * 3600 * 1000;
-    const blockedCorrupt = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: corruptHome}, stateFile, now: sixHourNow, profile: makeProfile()});
-    assert.deepEqual([blockedCorrupt.status, blockedCorrupt.reason, blockedCorrupt.decision.reason], ['blocked', 'accounts_unavailable', 'accounts_unavailable']);
-    assert.equal(blockedCorrupt.decision.accounts[0].state, 'usage_failing');
-    assert.equal(blockedCorrupt.decision.accounts[0].dispatchable, false);
-    assert.ok(blockedCorrupt.decision.warnings.some(w => /usage_failing, excluded from dispatch/.test(w)), JSON.stringify(blockedCorrupt.decision.warnings));
-    assert.match(blockedCorrupt.next_action, /quota-state\.json/);
-
-    const fallbackToClaude = routeTask('Fix util.py', WITH_CLAUDE, {env: {CODEX_HOME: corruptHome}, stateFile, now: sixHourNow, profile: makeProfile()});
-    assert.deepEqual([fallbackToClaude.status, fallbackToClaude.route.bundle.harness], ['native', 'claude']);
-    assert.ok(fallbackToClaude.decision.warnings.some(w => /codex\/openai: usage_failing, excluded from dispatch/.test(w)));
-
-    // Healthy log written at NOW + 7h clears the persisted failure record in quota-state.json.
-    const healthyNow = NOW + 7 * 3600 * 1000;
-    fs.writeFileSync(
-      corruptFile,
-      `${JSON.stringify({timestamp: new Date(healthyNow).toISOString(), payload: {rate_limits: {plan_type: 'pro', primary: {used_percent: 15, resets_at: Math.floor((healthyNow + 86400000) / 1000)}}}})}\n`,
-    );
-    fs.utimesSync(corruptFile, new Date(healthyNow), new Date(healthyNow));
-    const recovered = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: corruptHome}, stateFile, now: healthyNow, profile: makeProfile()});
-    assert.equal(recovered.status, 'native');
-    assert.equal(recovered.decision.accounts[0].state, 'ready');
-    assert.equal(recovered.decision.accounts[0].dispatchable, true);
-    assert.deepEqual(quiet(recovered.decision), []);
-    const savedAfterRecovery = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-    assert.equal(savedAfterRecovery.entries[path.resolve(corruptHome)], undefined, 'healthy log clears persisted failure entry');
-
-    // 4. Inactive plan (free): fresh (<6h) excludes; old (>6h) warns and dispatches so the run can refresh telemetry.
-    const freeHome = path.join(dir, 'free');
-    const freeDay = path.join(freeHome, 'sessions', '2026', '11', '07');
-    fs.mkdirSync(freeDay, {recursive: true});
-    const freshDate = new Date(NOW - 60000);
-    const freeFile = path.join(freeDay, 'rollout-1.jsonl');
-    fs.writeFileSync(
-      freeFile,
-      `${JSON.stringify({timestamp: freshDate.toISOString(), payload: {rate_limits: {plan_type: 'Free × 3', secondary: {used_percent: 10, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
-    );
-    fs.utimesSync(freeFile, freshDate, freshDate);
-    const freeRoute = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: freeHome}, stateFile, now: NOW, profile: makeProfile()});
-    assert.deepEqual([freeRoute.status, freeRoute.reason, freeRoute.decision.reason], ['blocked', 'accounts_unavailable', 'accounts_unavailable']);
-    assert.equal(freeRoute.decision.accounts[0].state, 'plan_inactive');
-    assert.equal(freeRoute.decision.accounts[0].dispatchable, false);
-
-    const oldFreeDate = new Date(NOW - 8 * 3600 * 1000);
-    fs.utimesSync(freeFile, oldFreeDate, oldFreeDate);
-    const oldFreeRoute = routeTask('Fix util.py', REAL, {
-      env: {CODEX_HOME: freeHome},
-      stateFile,
-      now: NOW,
-      profile: makeProfile({wants_fast: true, urgency: 'high'}),
-    });
-    assert.equal(oldFreeRoute.status, 'native', 'old (>6h) free session log dispatches with warning to refresh telemetry');
-    assert.equal(oldFreeRoute.route.bundle.fast, false);
-    assert.equal(oldFreeRoute.decision.accounts[0].state, 'plan_inactive');
-    assert.equal(oldFreeRoute.decision.accounts[0].dispatchable, true);
-    assert.ok(oldFreeRoute.decision.warnings.some(w => /codex\/openai: plan_inactive: .*8\.0h ago/.test(w)), JSON.stringify(oldFreeRoute.decision.warnings));
-
-    // 5. Preserve custom reason on usage_failing quota without overwriting it with 'usage_failing' (TODO 1).
-    const customReasonRoute = routeTask('Fix util.py', REAL, {
-      quota: {source: 'test', state: 'usage_failing', reason: 'no successful reading for 3.0h', failing_since: new Date(NOW - 3 * 3600 * 1000).toISOString()},
-      now: NOW,
-      profile: makeProfile(),
-    });
-    assert.equal(customReasonRoute.status, 'blocked', 'a snapshot that names no plan and no window prices nothing');
-    assert.match(customReasonRoute.decision.accounts[0].reason, /no successful reading for 3\.0h/);
-    assert.doesNotMatch(customReasonRoute.decision.accounts[0].reason, /usage reading failing: usage_failing/);
-
-    // 6. Caller-supplied accounts snapshot with auth_failed and plan_inactive -> formatQuotaAccountList and quotaAccountWarnings surface both, and routeTask blocks when all accounts are excluded.
-    const accountsSnapshot = {
-      'codex/openai': {provider: 'codex', account: 'openai', plan: 'free', status: 'plan_inactive'},
-      'claude/anthropic': {provider: 'claude', account: 'anthropic', plan: 'Max ×20', http_status: 401, error: 'HTTP 401 unauthorized'},
-    };
-    const listedAccounts = listQuotaAccounts(accountsSnapshot, NOW);
-    assert.equal(listedAccounts.length, 2);
-    const formatted = formatQuotaAccountList(listedAccounts);
-    assert.match(formatted, /codex\/openai.*state=plan_inactive \[excluded from dispatch\]/);
-    assert.match(formatted, /claude\/anthropic.*state=auth_failed \[excluded from dispatch\]/);
-    const warnings = quotaAccountWarnings(accountsSnapshot, NOW);
-    assert.equal(warnings.length, 2);
-    const allExcluded = routeTask('Fix util.py', WITH_CLAUDE, {accounts: accountsSnapshot, now: NOW, profile: makeProfile()});
-    assert.deepEqual([allExcluded.status, allExcluded.reason, allExcluded.decision.reason], ['blocked', 'accounts_unavailable', 'accounts_unavailable']);
-    assert.equal(allExcluded.decision.warnings.length, 2);
-
-    // 7. M2 regression: malformed quota-state.json / score-cache.json shapes (e.g. {"entries":null}, null, []) are treated as empty state and never throw.
-    for (const badJson of ['{"entries":null}', 'null', '[]', '{"entries":[]}']) {
-      fs.writeFileSync(stateFile, badJson, 'utf8');
-      const healthyAfterNull = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: corruptHome}, stateFile, now: healthyNow, profile: makeProfile()});
-      assert.equal(healthyAfterNull.status, 'native', `healthy log with ${badJson}`);
-      fs.writeFileSync(stateFile, badJson, 'utf8');
-      const brokenHome = path.join(dir, 'm2-broken');
-      const brokenDay = path.join(brokenHome, 'sessions', '2026', '11', '07');
-      fs.mkdirSync(brokenDay, {recursive: true});
-      fs.writeFileSync(path.join(brokenDay, 'rollout-1.jsonl'), '{"payload":{"rate_limits":BROKEN\n');
-      const brokenAfterNull = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: brokenHome}, stateFile, now: NOW, profile: makeProfile()});
-      assert.equal(brokenAfterNull.status, 'blocked', `corrupt log with ${badJson}: read as empty state, nothing to price`);
-      assert.equal(brokenAfterNull.decision.accounts[0].state, 'usage_failing');
-    }
-
-    // 8. M3 regression: when the newest session log has no rate_limits line, codexQuota scans back through recent sessions to find the most recent rate_limits snapshot.
-    const fallbackHome = path.join(dir, 'm3-fallback');
-    const fallbackDay = path.join(fallbackHome, 'sessions', '2026', '11', '07');
-    fs.mkdirSync(fallbackDay, {recursive: true});
-    const earlierFreeFile = path.join(fallbackDay, 'rollout-1.jsonl');
-    const earlierFreeDate = new Date(NOW - 8 * 3600 * 1000);
-    fs.writeFileSync(
-      earlierFreeFile,
-      `${JSON.stringify({timestamp: earlierFreeDate.toISOString(), payload: {rate_limits: {plan_type: 'free', secondary: {used_percent: 10, resets_at: Math.floor((NOW + 86400000) / 1000)}}}})}\n`,
-    );
-    fs.utimesSync(earlierFreeFile, earlierFreeDate, earlierFreeDate);
-    const newerNoLimitsFile = path.join(fallbackDay, 'rollout-2.jsonl');
-    const newerDate = new Date(NOW - 60000);
-    fs.writeFileSync(newerNoLimitsFile, '{"type":"session_meta","payload":{"id":"abc"}}\n{"type":"error","message":"failed before rate_limits"}\n');
-    fs.utimesSync(newerNoLimitsFile, newerDate, newerDate);
-    const m3StaleFree = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: fallbackHome}, stateFile, now: NOW, profile: makeProfile()});
-    assert.equal(m3StaleFree.status, 'native', 'earlier >6h free log behind a no-rate_limits log still dispatches with warning');
-    assert.equal(m3StaleFree.decision.accounts[0].state, 'plan_inactive');
-    assert.equal(m3StaleFree.decision.accounts[0].dispatchable, true);
-    assert.ok(m3StaleFree.decision.warnings?.some(w => /codex\/openai: plan_inactive: .*8\.0h ago/.test(w)), JSON.stringify(m3StaleFree.decision.warnings));
-
-    // When the earlier free log is fresh (<6h), a newer log with no rate_limits line does not bypass the plan_inactive exclusion.
-    const freshFreeDate = new Date(NOW - 3600 * 1000);
-    fs.utimesSync(earlierFreeFile, freshFreeDate, freshFreeDate);
-    const m3FreshFree = routeTask('Fix util.py', REAL, {env: {CODEX_HOME: fallbackHome}, stateFile, now: NOW, profile: makeProfile()});
-    assert.deepEqual([m3FreshFree.status, m3FreshFree.reason, m3FreshFree.decision.reason], ['blocked', 'accounts_unavailable', 'accounts_unavailable']);
-    assert.equal(m3FreshFree.decision.accounts[0].state, 'plan_inactive');
-    assert.equal(m3FreshFree.decision.accounts[0].dispatchable, false);
-    assert.match(m3FreshFree.next_action, /Pi routes sharing the same provider account/);
-  } finally {
-    fs.rmSync(dir, {recursive: true, force: true});
-  }
-});
-
 test('Review minors regression: classifier reason >240 chars is truncated to 300 chars and accepted, caller profile requires wants_fast and read_only_review, and route.mjs comment matches CRITICAL RULES 2-7', () => {
   // 1. Classifier reason > 240 chars (e.g. 260 and 350 chars) is accepted and truncated to 300 chars, matching AgentCompass.
   const reason260 = 'r'.repeat(260);
@@ -2098,7 +1671,6 @@ test('Review minors regression: classifier reason >240 chars is truncated to 300
   assert.equal(clf260.reason.length, 260);
   assert.equal(clf260.reason, reason260);
   const routed260 = routeTask('Fix util.py', REAL, {
-    quota: OK,
     useCache: false,
     classification: {ok: true, model: 'm', rawOutput: JSON.stringify(makeProfile({reason: reason260}))},
   });
@@ -2110,7 +1682,6 @@ test('Review minors regression: classifier reason >240 chars is truncated to 300
   assert.equal(clf350.reason.length, 300);
   assert.equal(clf350.reason, 'x'.repeat(300));
   const routed350 = routeTask('Fix util.py', REAL, {
-    quota: OK,
     useCache: false,
     classification: {ok: true, model: 'm', rawOutput: JSON.stringify(makeProfile({reason: reason350}))},
   });
@@ -2128,37 +1699,9 @@ test('Review minors regression: classifier reason >240 chars is truncated to 300
   assert.doesNotMatch(routeSrc, /without its CRITICAL RULES 2-7:/);
 });
 
-test('Magpie 539a011: accounts_unavailable refusal, SessionContinuityStore.get({keepExpired}), and session/strict vs cache replay hold', () => {
+test('Magpie 539a011: SessionContinuityStore.get({keepExpired}), and session/strict vs cache replay hold', () => {
   const now = Date.parse('2026-11-08T00:00:00Z');
-  const allUnavailableQuotas = {
-    'claude:main': {provider: 'claude', account: 'main', plan: 'Max ×20', http_status: 401, error: 'HTTP 401 unauthorized'},
-    'codex:main': {provider: 'codex', account: 'main', plan: 'free', status: 'plan_inactive'},
-  };
   const coupledProfile = makeProfile({reasoning_depth: 3, code_complexity: 3, axis_demand: {divergence: 1, coding: 3, aesthetics: 0, tool_operation: 2}});
-  const sel = selectBestRoute(coupledProfile, {
-    candidateModels: ['claude/claude-opus-5-5', 'claude/claude-sonnet-5-5', 'codex/gpt-6-astra'],
-    quotas: allUnavailableQuotas,
-    now,
-  });
-  assert.equal(sel.ok, false);
-  assert.equal(sel.blocked, true);
-  assert.equal(sel.error, 'accounts_unavailable');
-  assert.equal(sel.refusal, 'accounts_unavailable: every candidate account is unavailable');
-
-  // In routeTask: the Codex account has failed for more than 6h, so its rows are out; a Claude row Cindy lists that AgentCompass has no
-  // data for is out too, and the refusal names both. With only the failing account's rows, the refusal is the account one.
-  const failing = {provider: 'codex', account: 'openai', plan: 'pro', status: 'usage_failing', error: 'corrupt snapshot', failing_since: new Date(now - 7 * 3600 * 1000).toISOString()};
-  const accounts = {'codex/openai': failing, 'claude/anthropic': {provider: 'claude', account: 'anthropic', plan: 'pro', status: 'ready', used: 20}};
-  const noData = {models: [...REAL.models, {route: {agentKind: 'cc', providerId: 'anthropic', model: 'claude-haiku-5-5', effort: 'high', fastMode: false}, efforts: ['low', 'medium', 'high'], supportsFastMode: false}]};
-  const mixedBlocked = routeTask('Audit distributed lock manager', noData, {accounts, now, profile: coupledProfile});
-  assert.deepEqual([mixedBlocked.status, mixedBlocked.decision.reason], ['blocked', 'no_route']);
-  assert.ok(mixedBlocked.decision.excluded.some(line => /usage_failing/.test(line)), JSON.stringify(mixedBlocked.decision.excluded));
-  assert.ok(mixedBlocked.decision.excluded.some(line => /data error/.test(line) && /claude-haiku-5-5/.test(line)), JSON.stringify(mixedBlocked.decision.excluded));
-  const onlyFailing = routeTask('Audit distributed lock manager', REAL, {accounts: {'codex/openai': failing}, now, profile: coupledProfile});
-  assert.deepEqual([onlyFailing.status, onlyFailing.reason, onlyFailing.decision.reason], ['blocked', 'accounts_unavailable', 'accounts_unavailable']);
-  assert.match(onlyFailing.next_action, /Fix the account subscription, sign-in, or usage telemetry in Cindy/);
-  const withClaude = routeTask('Audit distributed lock manager', WITH_CLAUDE, {accounts: {'codex/openai': failing}, now, profile: coupledProfile});
-  assert.deepEqual([withClaude.status, withClaude.route?.bundle.harness], ['native', 'claude']);
 
   // SessionContinuityStore.get({keepExpired: true}) returns the expired state while deleting it from the store.
   const store = new SessionContinuityStore();

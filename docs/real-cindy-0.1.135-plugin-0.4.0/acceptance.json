@@ -75,7 +75,7 @@
       "scenario 1": "0f9c5ab (plugin 0.4.0 as first installed in the guest)",
       "scenarios 2 onward": "9f78178 (the same plugin with plugin/engine/route.mjs updated in place in the guest at about 09:41 UTC; no other file under plugin/ differed)"
     },
-    "after_the_run": "0.4.1: the read of owners/*/ghost-errand-prefs.json removed, every observed quota window handed to the engine (9f78178), engine re-vendored at Magpie 35a7aea. 0.4.1 was verified with npm test and the fake-host sandbox, not on real Cindy (the guest was already closed)."
+    "after_the_run": "0.4.1: the read of owners/*/ghost-errand-prefs.json removed, every observed quota window handed to the engine (9f78178), engine re-vendored at Magpie 35a7aea, and the Codex log read (quota attribution) removed. 0.4.1 was verified with npm test and the fake-host sandbox, not on real Cindy (the guest was already closed)."
   },
   "account": {
     "signed_in": true,
@@ -3021,7 +3021,8 @@
       "verdict": "valid",
       "measured": "v0.6.0 takes every Codex row out of automatic routing when an observed window is not declared: capacity_unknown at 70% left, plus \"confirmed exhausted or below launch floor\" at 0% left; the plugin used to hide the window and route anyway",
       "change": "plugin/engine/route.mjs passes every observed window to the engine (9f78178); tests assert both reasons and that another connection still routes",
-      "consequence": "a Codex Pro or Pro100 log carrying a five-hour window now leaves Codex rows out of automatic routing, as in v0.6.0; Plus declares both windows"
+      "consequence": "a Codex Pro or Pro100 log carrying a five-hour window now leaves Codex rows out of automatic routing, as in v0.6.0; Plus declares both windows",
+      "superseded": "In 0.4.1 the Codex log read is removed altogether, so no window reaches the engine; not re-run on real Cindy."
     }
   },
   "quota_attribution": {
@@ -3029,7 +3030,8 @@
     "evidence": "all 84 catalog rows (agentKind cc, codex, pi) have providerId xd; every router output reports accounts [codex/xd, plan plus, ready] and a quota block read from Cindy's codex-home session log (five-hour window 6% used, weekly 93% used, observed 2026-11-13), including decisions routed to anthropic/claude-sonnet-5-5 and google/gemini-3.8-flash that spend gateway credit, not the Codex plan. The 0.1.121 fixture had a separate Codex connection with providerId openai",
     "plugin_bound": "codex/xd (plan plus) from the session log",
     "should_have_distinguished": "a Codex-harness connection that authenticates with a Codex sign-in (the log's owner) from the gateway connection that only offers the codex harness; catalog rows carry no field for it besides providerId",
-    "fixed_in_this_run": false
+    "fixed_in_this_run": false,
+    "after_the_run": "Plugin 0.4.1 removes the Codex log read and attaches no quota to any connection, so this attribution no longer happens; verified with npm test and the fake-host sandbox, not re-run on real Cindy."
   },
   "classifications_spent": {
     "receipts_with_a_classification": 15,
