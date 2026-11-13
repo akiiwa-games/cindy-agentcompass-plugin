@@ -4,7 +4,7 @@
   "linux": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "linux",
-   "started_at": "2026-11-13T08:44:55.307Z",
+   "started_at": "2026-11-13T10:48:29.530Z",
    "operations": [
     {
      "name": "isolation",
@@ -33,7 +33,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 127 passed, 0 failed",
+       "name": "node --test: 129 passed, 0 failed",
        "ok": true
       },
       {
@@ -664,11 +664,11 @@
     "agentcompass_version": "0.6.0",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:37733/v1"
+    "scorer": "http://127.0.0.1:38739/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 127,
+     "pass": 129,
      "fail": 0
     },
     "python": {
@@ -678,7 +678,7 @@
    },
    "market": {
     "id": "agentcompass",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "icon": {
      "bytes": 5217,
      "px": 256
@@ -690,7 +690,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-13T08:45:27.187Z",
+   "finished_at": "2026-11-13T10:49:01.624Z",
    "summary": {
     "operations": 28,
     "checks": 120,
@@ -702,7 +702,7 @@
   "win32": {
    "kind": "cindy-agentcompass-plugin sandbox e2e",
    "label": "win32",
-   "started_at": "2026-11-13T08:43:18.535Z",
+   "started_at": "2026-11-13T10:47:00.232Z",
    "operations": [
     {
      "name": "isolation",
@@ -731,7 +731,7 @@
      "intent": "the plugin boundary, the real worker.cjs bridge, the build script and the hotfix refusals, run inside this sandbox",
      "checks": [
       {
-       "name": "node --test: 127 passed, 0 failed",
+       "name": "node --test: 129 passed, 0 failed",
        "ok": true
       },
       {
@@ -1362,11 +1362,11 @@
     "agentcompass_version": "0.6.0",
     "agentcompass_checkout": "<agentcompass-checkout>",
     "sandbox_root": "<sandbox>",
-    "scorer": "http://127.0.0.1:64492/v1"
+    "scorer": "http://127.0.0.1:51452/v1"
    },
    "unit_tests": {
     "node": {
-     "pass": 127,
+     "pass": 129,
      "fail": 0
     },
     "python": {
@@ -1376,7 +1376,7 @@
    },
    "market": {
     "id": "agentcompass",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "icon": {
      "bytes": 5217,
      "px": 256
@@ -1388,7 +1388,7 @@
      "ko"
     ]
    },
-   "finished_at": "2026-11-13T08:44:35.941Z",
+   "finished_at": "2026-11-13T10:48:15.986Z",
    "summary": {
     "operations": 28,
     "checks": 120,

@@ -1,6 +1,6 @@
 # Real Cindy 0.1.135, plugin 0.4.0, 2026-11-13
 
-A dated record: plugin 0.4.0 (AgentCompass v0.6.0 engine, vendored unchanged, quick-text classifier) on a real, signed-in Cindy, in a disposable Windows Sandbox guest that was closed afterwards.
+A dated record: plugin 0.4.0 (AgentCompass v0.6.0 engine as vendored from Magpie `ac494f3`, quick-text classifier) on a real, signed-in Cindy, in a disposable Windows Sandbox guest that was closed afterwards.
 Every operation's receipt and router output, the live-catalog checks and the agent transcripts are in [acceptance.json](acceptance.json) (times are UTC; the account's address, name and ids are redacted).
 The kit that drives such a run is in [`test/real-cindy/`](../../test/real-cindy/README.md).
 
@@ -16,6 +16,9 @@ The kit that drives such a run is in [`test/real-cindy/`](../../test/real-cindy/
 [install-consent.png](install-consent.png): the plugin install consent.
 
 ## Scenarios
+
+Plugin commit: scenario 1 ran on `0f9c5ab`; every other scenario on `9f78178`, which is `0f9c5ab` with `plugin/engine/route.mjs` updated in place in the guest at about 09:41 UTC (each scenario's `plugin_commit` is in `acceptance.json`).
+Plugin 0.4.1 (prefs read removed, engine at Magpie `35a7aea`, see [CHANGELOG](../../CHANGELOG.md)) came after this run and was verified with `npm test` and the fake-host sandbox, not on real Cindy.
 
 For each started run the record asserts the contract, not the winner: the route is a row of the live catalog, `acceptedConfig` equals the route, the task input is the task plus the return-channel
 contract, and `messages_complete` is true before the final message is taken. All of those held for every run that started.
@@ -47,8 +50,9 @@ and `unknown_create` "Requested permission exceeds plugin dispatch policy" (a pr
 
 1. **`effortRows` intersects Cindy's efforts with the dispatch table.** Valid in code, kept as is. On the live catalog no row is `not_dispatchable`; 12 rows (gpt-5.6-luna, gpt-6-luna, gpt-6.1-terra and claude-haiku-5-5, on `cc`, `codex` and `pi`)
    are narrowed from low…max to high. `no_route` appears only for a catalog that offers nothing inside the table.
-2. **Image input.** On Cindy 0.1.135's catalog one model (`deepseek/deepseek-v4-pro`, `image_input: no`) routes for a profile with `needs_visual: true` and `tool_operation` below 3; this follows engine v0.6.0,
-   where image input is demanded only at `tool_operation` 3; the engine rule is being changed upstream. Nothing changed here.
+2. **Image input.** Measured on the vendored `ac494f3` engine: on Cindy 0.1.135's catalog one model (`deepseek/deepseek-v4-pro`, `image_input: no`) routed for a profile with `needs_visual: true` and `tool_operation` below 3,
+   because v0.6.0 demanded image input only at `tool_operation` 3. Fixed upstream (AgentCompass `2844342`, Magpie port `35a7aea`, 0.2.1) and by re-vendoring in plugin 0.4.1. Re-measured offline, not on real Cindy
+   (the guest was closed): that row is now excluded with "model does not accept image input" at `tool_operation` 0 and 1 on the `pi`, `cc` and `codex` harnesses; the previous engine routed it.
 3. **Undeclared quota window.** Valid, fixed in the plugin (`plugin/engine/route.mjs`, 9f78178): every window the Codex log reports now goes to the engine, which takes every Codex row out of automatic routing
    when a window is not declared (`capacity_unknown`, plus "confirmed exhausted or below launch floor" at 0% left). Plus declares both windows, so the owner's account still routes; a Codex Pro or Pro100 log carrying a five-hour window
    now leaves Codex rows out, as in v0.6.0.
@@ -75,7 +79,8 @@ The Codex session-log quota is attributed to the Cindy AI gateway connection.
 ## Not verified
 
 - A Codex-only, Claude-only and Codex + Claude + Grok sign-in configuration: the run used the Cindy AI gateway, which serves every harness.
+- Plugin 0.4.1 on real Cindy: the prefs-read removal and the re-vendored engine were not run there.
 - Whether a Codex Pro or Pro100 account's five-hour window is handled as intended upstream.
 - The agent transcripts in `acceptance.json` were pasted back by Cindy agents; the receipts and router outputs are the primary evidence.
 
-`plugin/engine/route.mjs` is the only file under `plugin/` that changed (the market copy follows it). Tests: `npm test` 127/127 Node tests and 8 Python tests.
+During this run only `plugin/engine/route.mjs` changed under `plugin/`.
